@@ -3,12 +3,13 @@ import {
   Box, Drawer, AppBar, Toolbar, Typography, List, ListItem,
   ListItemIcon, ListItemText, IconButton
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
+import { styled } from '@mui/system';
 import { useNavigate, useLocation } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
 import KitchenIcon from '@mui/icons-material/Kitchen';
+import InventoryIcon from '@mui/icons-material/Inventory';
 import MenuIcon from '@mui/icons-material/Menu';
 
 const drawerWidth = 240;
@@ -18,16 +19,10 @@ const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })<{
 }>(({ theme, open }) => ({
   flexGrow: 1,
   padding: theme.spacing(3),
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
+  transition: 'margin 225ms cubic-bezier(0.4, 0, 0.6, 1) 0ms',
   marginLeft: `-${drawerWidth}px`,
   ...(open && {
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
+    transition: 'margin 195ms cubic-bezier(0.0, 0, 0.2, 1) 0ms',
     marginLeft: 0,
   }),
 }));
@@ -46,6 +41,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { text: 'Import Recipe', icon: <AddIcon />, path: '/import' },
     { text: 'Search Recipes', icon: <SearchIcon />, path: '/search' },
     { text: 'Pantry', icon: <KitchenIcon />, path: '/pantry' },
+    { text: 'Ingredients', icon: <InventoryIcon />, path: '/ingredients' },
   ];
 
   return (
@@ -83,10 +79,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <List>
           {menuItems.map((item) => (
             <ListItem
-              button
               key={item.text}
+              component="div"
               onClick={() => navigate(item.path)}
-              selected={location.pathname === item.path}
+              sx={{
+                cursor: 'pointer',
+                backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                },
+              }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />

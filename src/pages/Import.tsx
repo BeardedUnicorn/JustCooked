@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import {
   Box, Typography, TextField, Button, Paper, CircularProgress, Alert,
-  Snackbar
+  Snackbar, List, ListItem, ListItemText, Divider
 } from '@mui/material';
-import { importRecipeFromUrl } from '../services/recipeParser';
+import { importRecipeFromUrl, formatIngredientForDisplay } from '@services/recipeImport';
+import { Recipe } from '@app-types/recipe';
 
 const Import: React.FC = () => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [importedRecipe, setImportedRecipe] = useState<Recipe | null>(null);
 
   const handleImport = async () => {
     if (!url.trim()) {
@@ -17,11 +19,16 @@ const Import: React.FC = () => {
       return;
     }
 
+    // Remove the frontend URL validation since the backend now handles it
+    // The backend will return a proper error message for unsupported sites
+
     setLoading(true);
     setError(null);
+    setImportedRecipe(null);
 
     try {
-      await importRecipeFromUrl(url);
+      const recipe = await importRecipeFromUrl(url);
+      setImportedRecipe(recipe);
       setSuccess(true);
       setUrl('');
     } catch (err) {
@@ -39,7 +46,11 @@ const Import: React.FC = () => {
 
       <Paper sx={{ p: 4, mt: 4 }}>
         <Typography variant="body1" sx={{ mb: 3 }}>
-          Enter the URL of a recipe from AllRecipes, Food Network, or other popular recipe sites to import it into your cookbook.
+          Enter the URL of a recipe from any supported site to import it into your cookbook.
+          <br />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes
+          </Typography>
         </Typography>
 
         <TextField
@@ -49,7 +60,7 @@ const Import: React.FC = () => {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           disabled={loading}
-          placeholder="https://www.allrecipes.com/recipe/..."
+          placeholder="https://www.allrecipes.com/recipe/... or any supported site"
           sx={{ mb: 3 }}
         />
 
@@ -76,6 +87,44 @@ const Import: React.FC = () => {
           onClose={() => setSuccess(false)}
           message="Recipe imported successfully!"
         />
+
+        {importedRecipe && (
+          <Box sx={{ mt: 4 }}>
+            <Typography variant="h6" gutterBottom>
+              Recipe Imported Successfully:
+            </Typography>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {importedRecipe.title}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                {importedRecipe.description}
+              </Typography>
+
+              <Divider sx={{ my: 2 }} />
+
+              <Typography variant="subtitle2" gutterBottom>
+                Ingredients ({importedRecipe.ingredients.length}):
+              </Typography>
+              <List dense>
+                {importedRecipe.ingredients.slice(0, 5).map((ingredient, idx) => (
+                  <ListItem key={idx} dense>
+                    <ListItemText primary={formatIngredientForDisplay(ingredient)} />
+                  </ListItem>
+                ))}
+                {importedRecipe.ingredients.length > 5 && (
+                  <ListItem dense>
+                    <ListItemText primary={`+ ${importedRecipe.ingredients.length - 5} more ingredients`} />
+                  </ListItem>
+                )}
+              </List>
+
+              <Typography variant="subtitle2" sx={{ mt: 2 }}>
+                Tags: {importedRecipe.tags.join(', ')}
+              </Typography>
+            </Paper>
+          </Box>
+        )}
       </Paper>
     </Box>
   );

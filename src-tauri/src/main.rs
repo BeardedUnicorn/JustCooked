@@ -1,67 +1,59 @@
 #![cfg_attr(
-  all(not(debug_assertions), target_os = "windows"),
-  windows_subsystem = "windows"
+    all(not(debug_assertions), target_os = "windows"),
+    windows_subsystem = "windows"
 )]
 
-use serde::{Deserialize, Serialize};
-use std::error::Error;
-use reqwest::blocking::Client;
+mod recipe_import;
+mod image_storage;
 
-#[derive(Serialize, Deserialize)]
-struct RecipeData {
-    name: String,
-    description: Option<String>,
-    image: Option<String>,
-    prepTime: Option<String>,
-    cookTime: Option<String>,
-    totalTime: Option<String>,
-    recipeYield: Option<String>,
-    recipeIngredient: Vec<String>,
-    recipeInstructions: Vec<String>,
-    keywords: Option<String>,
+use recipe_import::{import_recipe_from_url, ImportedRecipe};
+use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
+
+#[tauri::command]
+async fn import_recipe(url: String) -> Result<ImportedRecipe, String> {
+    match import_recipe_from_url(&url).await {
+        Ok(recipe) => Ok(recipe),
+        Err(e) => Err(e.message),
+    }
 }
 
 #[tauri::command]
-fn scrape_recipe(url: String) -> Result<RecipeData, String> {
-    let client = Client::new();
-    let response = client
-        .get(&url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.82 Safari/537.36")
-        .send()
-        .map_err(|e| format!("Failed to fetch recipe: {}", e))?;
+async fn download_recipe_image(image_url: String) -> Result<StoredImage, String> {
+    let app_data_dir = get_app_data_dir().map_err(|e| e.message)?;
+    match download_and_store_image(&image_url, &app_data_dir).await {
+        Ok(stored_image) => Ok(stored_image),
+        Err(e) => Err(e.message),
+    }
+}
 
-    let html = response
-        .text()
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+#[tauri::command]
+async fn get_local_image(local_path: String) -> Result<String, String> {
+    match get_local_image_as_base64(&local_path).await {
+        Ok(base64_data_url) => Ok(base64_data_url),
+        Err(e) => Err(e.message),
+    }
+}
 
-    // Parse the HTML and extract structured data
-    // Here we'd use a library like scraper or html5ever to parse the HTML
-    // For simplicity, I'll return mock data - in a real app you'd parse the actual content
+#[tauri::command]
+async fn delete_recipe_image(local_path: String) -> Result<(), String> {
+    match delete_stored_image(&local_path).await {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e.message),
+    }
+}
 
-    Ok(RecipeData {
-        name: "Mock Recipe".to_string(),
-        description: Some("This is a mock recipe for demonstration".to_string()),
-        image: Some("https://example.com/image.jpg".to_string()),
-        prepTime: Some("15 minutes".to_string()),
-        cookTime: Some("30 minutes".to_string()),
-        totalTime: Some("45 minutes".to_string()),
-        recipeYield: Some("4".to_string()),
-        recipeIngredient: vec![
-            "2 cups flour".to_string(),
-            "1 cup sugar".to_string(),
-            "3 eggs".to_string(),
-        ],
-        recipeInstructions: vec![
-            "Mix ingredients".to_string(),
-            "Bake at 350°F for 30 minutes".to_string(),
-        ],
-        keywords: Some("dessert, easy, quick".to_string()),
-    })
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![import_recipe, download_recipe_image, get_local_image, delete_recipe_image])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
 fn main() {
-  tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![scrape_recipe])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    run();
 }
