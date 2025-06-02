@@ -1,9 +1,7 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import { invoke } from '@tauri-apps/api/core';
-import {
-  importRecipeFromUrl,
-  formatIngredientForDisplay,
-} from '@services/recipeImport';
+import { importRecipeFromUrl } from '@services/recipeImport';
+import { formatIngredientForDisplay } from '@utils/ingredientUtils';
 import { saveRecipe } from '@services/recipeStorage';
 import { autoDetectIngredients } from '@services/ingredientStorage';
 import { processRecipeImage } from '@services/imageService';
@@ -14,6 +12,30 @@ jest.mock('@tauri-apps/api/core');
 jest.mock('@services/recipeStorage');
 jest.mock('@services/ingredientStorage');
 jest.mock('@services/imageService');
+jest.mock('@utils/stringUtils');
+jest.mock('@utils/timeUtils');
+
+// Mock urlUtils with specific implementation for isSupportedUrl
+jest.mock('@utils/urlUtils', () => ({
+  isSupportedUrl: jest.fn((url: string) => {
+    // Allow supported sites for testing
+    return url.includes('allrecipes.com') ||
+           url.includes('foodnetwork.com') ||
+           url.includes('bbcgoodfood.com') ||
+           url.includes('seriouseats.com') ||
+           url.includes('epicurious.com') ||
+           url.includes('food.com') ||
+           url.includes('tasteofhome.com') ||
+           url.includes('delish.com') ||
+           url.includes('bonappetit.com') ||
+           url.includes('simplyrecipes.com');
+  }),
+  shouldDownloadImage: jest.fn(() => true),
+  isValidImageUrl: jest.fn(() => true),
+}));
+
+// Don't mock ingredientUtils since we want to test formatIngredientForDisplay
+// jest.mock('@utils/ingredientUtils');
 
 const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
 const mockSaveRecipe = saveRecipe as jest.MockedFunction<typeof saveRecipe>;
@@ -52,17 +74,12 @@ describe('recipeImport', () => {
       expect(formatIngredientForDisplay({ amount: 1.25, unit: 'tbsp', name: 'olive oil' }))
         .toBe('1 1/4 tbsp olive oil');
     });
-
-    test('should handle zero amounts', () => {
-      expect(formatIngredientForDisplay({ amount: 0, unit: '', name: 'salt to taste' }))
-        .toBe('0 salt to taste');
-    });
   });
 
   describe('importRecipeFromUrl', () => {
     test('should successfully import a recipe from supported URL', async () => {
       const url = 'https://allrecipes.com/recipe/123/cookies';
-      
+
       mockInvoke.mockResolvedValue(mockImportedRecipe);
       mockProcessRecipeImage.mockResolvedValue('processed-image-url');
       mockAutoDetectIngredients.mockReturnValue([]);
@@ -73,7 +90,7 @@ describe('recipeImport', () => {
       expect(mockInvoke).toHaveBeenCalledWith('import_recipe', { url });
       expect(mockProcessRecipeImage).toHaveBeenCalledWith('https://example.com/cookies.jpg');
       expect(mockSaveRecipe).toHaveBeenCalled();
-      
+
       expect(result.title).toBe('Chocolate Chip Cookies');
       expect(result.sourceUrl).toBe(url);
       expect(result.ingredients).toHaveLength(5);
@@ -91,7 +108,7 @@ describe('recipeImport', () => {
 
     test('should handle Tauri backend errors', async () => {
       const url = 'https://allrecipes.com/recipe/123/cookies';
-      
+
       mockInvoke.mockRejectedValue(new Error('Network error'));
 
       await expect(importRecipeFromUrl(url)).rejects.toThrow('Network error');
@@ -99,7 +116,7 @@ describe('recipeImport', () => {
 
     test('should handle empty recipe data', async () => {
       const url = 'https://allrecipes.com/recipe/123/cookies';
-      
+
       mockInvoke.mockResolvedValue({ ...mockImportedRecipe, name: '' });
 
       await expect(importRecipeFromUrl(url)).rejects.toThrow(

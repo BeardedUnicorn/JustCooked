@@ -1,9 +1,8 @@
-import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import Home from '../../pages/Home';
 import * as recipeStorage from '../../services/recipeStorage';
-import { Recipe } from '../../types/recipe';
+import { Recipe } from '@app-types';
 
 // Mock the recipe storage service
 jest.mock('../../services/recipeStorage');
@@ -185,7 +184,7 @@ describe('Home Component', () => {
     // Click on the parent card
     const cardElement = dessertCategoryCard?.closest('.MuiCard-root');
     expect(cardElement).toBeTruthy();
-    cardElement?.click();
+    (cardElement as HTMLElement)?.click();
 
     expect(mockNavigate).toHaveBeenCalledWith('/search?tag=dessert');
   });
@@ -222,7 +221,7 @@ describe('Home Component', () => {
 
     const cardElement = glutenFreeCategoryCard?.closest('.MuiCard-root');
     expect(cardElement).toBeTruthy();
-    cardElement?.click();
+    (cardElement as HTMLElement)?.click();
 
     expect(mockNavigate).toHaveBeenCalledWith('/search?tag=gluten-free');
   });

@@ -103,8 +103,8 @@ describe('ingredientStorage', () => {
       mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
       
       const capturedData: any[] = [];
-      mockLocalStorage.setItem.mockImplementation((key, value) => {
-        capturedData.push(JSON.parse(value));
+      mockLocalStorage.setItem.mockImplementation((_key, value) => {
+        capturedData.push(JSON.parse(value as string));
       });
 
       const newIngredient = {
@@ -127,7 +127,7 @@ describe('ingredientStorage', () => {
       let capturedData: any;
       mockLocalStorage.setItem.mockImplementation((key, value) => {
         if (key === 'justcooked_ingredients') {
-          capturedData = JSON.parse(value);
+          capturedData = JSON.parse(value as string);
         }
       });
 
@@ -163,7 +163,7 @@ describe('ingredientStorage', () => {
       let capturedData: any;
       mockLocalStorage.setItem.mockImplementation((key, value) => {
         if (key === 'justcooked_ingredients') {
-          capturedData = JSON.parse(value);
+          capturedData = JSON.parse(value as string);
         }
       });
 
@@ -281,8 +281,8 @@ describe('ingredientStorage', () => {
 
     test('should add new ingredients and skip existing ones', () => {
       const capturedData: any[] = [];
-      mockLocalStorage.setItem.mockImplementation((key, value) => {
-        capturedData.push(JSON.parse(value));
+      mockLocalStorage.setItem.mockImplementation((_key, value) => {
+        capturedData.push(JSON.parse(value as string));
       });
 
       const ingredientNames = ['Sugar', 'New Ingredient', 'Another New One'];
@@ -296,11 +296,8 @@ describe('ingredientStorage', () => {
     });
 
     test('should clean ingredient names before processing', () => {
-      let capturedData: any;
-      mockLocalStorage.setItem.mockImplementation((key, value) => {
-        if (key === 'justcooked_ingredients') {
-          capturedData = JSON.parse(value);
-        }
+      mockLocalStorage.setItem.mockImplementation(() => {
+        // Mock implementation for storage
       });
 
       const ingredientNames = ['2 cups fresh tomatoes, diced'];

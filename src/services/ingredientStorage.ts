@@ -1,4 +1,6 @@
-import { IngredientDatabase, IngredientSearchResult, INGREDIENT_CATEGORIES } from '@app-types/ingredient';
+import { IngredientDatabase, IngredientSearchResult } from '@app-types';
+import { cleanIngredientName, detectIngredientCategory } from '@utils/ingredientUtils';
+import { getCurrentTimestamp } from '@utils/timeUtils';
 
 const STORAGE_KEY = 'justcooked_ingredients';
 
@@ -31,8 +33,8 @@ export function addIngredient(ingredient: Omit<IngredientDatabase, 'id' | 'dateA
   const newIngredient: IngredientDatabase = {
     ...ingredient,
     id: crypto.randomUUID(),
-    dateAdded: new Date().toISOString(),
-    dateModified: new Date().toISOString(),
+    dateAdded: getCurrentTimestamp(),
+    dateModified: getCurrentTimestamp(),
   };
   
   ingredients.push(newIngredient);
@@ -53,7 +55,7 @@ export function updateIngredient(id: string, updates: Partial<IngredientDatabase
   ingredients[index] = {
     ...ingredients[index],
     ...updates,
-    dateModified: new Date().toISOString(),
+    dateModified: getCurrentTimestamp(),
   };
   
   saveIngredients(ingredients);
@@ -177,46 +179,9 @@ export function autoDetectIngredients(ingredientNames: string[]): IngredientData
   return newIngredients;
 }
 
-// Clean ingredient name (remove preparation instructions, etc.)
-function cleanIngredientName(name: string): string {
-  // Remove common preparation instructions
-  const cleanedName = name
-    .replace(/,\s*(diced|chopped|sliced|minced|grated|shredded|crushed|ground|fresh|dried|cooked|raw|peeled|seeded|stemmed|trimmed|halved|quartered).*$/i, '')
-    .replace(/\s*\([^)]*\)\s*/g, '') // Remove parenthetical content
-    .trim();
-  
-  return cleanedName || name; // Fallback to original if cleaning results in empty string
-}
 
-// Detect ingredient category based on name
-function detectIngredientCategory(name: string): { id: string; name: string } {
-  const normalizedName = name.toLowerCase();
-  
-  // Simple keyword-based categorization
-  const categoryKeywords = {
-    vegetables: ['onion', 'garlic', 'carrot', 'celery', 'potato', 'tomato', 'pepper', 'mushroom', 'spinach', 'lettuce', 'cucumber', 'broccoli', 'cauliflower', 'zucchini', 'eggplant', 'cabbage', 'kale', 'asparagus', 'artichoke', 'beet', 'radish', 'turnip', 'parsnip', 'leek', 'shallot', 'scallion', 'chive'],
-    fruits: ['apple', 'banana', 'orange', 'lemon', 'lime', 'grape', 'strawberry', 'blueberry', 'raspberry', 'blackberry', 'cherry', 'peach', 'pear', 'plum', 'apricot', 'mango', 'pineapple', 'kiwi', 'avocado', 'coconut', 'cranberry', 'pomegranate', 'fig', 'date', 'raisin'],
-    meat: ['chicken', 'beef', 'pork', 'lamb', 'turkey', 'duck', 'bacon', 'ham', 'sausage', 'ground beef', 'ground turkey', 'ground chicken', 'steak', 'roast', 'chop', 'breast', 'thigh', 'wing'],
-    seafood: ['salmon', 'tuna', 'cod', 'halibut', 'shrimp', 'crab', 'lobster', 'scallop', 'mussel', 'clam', 'oyster', 'fish', 'anchovy', 'sardine', 'mackerel', 'trout', 'bass', 'snapper'],
-    dairy: ['milk', 'cream', 'butter', 'cheese', 'yogurt', 'sour cream', 'cottage cheese', 'ricotta', 'mozzarella', 'cheddar', 'parmesan', 'feta', 'goat cheese', 'cream cheese', 'egg', 'eggs'],
-    grains: ['rice', 'pasta', 'bread', 'flour', 'oats', 'quinoa', 'barley', 'wheat', 'corn', 'cornmeal', 'couscous', 'bulgur', 'farro', 'millet', 'buckwheat', 'rye', 'spelt'],
-    legumes: ['bean', 'beans', 'lentil', 'lentils', 'chickpea', 'chickpeas', 'pea', 'peas', 'peanut', 'peanuts', 'almond', 'almonds', 'walnut', 'walnuts', 'cashew', 'cashews', 'pistachio', 'pistachios', 'pecan', 'pecans', 'hazelnut', 'hazelnuts'],
-    herbs: ['basil', 'oregano', 'thyme', 'rosemary', 'sage', 'parsley', 'cilantro', 'dill', 'mint', 'chives', 'tarragon', 'bay leaf', 'bay leaves', 'paprika', 'cumin', 'coriander', 'turmeric', 'ginger', 'cinnamon', 'nutmeg', 'clove', 'cloves', 'cardamom', 'fennel', 'anise', 'saffron', 'vanilla', 'pepper', 'salt', 'garlic powder', 'onion powder'],
-    oils: ['oil', 'olive oil', 'vegetable oil', 'canola oil', 'coconut oil', 'sesame oil', 'avocado oil', 'sunflower oil', 'safflower oil', 'grapeseed oil', 'peanut oil', 'corn oil', 'butter', 'margarine', 'shortening', 'lard'],
-    condiments: ['sauce', 'ketchup', 'mustard', 'mayonnaise', 'vinegar', 'soy sauce', 'worcestershire', 'hot sauce', 'barbecue sauce', 'teriyaki', 'salsa', 'pesto', 'tahini', 'hummus', 'pickle', 'pickles', 'relish', 'capers', 'olives'],
-    baking: ['sugar', 'brown sugar', 'honey', 'maple syrup', 'molasses', 'baking powder', 'baking soda', 'yeast', 'vanilla extract', 'almond extract', 'cocoa powder', 'chocolate', 'chocolate chips', 'cornstarch', 'gelatin', 'agar'],
-    beverages: ['water', 'broth', 'stock', 'wine', 'beer', 'juice', 'coffee', 'tea', 'soda', 'milk', 'coconut milk', 'almond milk', 'soy milk', 'oat milk'],
-  };
-  
-  for (const [categoryId, keywords] of Object.entries(categoryKeywords)) {
-    if (keywords.some(keyword => normalizedName.includes(keyword))) {
-      const category = INGREDIENT_CATEGORIES.find(cat => cat.id === categoryId);
-      return category || INGREDIENT_CATEGORIES.find(cat => cat.id === 'other')!;
-    }
-  }
-  
-  return INGREDIENT_CATEGORIES.find(cat => cat.id === 'other')!;
-}
+
+
 
 // Get default ingredients (common ingredients to start with)
 function getDefaultIngredients(): IngredientDatabase[] {
@@ -236,7 +201,7 @@ function getDefaultIngredients(): IngredientDatabase[] {
   return defaultIngredients.map(ingredient => ({
     ...ingredient,
     id: crypto.randomUUID(),
-    dateAdded: new Date().toISOString(),
-    dateModified: new Date().toISOString(),
+    dateAdded: getCurrentTimestamp(),
+    dateModified: getCurrentTimestamp(),
   }));
 }

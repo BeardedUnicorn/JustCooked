@@ -1,4 +1,4 @@
-import { Ingredient } from '../types/recipe';
+import { Ingredient } from '@app-types';
 
 /**
  * Scale ingredient amounts based on serving size ratio

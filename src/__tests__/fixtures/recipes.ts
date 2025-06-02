@@ -1,5 +1,4 @@
-import { Recipe, Ingredient, PantryItem } from '../../types/recipe';
-import { IngredientDatabase } from '../../types/ingredient';
+import { Recipe, Ingredient, PantryItem, IngredientDatabase } from '@app-types';
 
 export const mockIngredient: Ingredient = {
   name: 'flour',

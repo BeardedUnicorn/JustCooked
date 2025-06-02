@@ -18,12 +18,13 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
 
   const handleSearch = () => {
-    if (searchTerm.trim()) {
-      onSearch(searchTerm);
+    const trimmedTerm = searchTerm.trim();
+    if (trimmedTerm) {
+      onSearch(trimmedTerm);
 
       // Add to history if not already there
-      if (!searchHistory.includes(searchTerm)) {
-        const newHistory = [searchTerm, ...searchHistory].slice(0, 5);
+      if (!searchHistory.includes(trimmedTerm)) {
+        const newHistory = [trimmedTerm, ...searchHistory].slice(0, 5);
         setSearchHistory(newHistory);
       }
     }

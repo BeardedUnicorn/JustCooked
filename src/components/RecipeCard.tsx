@@ -2,35 +2,105 @@ import React, { useState } from 'react';
 import {
   Card, CardContent, CardMedia, Typography, Box, Chip,
   CardActionArea, IconButton, CardActions, Dialog,
-  DialogTitle, DialogContent, DialogActions, Button
+  DialogTitle, DialogContent, DialogActions, Button,
+  Rating, Tooltip, Menu, MenuItem, ListItemIcon, ListItemText
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { Recipe } from '@app-types/recipe';
-import { deleteRecipe } from '@services/recipeStorage';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ShareIcon from '@mui/icons-material/Share';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import StarIcon from '@mui/icons-material/Star';
+
+import { Recipe } from '@app-types';
+import { deleteRecipe, updateRecipe } from '@services/recipeStorage';
 import { useImageUrl } from '@hooks/useImageUrl';
 import { calculateTotalTime } from '@utils/timeUtils';
 
 interface RecipeCardProps {
   recipe: Recipe;
   onDelete?: () => void;
+  onUpdate?: () => void;
 }
 
-const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete }) => {
+const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) => {
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const imageUrl = useImageUrl(recipe.image);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const { imageUrl } = useImageUrl(recipe.image);
+
+  // Helper functions
+  const getDifficultyColor = (difficulty?: string) => {
+    switch (difficulty) {
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
+      default: return '#9E9E9E';
+    }
+  };
 
   const handleClick = () => {
     navigate(`/recipe/${recipe.id}`);
   };
 
+  const handleCookNowClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/recipe/${recipe.id}/cook`);
+  };
+
+  const handleFavoriteClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const updatedRecipe = { ...recipe, isFavorite: !recipe.isFavorite };
+      await updateRecipe(updatedRecipe);
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to update favorite status:', error);
+    }
+  };
+
+  const handleShareClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: recipe.title,
+          text: recipe.description,
+          url: recipe.sourceUrl || window.location.href,
+        });
+      } catch (error) {
+        console.log('Error sharing:', error);
+      }
+    } else {
+      // Fallback: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(recipe.sourceUrl || window.location.href);
+        // You could show a toast notification here
+      } catch (error) {
+        console.error('Failed to copy to clipboard:', error);
+      }
+    }
+  };
+
+  const handleMenuClick = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    setMenuAnchorEl(e.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
   const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
+    e.stopPropagation();
     setDeleteDialogOpen(true);
+    handleMenuClose();
   };
 
   const handleConfirmDelete = async () => {
@@ -54,29 +124,134 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete }) => {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'transform 0.2s ease-in-out',
+        position: 'relative',
+        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
         '&:hover': {
           transform: 'translateY(-4px)',
         }
       }}>
-        <CardActionArea onClick={handleClick}>
-          <CardMedia
-            component="img"
-            height="180"
-            image={imageUrl}
-            alt={recipe.title}
-          />
-          <CardContent sx={{ flexGrow: 1 }}>
-            <Typography gutterBottom variant="h6" component="div" noWrap>
-              {recipe.title}
-            </Typography>
+        {/* Favorite Badge */}
+        {recipe.isFavorite && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1,
+              backgroundColor: 'rgba(244, 67, 54, 0.9)',
+              borderRadius: '50%',
+              p: 0.5,
+            }}
+          >
+            <FavoriteIcon sx={{ color: 'white', fontSize: '1rem' }} />
+          </Box>
+        )}
+
+        <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }}>
+          <Box sx={{ position: 'relative' }}>
+            <CardMedia
+              component="img"
+              sx={{
+                height: 180,
+                objectFit: 'cover',
+                objectPosition: 'center',
+              }}
+              image={imageUrl}
+              alt={recipe.title}
+            />
+
+            {/* Quick Action Overlay */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: 0,
+                transition: 'opacity 0.2s ease-in-out',
+                '&:hover': {
+                  opacity: 1,
+                },
+              }}
+            >
+              <Tooltip title="Start Cooking">
+                <IconButton
+                  onClick={handleCookNowClick}
+                  sx={{
+                    backgroundColor: 'primary.main',
+                    color: 'white',
+                    '&:hover': {
+                      backgroundColor: 'primary.dark',
+                    },
+                  }}
+                  aria-label="start cooking mode"
+                >
+                  <PlayArrowIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+
+          <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+              <Typography gutterBottom variant="h6" component="div" sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                lineHeight: 1.2,
+                flex: 1,
+                mr: 1,
+              }}>
+                {recipe.title}
+              </Typography>
+
+              {recipe.difficulty && (
+                <Tooltip title={`Difficulty: ${recipe.difficulty}`}>
+                  <Chip
+                    size="small"
+                    label={recipe.difficulty}
+                    sx={{
+                      backgroundColor: getDifficultyColor(recipe.difficulty),
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      height: '20px',
+                    }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
+
+            {/* Rating */}
+            {recipe.rating && (
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Rating
+                  value={recipe.rating}
+                  readOnly
+                  size="small"
+                  precision={0.5}
+                  emptyIcon={<StarIcon style={{ opacity: 0.3 }} fontSize="inherit" />}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                  ({recipe.rating})
+                </Typography>
+              </Box>
+            )}
+
             <Typography variant="body2" color="text.secondary" sx={{
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
-              mb: 2
+              mb: 2,
+              minHeight: '2.5em',
             }}>
               {recipe.description}
             </Typography>
@@ -97,8 +272,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete }) => {
           </CardContent>
         </CardActionArea>
 
-        <CardActions sx={{ p: 1, pt: 0 }}>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flexGrow: 1 }}>
+        <CardActions sx={{ p: 1, pt: 0, justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flexGrow: 1, minWidth: 0 }}>
             {recipe.tags.slice(0, 2).map(tag => (
               <Chip
                 key={tag}
@@ -116,33 +291,91 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete }) => {
               />
             )}
           </Box>
-          <IconButton size="small" aria-label="add to favorites">
-            <FavoriteBorderIcon fontSize="small" />
-          </IconButton>
-          <IconButton
-            size="small"
-            aria-label="delete recipe"
-            onClick={handleDeleteClick}
-            sx={{ color: 'error.light' }}
-          >
-            <DeleteOutlineIcon fontSize="small" />
-          </IconButton>
+
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}>
+              <IconButton
+                size="small"
+                onClick={handleFavoriteClick}
+                aria-label={recipe.isFavorite ? "remove from favorites" : "add to favorites"}
+                sx={{
+                  color: recipe.isFavorite ? 'error.main' : 'text.secondary',
+                  '&:hover': {
+                    color: recipe.isFavorite ? 'error.dark' : 'error.light',
+                  },
+                }}
+              >
+                {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Share recipe">
+              <IconButton
+                size="small"
+                onClick={handleShareClick}
+                aria-label="share recipe"
+                sx={{ color: 'text.secondary' }}
+              >
+                <ShareIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="More options">
+              <IconButton
+                size="small"
+                onClick={handleMenuClick}
+                aria-label="more recipe options"
+                sx={{ color: 'text.secondary' }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </CardActions>
       </Card>
 
+      {/* More Options Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <MenuItem onClick={handleDeleteClick}>
+          <ListItemIcon>
+            <DeleteOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Delete Recipe</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
       >
-        <DialogTitle>Delete Recipe</DialogTitle>
+        <DialogTitle id="delete-dialog-title">Delete Recipe</DialogTitle>
         <DialogContent>
-          <Typography>
+          <Typography id="delete-dialog-description">
             Are you sure you want to delete "{recipe.title}"? This action cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleConfirmDelete} color="error">Delete</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)} autoFocus>
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
         </DialogActions>
       </Dialog>
     </>

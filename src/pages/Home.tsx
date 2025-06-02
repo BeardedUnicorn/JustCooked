@@ -7,7 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import KitchenIcon from '@mui/icons-material/Kitchen';
 import { useNavigate } from 'react-router-dom';
 import RecipeCard from '@components/RecipeCard';
-import { Recipe } from '@app-types/recipe';
+import { Recipe } from '@app-types';
 import { getAllRecipes } from '@services/recipeStorage';
 
 interface RecipeCategory {
@@ -68,6 +68,10 @@ const Home: React.FC = () => {
     fetchRecipes();
   };
 
+  const handleRecipeUpdated = () => {
+    fetchRecipes();
+  };
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', py: 3 }}>
       {/* Recent Recipes Section */}
@@ -91,6 +95,7 @@ const Home: React.FC = () => {
                 <RecipeCard
                   recipe={recipe}
                   onDelete={handleRecipeDeleted}
+                  onUpdate={handleRecipeUpdated}
                 />
               </Grid>
             ))}

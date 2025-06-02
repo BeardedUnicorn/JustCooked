@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 import PantryManager from '@components/PantryManager';
-import { PantryItem } from '@app-types/recipe';
+import { PantryItem } from '@app-types';
 import { getPantryItems, addPantryItem, updatePantryItem, deletePantryItem } from '@services/pantryStorage';
 
 const Pantry: React.FC = () => {

@@ -32,7 +32,7 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
-import { IngredientDatabase, INGREDIENT_CATEGORIES } from '@app-types/ingredient';
+import { IngredientDatabase, INGREDIENT_CATEGORIES } from '@app-types';
 import {
   loadIngredients,
   searchIngredients,

@@ -7,15 +7,14 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import PublicIcon from '@mui/icons-material/Public';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import PrintIcon from '@mui/icons-material/Print';
 import EditIcon from '@mui/icons-material/Edit';
 import PrepTimeIcon from '@mui/icons-material/Schedule';
 import CookTimeIcon from '@mui/icons-material/Whatshot';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import { Recipe } from '@app-types/recipe';
+import { Recipe } from '@app-types';
 import { useImageUrl } from '@hooks/useImageUrl';
-import { formatIngredientForDisplay } from '@services/recipeImport';
+import { formatIngredientForDisplay } from '@utils/ingredientUtils';
 import { formatTimeForDisplay, calculateTotalTime } from '@utils/timeUtils';
 import { scaleIngredients, isValidServingSize, getScalingDescription } from '@utils/servingUtils';
 
@@ -27,7 +26,7 @@ interface RecipeDetailProps {
 }
 
 const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
-  const imageUrl = useImageUrl(recipe.image);
+  const { imageUrl } = useImageUrl(recipe.image);
 
   // State for serving size adjustment
   const [currentServings, setCurrentServings] = useState(recipe.servings || 1);
@@ -36,10 +35,6 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
   const scaledIngredients = useMemo(() => {
     return scaleIngredients(recipe.ingredients, recipe.servings || 1, currentServings);
   }, [recipe.ingredients, recipe.servings, currentServings]);
-
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handleServingsChange = (newServings: number) => {
     if (isValidServingSize(newServings)) {
@@ -235,15 +230,8 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
             </Box>
           )}
 
-          <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-            <Button
-              variant="outlined"
-              startIcon={<PrintIcon />}
-              onClick={handlePrint}
-            >
-              Print
-            </Button>
-            {onEdit && (
+          {onEdit && (
+            <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
               <Button
                 variant="outlined"
                 startIcon={<EditIcon />}
@@ -251,8 +239,8 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
               >
                 Edit
               </Button>
-            )}
-          </Stack>
+            </Stack>
+          )}
         </Box>
       </Box>
 

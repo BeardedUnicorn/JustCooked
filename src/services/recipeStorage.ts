@@ -6,8 +6,9 @@ import {
   BaseDirectory,
   exists
 } from '@tauri-apps/plugin-fs';
-import { Recipe } from '@app-types/recipe';
+import { Recipe } from '@app-types';
 import { deleteRecipeImage } from '@services/imageService';
+import { getCurrentTimestamp } from '@utils/timeUtils';
 
 // Use simpler paths without app name (Tauri handles that)
 const RECIPES_DIR = 'recipes';
@@ -178,6 +179,18 @@ export async function getRecipeById(id: string): Promise<Recipe | null> {
     console.warn(`Recipe not found: ${id}`, error);
     return null;
   }
+}
+
+// Update a recipe
+export async function updateRecipe(recipe: Recipe): Promise<void> {
+  // Update the dateModified field
+  const updatedRecipe = {
+    ...recipe,
+    dateModified: getCurrentTimestamp(),
+  };
+
+  // Use the existing saveRecipe function which handles both create and update
+  await saveRecipe(updatedRecipe);
 }
 
 // Delete a recipe

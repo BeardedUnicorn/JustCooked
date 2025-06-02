@@ -1,0 +1,300 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { ThemeProvider } from '@mui/material/styles';
+import PantryManager from '@components/PantryManager';
+import { PantryItem } from '@app-types';
+import { mockPantryItems } from '@/__tests__/fixtures/recipes';
+import darkTheme from '@styles/theme';
+
+// Mock the formatAmountForDisplay function
+jest.mock('@services/recipeImport', () => ({
+  formatAmountForDisplay: jest.fn((amount: number, unit: string) => `${amount} ${unit}`),
+}));
+
+const mockOnAddItem = jest.fn();
+const mockOnUpdateItem = jest.fn();
+const mockOnDeleteItem = jest.fn();
+
+const renderPantryManager = (items: PantryItem[] = mockPantryItems) => {
+  return render(
+    <ThemeProvider theme={darkTheme}>
+      <PantryManager
+        items={items}
+        onAddItem={mockOnAddItem}
+        onUpdateItem={mockOnUpdateItem}
+        onDeleteItem={mockOnDeleteItem}
+      />
+    </ThemeProvider>
+  );
+};
+
+describe('PantryManager Component', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('Rendering', () => {
+    test('should render pantry manager with title and add button', () => {
+      renderPantryManager();
+
+      expect(screen.getByText('Pantry Items')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument();
+    });
+
+    test('should render empty state when no items', () => {
+      renderPantryManager([]);
+
+      expect(screen.getByText('Pantry Items')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument();
+    });
+
+    test('should group items by category', () => {
+      renderPantryManager();
+
+      // Should show category headers
+      expect(screen.getByText('baking')).toBeInTheDocument();
+      
+      // Should show items under categories
+      expect(screen.getByText('Flour')).toBeInTheDocument();
+      expect(screen.getByText('Sugar')).toBeInTheDocument();
+    });
+
+    test('should display item details correctly', () => {
+      renderPantryManager();
+
+      // Check if items are displayed with proper formatting
+      expect(screen.getByText('Flour')).toBeInTheDocument();
+      expect(screen.getByText('5 lbs')).toBeInTheDocument();
+      expect(screen.getByText('Sugar')).toBeInTheDocument();
+      expect(screen.getByText('2 lbs')).toBeInTheDocument();
+    });
+  });
+
+  describe('Add Item Dialog', () => {
+    test('should open add dialog when add button is clicked', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      expect(screen.getByText('Add Pantry Item')).toBeInTheDocument();
+      expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/amount/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/unit/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/category/i)).toBeInTheDocument();
+    });
+
+    test('should close dialog when cancel is clicked', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+      expect(screen.getByText('Add Pantry Item')).toBeInTheDocument();
+
+      // Close dialog
+      await user.click(screen.getByRole('button', { name: /cancel/i }));
+      expect(screen.queryByText('Add Pantry Item')).not.toBeInTheDocument();
+    });
+
+    test('should add new item when form is submitted', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+
+      // Fill form
+      await user.type(screen.getByLabelText(/name/i), 'Milk');
+      await user.clear(screen.getByLabelText(/amount/i));
+      await user.type(screen.getByLabelText(/amount/i), '1');
+      
+      // Select unit
+      await user.click(screen.getByLabelText(/unit/i));
+      await user.click(screen.getByText('gallon'));
+
+      // Select category
+      await user.click(screen.getByLabelText(/category/i));
+      await user.click(screen.getByText('Dairy'));
+
+      // Submit form
+      await user.click(screen.getByRole('button', { name: /add/i }));
+
+      expect(mockOnAddItem).toHaveBeenCalledWith({
+        id: 'test-uuid-123',
+        name: 'Milk',
+        amount: 1,
+        unit: 'gallon',
+        category: 'Dairy',
+        expiryDate: undefined,
+      });
+    });
+
+    test('should handle expiry date input', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+
+      // Fill form with expiry date
+      await user.type(screen.getByLabelText(/name/i), 'Bread');
+      await user.clear(screen.getByLabelText(/amount/i));
+      await user.type(screen.getByLabelText(/amount/i), '1');
+      await user.type(screen.getByLabelText(/expiry date/i), '2024-12-31');
+
+      // Submit form
+      await user.click(screen.getByRole('button', { name: /add/i }));
+
+      expect(mockOnAddItem).toHaveBeenCalledWith({
+        id: 'test-uuid-123',
+        name: 'Bread',
+        amount: 1,
+        unit: 'piece(s)',
+        category: 'Other',
+        expiryDate: '2024-12-31',
+      });
+    });
+  });
+
+  describe('Edit Item Dialog', () => {
+    test('should open edit dialog when edit button is clicked', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Find and click edit button for first item
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      await user.click(editButtons[0]);
+
+      expect(screen.getByText('Edit Pantry Item')).toBeInTheDocument();
+      
+      // Form should be pre-filled with item data
+      expect(screen.getByDisplayValue('Flour')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('5')).toBeInTheDocument();
+    });
+
+    test('should update item when edit form is submitted', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open edit dialog
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      await user.click(editButtons[0]);
+
+      // Modify the amount
+      const amountInput = screen.getByDisplayValue('5');
+      await user.clear(amountInput);
+      await user.type(amountInput, '10');
+
+      // Submit form
+      await user.click(screen.getByRole('button', { name: /update/i }));
+
+      expect(mockOnUpdateItem).toHaveBeenCalledWith({
+        id: 'pantry-1',
+        name: 'Flour',
+        amount: 10,
+        unit: 'lbs',
+        category: 'baking',
+        expiryDate: '2024-12-31',
+      });
+    });
+  });
+
+  describe('Delete Item', () => {
+    test('should delete item when delete button is clicked', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Find and click delete button for first item
+      const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+      await user.click(deleteButtons[0]);
+
+      expect(mockOnDeleteItem).toHaveBeenCalledWith('pantry-1');
+    });
+  });
+
+  describe('Form Validation', () => {
+    test('should require name field', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+
+      // Try to submit without name
+      await user.click(screen.getByRole('button', { name: /add/i }));
+
+      // Should not call onAddItem
+      expect(mockOnAddItem).not.toHaveBeenCalled();
+    });
+
+    test('should handle numeric amount input', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+
+      // Fill form with valid data
+      await user.type(screen.getByLabelText(/name/i), 'Test Item');
+      await user.clear(screen.getByLabelText(/amount/i));
+      await user.type(screen.getByLabelText(/amount/i), '2.5');
+
+      // Submit form
+      await user.click(screen.getByRole('button', { name: /add/i }));
+
+      expect(mockOnAddItem).toHaveBeenCalledWith({
+        id: 'test-uuid-123',
+        name: 'Test Item',
+        amount: 2.5,
+        unit: 'piece(s)',
+        category: 'Other',
+        expiryDate: undefined,
+      });
+    });
+  });
+
+  describe('Accessibility', () => {
+    test('should have proper ARIA labels', () => {
+      renderPantryManager();
+
+      expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument();
+      
+      const editButtons = screen.getAllByRole('button', { name: /edit/i });
+      expect(editButtons.length).toBeGreaterThan(0);
+      
+      const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
+      expect(deleteButtons.length).toBeGreaterThan(0);
+    });
+
+    test('should support keyboard navigation in dialog', async () => {
+      const user = userEvent.setup();
+      renderPantryManager();
+
+      // Open dialog
+      await user.click(screen.getByRole('button', { name: /add item/i }));
+
+      // Tab through form fields
+      await user.tab();
+      expect(screen.getByLabelText(/name/i)).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByLabelText(/amount/i)).toHaveFocus();
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('should handle empty items array', () => {
+      expect(() => renderPantryManager([])).not.toThrow();
+    });
+
+    test('should handle items without categories', () => {
+      const itemsWithoutCategory = [
+        { id: '1', name: 'Test', amount: 1, unit: 'piece', category: '' }
+      ];
+      
+      expect(() => renderPantryManager(itemsWithoutCategory)).not.toThrow();
+    });
+  });
+});

@@ -1,37 +1,3 @@
-export interface Ingredient {
-  name: string;
-  amount: number;
-  unit: string;
-}
-
-export interface IngredientDatabase {
-  id: string;
-  name: string;
-  category: string;
-  aliases: string[];
-  nutritionalInfo?: NutritionalInfo;
-  storageInfo?: StorageInfo;
-  dateAdded: string;
-  dateModified: string;
-}
-
-export interface NutritionalInfo {
-  calories?: number;
-  protein?: number;
-  carbohydrates?: number;
-  fat?: number;
-  fiber?: number;
-  sugar?: number;
-  sodium?: number;
-  // All values per 100g/100ml
-}
-
-export interface StorageInfo {
-  shelfLife?: string;
-  storageMethod?: string;
-  temperature?: string;
-}
-
 export interface IngredientCategory {
   id: string;
   name: string;
@@ -55,9 +21,3 @@ export const INGREDIENT_CATEGORIES: IngredientCategory[] = [
   { id: 'beverages', name: 'Beverages', color: '#00BCD4' },
   { id: 'other', name: 'Other', color: '#9E9E9E' },
 ];
-
-export interface IngredientSearchResult {
-  ingredient: IngredientDatabase;
-  score: number;
-  matchType: 'exact' | 'alias' | 'fuzzy';
-}

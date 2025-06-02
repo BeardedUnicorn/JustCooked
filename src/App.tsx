@@ -10,22 +10,31 @@ import Search from '@pages/Search';
 import Pantry from '@pages/Pantry';
 import Ingredients from '@pages/Ingredients';
 import RecipeView from '@pages/RecipeView';
+import CookingMode from '@pages/CookingMode';
 
 function App() {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
       <Router>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/import" element={<Import />} />
-            <Route path="/search" element={<Search />} />
-            <Route path="/pantry" element={<Pantry />} />
-            <Route path="/ingredients" element={<Ingredients />} />
-            <Route path="/recipe/:id" element={<RecipeView />} />
-          </Routes>
-        </AppLayout>
+        <Routes>
+          {/* Cooking mode route without AppLayout for fullscreen experience */}
+          <Route path="/recipe/:id/cook" element={<CookingMode />} />
+
+          {/* All other routes with AppLayout */}
+          <Route path="/*" element={
+            <AppLayout>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/import" element={<Import />} />
+                <Route path="/search" element={<Search />} />
+                <Route path="/pantry" element={<Pantry />} />
+                <Route path="/ingredients" element={<Ingredients />} />
+                <Route path="/recipe/:id" element={<RecipeView />} />
+              </Routes>
+            </AppLayout>
+          } />
+        </Routes>
       </Router>
     </ThemeProvider>
   );

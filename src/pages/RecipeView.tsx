@@ -6,9 +6,11 @@ import {
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PrintIcon from '@mui/icons-material/Print';
 import RecipeDetail from '@components/RecipeDetail';
 import { getRecipeById, deleteRecipe } from '@services/recipeStorage';
-import { Recipe } from '@app-types/recipe';
+import { Recipe } from '@app-types';
 
 const RecipeView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +65,16 @@ const RecipeView: React.FC = () => {
     navigate(-1);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleStartCooking = () => {
+    if (id) {
+      navigate(`/recipe/${id}/cook`);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -89,7 +101,14 @@ const RecipeView: React.FC = () => {
 
   return (
     <Box sx={{ py: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        mb: 3,
+        flexWrap: { xs: 'wrap', sm: 'nowrap' },
+        gap: 2
+      }}>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
@@ -97,14 +116,38 @@ const RecipeView: React.FC = () => {
         >
           Back
         </Button>
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<DeleteIcon />}
-          onClick={() => setDeleteDialogOpen(true)}
-        >
-          Delete
-        </Button>
+
+        <Box sx={{
+          display: 'flex',
+          gap: 2,
+          flexWrap: 'wrap',
+          justifyContent: { xs: 'center', sm: 'flex-end' }
+        }}>
+          <Button
+            variant="contained"
+            startIcon={<PlayArrowIcon />}
+            onClick={handleStartCooking}
+            size="large"
+            aria-label="start cooking mode"
+          >
+            Start Cooking
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<PrintIcon />}
+            onClick={handlePrint}
+          >
+            Print
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            Delete
+          </Button>
+        </Box>
       </Box>
 
       <RecipeDetail recipe={recipe} />

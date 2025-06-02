@@ -1,23 +1,36 @@
 import { useState, useEffect } from 'react';
 import { getLocalImageUrl } from '@services/imageService';
 
+export interface UseImageUrlResult {
+  imageUrl: string;
+  isLoading: boolean;
+  error: string | null;
+}
+
 /**
  * Hook to handle loading local images asynchronously
  * Returns a data URL for local images or the original URL for remote images
  */
-export function useImageUrl(imageUrl: string | undefined): string {
+export function useImageUrl(imageUrl: string | undefined): UseImageUrlResult {
   const [resolvedUrl, setResolvedUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!imageUrl) {
+    // Reset error state when imageUrl changes
+    setError(null);
+
+    if (!imageUrl || imageUrl.trim() === '') {
       setResolvedUrl('https://via.placeholder.com/400x300?text=No+Image');
+      setIsLoading(false);
       return;
     }
 
-    // If it's already a web URL or data URL, use it directly
-    if (imageUrl.startsWith('http') || imageUrl.startsWith('data:')) {
+    // If it's already a web URL, data URL, blob URL, or file URL, use it directly
+    if (imageUrl.startsWith('http') || imageUrl.startsWith('data:') ||
+        imageUrl.startsWith('blob:') || imageUrl.startsWith('file:')) {
       setResolvedUrl(imageUrl);
+      setIsLoading(false);
       return;
     }
 
@@ -29,9 +42,10 @@ export function useImageUrl(imageUrl: string | undefined): string {
           setResolvedUrl(url);
           setIsLoading(false);
         })
-        .catch(error => {
-          console.error('Failed to load image:', error);
-          setResolvedUrl('https://via.placeholder.com/400x300?text=Image+Not+Found');
+        .catch(err => {
+          console.error('Failed to load image:', err);
+          setError(err.message || 'Failed to load image');
+          setResolvedUrl('');
           setIsLoading(false);
         });
       return;
@@ -39,12 +53,12 @@ export function useImageUrl(imageUrl: string | undefined): string {
 
     // Fallback for any other case
     setResolvedUrl(imageUrl);
+    setIsLoading(false);
   }, [imageUrl]);
 
-  // Show placeholder while loading
-  if (isLoading) {
-    return 'https://via.placeholder.com/400x300?text=Loading...';
-  }
-
-  return resolvedUrl;
+  return {
+    imageUrl: resolvedUrl,
+    isLoading,
+    error,
+  };
 }

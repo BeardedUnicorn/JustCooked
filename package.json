@@ -11,7 +11,14 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:ci": "jest --ci --coverage --watchAll=false"
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:rust": "cd src-tauri && cargo test",
+    "test:rust:unit": "cd src-tauri && cargo test --lib",
+    "test:rust:integration": "cd src-tauri && cargo test --test integration_tests",
+    "test:rust:property": "cd src-tauri && cargo test --test property_tests",
+    "test:rust:coverage": "cd src-tauri && cargo tarpaulin --out Html --output-dir coverage/",
+    "test:all": "npm run test && npm run test:rust",
+    "test:all:coverage": "npm run test:coverage && npm run test:rust:coverage"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -33,6 +40,7 @@
     "@tauri-apps/cli": "2.5.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/jest": "^29.5.14",
     "@types/react": "19.1.6",
     "@types/react-dom": "19.1.5",

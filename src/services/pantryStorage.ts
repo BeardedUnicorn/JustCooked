@@ -5,7 +5,7 @@ import {
   BaseDirectory,
   exists
 } from '@tauri-apps/plugin-fs';
-import { PantryItem } from '@app-types/recipe';
+import { PantryItem } from '@app-types';
 
 const PANTRY_DIR = 'pantry';
 const PANTRY_FILE = 'pantry/items.json';

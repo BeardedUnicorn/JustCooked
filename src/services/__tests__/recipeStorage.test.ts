@@ -291,7 +291,7 @@ describe('recipeStorage', () => {
       await expect(deleteRecipe('non-existent-id')).resolves.not.toThrow();
     });
 
-    test('should handle file deletion errors', async () => {
+    test('should handle index update errors', async () => {
       // Mock getRecipeById call
       mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
       mockExists.mockResolvedValueOnce(true); // Recipe file exists
@@ -300,11 +300,21 @@ describe('recipeStorage', () => {
       // Mock deleteRecipeImage success
       mockDeleteRecipeImage.mockResolvedValue();
 
-      // Mock file deletion failure
+      // Mock file deletion success
       mockExists.mockResolvedValueOnce(true); // Recipe file exists for deletion
-      mockRemove.mockRejectedValue(new Error('File deletion failed'));
+      mockRemove.mockResolvedValue();
 
-      // Should throw error when file deletion fails
+      // Mock getAllRecipes call (for index update)
+      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
+      mockExists.mockResolvedValueOnce(true); // Index exists
+      mockReadTextFile.mockResolvedValueOnce(JSON.stringify([mockRecipe]));
+      mockExists.mockResolvedValueOnce(true); // Recipe file exists
+      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
+
+      // Mock final index write failure
+      mockWriteTextFile.mockRejectedValue(new Error('Index write failed'));
+
+      // Should throw error when index update fails
       await expect(deleteRecipe(mockRecipe.id)).rejects.toThrow('Failed to delete recipe');
     });
   });

@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { shouldDownloadImage as shouldDownloadImageUtil } from '@utils/urlUtils';
 
 export interface StoredImage {
   local_path: string;
@@ -16,37 +17,6 @@ export async function downloadAndStoreImage(imageUrl: string): Promise<StoredIma
   } catch (error) {
     console.error('Failed to download and store image:', error);
     throw new Error(`Failed to download image: ${error}`);
-  }
-}
-
-export function isValidImageUrl(url: string): boolean {
-  try {
-    const urlObj = new URL(url);
-    const pathname = urlObj.pathname.toLowerCase();
-    
-    // Check for common image extensions
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-    const hasImageExtension = imageExtensions.some(ext => pathname.endsWith(ext));
-    
-    // Also accept URLs that might be dynamic image URLs (no extension)
-    // as long as they're from known image hosting domains
-    const imageHostingDomains = [
-      'images.unsplash.com',
-      'cdn.pixabay.com',
-      'images.pexels.com',
-      'i.imgur.com',
-      'cloudinary.com',
-      'amazonaws.com',
-      'googleusercontent.com',
-    ];
-    
-    const isFromImageHost = imageHostingDomains.some(domain => 
-      urlObj.hostname.includes(domain)
-    );
-    
-    return hasImageExtension || isFromImageHost || url.includes('image') || url.includes('photo');
-  } catch {
-    return false;
   }
 }
 
@@ -71,28 +41,9 @@ export async function getLocalImageUrl(localPath: string): Promise<string> {
   }
 }
 
-export function shouldDownloadImage(imageUrl: string): boolean {
-  // Don't download if it's already a local file
-  if (imageUrl.startsWith('file://') || imageUrl.startsWith('/')) {
-    return false;
-  }
-  
-  // Don't download placeholder images
-  if (imageUrl.includes('placeholder') || imageUrl.includes('via.placeholder')) {
-    return false;
-  }
-  
-  // Don't download if URL is empty or invalid
-  if (!imageUrl || !isValidImageUrl(imageUrl)) {
-    return false;
-  }
-  
-  return true;
-}
-
 export async function processRecipeImage(imageUrl: string): Promise<string> {
   // If we shouldn't download the image, return the original URL
-  if (!shouldDownloadImage(imageUrl)) {
+  if (!shouldDownloadImageUtil(imageUrl)) {
     return imageUrl;
   }
 
@@ -125,3 +76,6 @@ export async function deleteRecipeImage(imagePath: string): Promise<void> {
     }
   }
 }
+
+// Re-export utility functions for convenience
+export { isValidImageUrl, shouldDownloadImage } from '@utils/urlUtils';
