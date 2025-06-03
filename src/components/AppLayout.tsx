@@ -112,15 +112,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ mr: theme.spacing(3) }}>
-            JustCooked
-          </Typography>
-          <Box sx={{ flexGrow: 1, maxWidth: 400, mr: theme.spacing(2) }}>
+          <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
+            <Typography variant="h6" noWrap component="div">
+              JustCooked
+            </Typography>
+          </Box>
+          <Box sx={{ width: '40%', minWidth: 300 }}>
             <SearchBar
               onSearch={handleSearch}
               placeholder="Search recipes..."
             />
           </Box>
+          <Box sx={{ flexGrow: 1 }} />
         </Toolbar>
       </AppBar>
 
