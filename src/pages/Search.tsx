@@ -69,11 +69,17 @@ const Search: React.FC = () => {
   // Handle URL search parameters
   useEffect(() => {
     const queryParam = searchParams.get('q');
+    const tagParam = searchParams.get('tag');
+    
     if (queryParam) {
       setSearchTerm(queryParam);
       // Save the search to history when coming from URL
       saveSearch(queryParam, { ...filters, query: queryParam, tags: selectedTags });
       setRecentSearches(getRecentSearches());
+    }
+    
+    if (tagParam && !selectedTags.includes(tagParam)) {
+      setSelectedTags(prev => [...prev, tagParam]);
     }
   }, [searchParams]);
 
