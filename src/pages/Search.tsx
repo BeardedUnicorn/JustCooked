@@ -13,12 +13,14 @@ import {
   Clear as ClearIcon,
   History as HistoryIcon,
 } from '@mui/icons-material';
+import { useSearchParams } from 'react-router-dom';
 import { getAllRecipes } from '@services/recipeStorage';
 import { Recipe, SearchFilters } from '@app-types';
 import RecipeCard from '@components/RecipeCard';
 import { getRecentSearches, saveSearch, removeSearch } from '@services/searchHistoryStorage';
 
 const Search: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -63,6 +65,17 @@ const Search: React.FC = () => {
   useEffect(() => {
     fetchRecipes();
   }, []);
+
+  // Handle URL search parameters
+  useEffect(() => {
+    const queryParam = searchParams.get('q');
+    if (queryParam) {
+      setSearchTerm(queryParam);
+      // Save the search to history when coming from URL
+      saveSearch(queryParam, { ...filters, query: queryParam, tags: selectedTags });
+      setRecentSearches(getRecentSearches());
+    }
+  }, [searchParams]);
 
   const applyFilters = useCallback(() => {
     let filtered = [...recipes];

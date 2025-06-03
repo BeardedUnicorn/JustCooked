@@ -15,6 +15,7 @@ import KitchenIcon from '@mui/icons-material/Kitchen';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import MenuIcon from '@mui/icons-material/Menu';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import SearchBar from './SearchBar';
 
 const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' && prop !== 'isMobile' })<{
   open?: boolean;
@@ -82,6 +83,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   const breadcrumbs = generateBreadcrumbs();
 
+  // Handle search functionality
+  const handleSearch = (searchTerm: string) => {
+    if (searchTerm.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
+    } else {
+      navigate('/search');
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex' }}>
       {/* App Bar */}
@@ -102,9 +112,15 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ mr: theme.spacing(3) }}>
             JustCooked
           </Typography>
+          <Box sx={{ flexGrow: 1, maxWidth: 400, mr: theme.spacing(2) }}>
+            <SearchBar
+              onSearch={handleSearch}
+              placeholder="Search recipes..."
+            />
+          </Box>
         </Toolbar>
       </AppBar>
 
