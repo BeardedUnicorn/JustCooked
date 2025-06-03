@@ -195,12 +195,6 @@ const Search: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Search Recipes
-      </Typography>
-
-
-
       {/* Filter Controls */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }}>
         <FormControl sx={{ minWidth: 150 }}>

@@ -33,9 +33,6 @@ const Pantry: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', py: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        My Pantry
-      </Typography>
       <Typography variant="body1" color="text.secondary" paragraph>
         Track ingredients you have at home and get recipe suggestions based on what's in your pantry.
       </Typography>

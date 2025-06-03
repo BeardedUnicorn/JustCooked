@@ -173,10 +173,6 @@ const Ingredients: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Ingredient Database
-      </Typography>
-
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
           <TextField

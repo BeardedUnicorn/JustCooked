@@ -56,10 +56,6 @@ const Import: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Import Recipe
-      </Typography>
-
       <Paper sx={{ p: 4, mt: 4 }}>
         <Typography variant="body1" sx={{ mb: 3 }}>
           Enter the URL of a recipe from any supported site to import it into your cookbook.
