@@ -65,13 +65,13 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
     }
   };
 
-  const handleShareClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleShareClick = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (navigator.share) {
       try {
         await navigator.share({
           title: recipe.title,
-          text: recipe.description,
+          text: `Check out this recipe: ${recipe.title}`,
           url: recipe.sourceUrl || window.location.href,
         });
       } catch (error) {
@@ -86,6 +86,24 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         console.error('Failed to copy to clipboard:', error);
       }
     }
+  };
+
+  const handleFavoriteMenuClick = async () => {
+    try {
+      const updatedRecipe = { ...recipe, isFavorite: !recipe.isFavorite };
+      await updateRecipe(updatedRecipe);
+      if (onUpdate) {
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to update favorite status:', error);
+    }
+    handleMenuClose();
+  };
+
+  const handleShareMenuClick = () => {
+    handleShareClick();
+    handleMenuClose();
   };
 
   const handleMenuClick = (e: React.MouseEvent<HTMLElement>) => {
@@ -189,7 +207,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                       backgroundColor: 'primary.dark',
                     },
                   }}
-                  aria-label="start cooking mode"
+                  aria-label="cook now"
                 >
                   <PlayArrowIcon />
                 </IconButton>
@@ -324,7 +342,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
               <IconButton
                 size="small"
                 onClick={handleMenuClick}
-                aria-label="more recipe options"
+                aria-label="more actions"
                 sx={{ color: 'text.secondary' }}
               >
                 <MoreVertIcon fontSize="small" />
@@ -348,6 +366,18 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           horizontal: 'right',
         }}
       >
+        <MenuItem onClick={handleFavoriteMenuClick}>
+          <ListItemIcon>
+            {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText>{recipe.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShareMenuClick}>
+          <ListItemIcon>
+            <ShareIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Share Recipe</ListItemText>
+        </MenuItem>
         <MenuItem onClick={handleDeleteClick}>
           <ListItemIcon>
             <DeleteOutlineIcon fontSize="small" />
@@ -363,7 +393,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         aria-labelledby="delete-dialog-title"
         aria-describedby="delete-dialog-description"
       >
-        <DialogTitle id="delete-dialog-title">Delete Recipe</DialogTitle>
+        <DialogTitle id="delete-dialog-title">Delete Recipe?</DialogTitle>
         <DialogContent>
           <Typography id="delete-dialog-description">
             Are you sure you want to delete "{recipe.title}"? This action cannot be undone.

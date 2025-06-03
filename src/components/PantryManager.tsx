@@ -75,9 +75,14 @@ const PantryManager: React.FC<PantryManagerProps> = ({
   };
 
   const handleSubmit = () => {
+    // Basic validation - require name
+    if (!name.trim()) {
+      return;
+    }
+
     const item: PantryItem = {
       id: editingItem?.id || crypto.randomUUID(),
-      name,
+      name: name.trim(),
       amount,
       unit,
       category,
@@ -129,7 +134,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                           size="small"
                           label={item.unit && item.unit.trim() !== ''
                             ? `${formatAmountForDisplay(item.amount)} ${item.unit}`
-                            : formatAmountForDisplay(item.amount)
+                            : `${formatAmountForDisplay(item.amount)}`
                           }
                           sx={{ mr: 1 }}
                         />
@@ -142,10 +147,10 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                     }
                   />
                   <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={() => handleOpen(item)} size="small">
+                    <IconButton edge="end" onClick={() => handleOpen(item)} size="small" aria-label="edit item">
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small">
+                    <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small" aria-label="delete item">
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </ListItemSecondaryAction>
@@ -164,16 +169,17 @@ const PantryManager: React.FC<PantryManagerProps> = ({
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{editingItem ? 'Edit Item' : 'Add New Item'}</DialogTitle>
+        <DialogTitle>{editingItem ? 'Edit Pantry Item' : 'Add Pantry Item'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             <Grid size={12}>
               <TextField
                 autoFocus
-                label="Item Name"
+                label="Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 fullWidth
+                required
               />
             </Grid>
             <Grid size={6}>
@@ -193,6 +199,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                   label="Unit"
+                  aria-label="unit"
                 >
                   {units.map((u) => (
                     <MenuItem key={u} value={u}>

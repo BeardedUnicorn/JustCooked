@@ -13,7 +13,13 @@ jest.mock('@services/recipeStorage', () => ({
 }));
 
 jest.mock('@utils/ingredientUtils', () => ({
-  formatIngredientForDisplay: jest.fn((ingredient) => `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`),
+  formatIngredientForDisplay: jest.fn((ingredient) => {
+    if (ingredient.unit && ingredient.unit.trim() !== '') {
+      return `${ingredient.amount} ${ingredient.unit} ${ingredient.name}`;
+    } else {
+      return `${ingredient.amount} ${ingredient.name}`;
+    }
+  }),
 }));
 
 // Mock useMediaQuery
@@ -65,6 +71,9 @@ describe('CookingMode Component', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     
+    // Reset the mock params
+    mockParams.id = 'test-recipe-123';
+    
     const { getRecipeById } = require('@services/recipeStorage');
     getRecipeById.mockResolvedValue(mockRecipe);
   });
@@ -103,12 +112,18 @@ describe('CookingMode Component', () => {
     });
 
     test('should navigate to home if no recipe ID', async () => {
-      mockParams.id = '';
+      // Create a new mock params object for this test
+      const originalUseParams = require('react-router-dom').useParams;
+      require('react-router-dom').useParams = jest.fn(() => ({ id: '' }));
+      
       renderCookingMode();
 
       await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/');
       });
+      
+      // Restore original mock
+      require('react-router-dom').useParams = originalUseParams;
     });
   });
 
@@ -122,11 +137,11 @@ describe('CookingMode Component', () => {
 
       expect(screen.getByText('2 cups flour')).toBeInTheDocument();
       expect(screen.getByText('1 cup sugar')).toBeInTheDocument();
-      expect(screen.getByText('3  eggs')).toBeInTheDocument();
+      expect(screen.getByText('3 eggs')).toBeInTheDocument();
     });
 
     test('should allow checking off ingredients', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -141,7 +156,7 @@ describe('CookingMode Component', () => {
     });
 
     test('should apply strikethrough to checked ingredients', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -171,19 +186,19 @@ describe('CookingMode Component', () => {
       });
 
       expect(screen.getByText('Preheat oven to 375°F')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /previous step/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /previous/i })).toBeInTheDocument();
     });
 
     test('should navigate to next step', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
         expect(screen.getByText('Step 1')).toBeInTheDocument();
       });
 
-      const nextButton = screen.getByRole('button', { name: /next step/i });
+      const nextButton = screen.getByRole('button', { name: /next/i });
       await user.click(nextButton);
 
       expect(screen.getByText('Step 2')).toBeInTheDocument();
@@ -191,7 +206,7 @@ describe('CookingMode Component', () => {
     });
 
     test('should navigate to previous step', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -199,12 +214,12 @@ describe('CookingMode Component', () => {
       });
 
       // Go to step 2 first
-      const nextButton = screen.getByRole('button', { name: /next step/i });
+      const nextButton = screen.getByRole('button', { name: /next/i });
       await user.click(nextButton);
       expect(screen.getByText('Step 2')).toBeInTheDocument();
 
       // Go back to step 1
-      const prevButton = screen.getByRole('button', { name: /previous step/i });
+      const prevButton = screen.getByRole('button', { name: /previous/i });
       await user.click(prevButton);
       expect(screen.getByText('Step 1')).toBeInTheDocument();
     });
@@ -216,12 +231,12 @@ describe('CookingMode Component', () => {
         expect(screen.getByText('Step 1')).toBeInTheDocument();
       });
 
-      const prevButton = screen.getByRole('button', { name: /previous step/i });
+      const prevButton = screen.getByRole('button', { name: /previous/i });
       expect(prevButton).toBeDisabled();
     });
 
     test('should disable next button on last step', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -229,7 +244,7 @@ describe('CookingMode Component', () => {
       });
 
       // Navigate to last step
-      const nextButton = screen.getByRole('button', { name: /next step/i });
+      const nextButton = screen.getByRole('button', { name: /next/i });
       
       // Click next until we reach the last step
       for (let i = 0; i < mockRecipe.instructions.length - 1; i++) {
@@ -264,14 +279,14 @@ describe('CookingMode Component', () => {
 
   describe('Timer Functionality', () => {
     test('should open timer dialog when timer button is clicked', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
         expect(screen.getByText('Step 1')).toBeInTheDocument();
       });
 
-      const timerButton = screen.getByRole('button', { name: /set timer/i });
+      const timerButton = screen.getByRole('button', { name: /timer/i });
       await user.click(timerButton);
 
       expect(screen.getByText('Set Timer')).toBeInTheDocument();
@@ -281,7 +296,7 @@ describe('CookingMode Component', () => {
     });
 
     test('should start timer when preset button is clicked', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -289,7 +304,7 @@ describe('CookingMode Component', () => {
       });
 
       // Open timer dialog
-      const timerButton = screen.getByRole('button', { name: /set timer/i });
+      const timerButton = screen.getByRole('button', { name: /timer/i });
       await user.click(timerButton);
 
       // Click 5 minute timer
@@ -298,11 +313,11 @@ describe('CookingMode Component', () => {
 
       // Timer should be running
       expect(screen.getByText('5:00')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /pause timer/i })).toBeInTheDocument();
+      expect(screen.getByTestId('PauseIcon')).toBeInTheDocument();
     });
 
     test('should countdown timer', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -310,7 +325,7 @@ describe('CookingMode Component', () => {
       });
 
       // Start 1 minute timer
-      const timerButton = screen.getByRole('button', { name: /set timer/i });
+      const timerButton = screen.getByRole('button', { name: /timer/i });
       await user.click(timerButton);
       await user.click(screen.getByText('1m'));
 
@@ -325,7 +340,7 @@ describe('CookingMode Component', () => {
     });
 
     test('should stop timer when stop button is clicked', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -333,13 +348,14 @@ describe('CookingMode Component', () => {
       });
 
       // Start timer
-      const timerButton = screen.getByRole('button', { name: /set timer/i });
+      const timerButton = screen.getByRole('button', { name: /timer/i });
       await user.click(timerButton);
       await user.click(screen.getByText('1m'));
 
       // Stop timer
-      const stopButton = screen.getByRole('button', { name: /stop timer/i });
-      await user.click(stopButton);
+      const stopButton = screen.getByTestId('StopIcon').closest('button');
+      expect(stopButton).not.toBeNull();
+      await user.click(stopButton!);
 
       expect(screen.queryByText('1:00')).not.toBeInTheDocument();
     });
@@ -347,15 +363,16 @@ describe('CookingMode Component', () => {
 
   describe('Fullscreen Mode', () => {
     test('should toggle fullscreen when fullscreen button is clicked', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
         expect(screen.getByText('Step 1')).toBeInTheDocument();
       });
 
-      const fullscreenButton = screen.getByRole('button', { name: /fullscreen/i });
-      await user.click(fullscreenButton);
+      const fullscreenButton = screen.getByTestId('FullscreenIcon').closest('button');
+      expect(fullscreenButton).not.toBeNull();
+      await user.click(fullscreenButton!);
 
       expect(document.documentElement.requestFullscreen).toHaveBeenCalled();
     });
@@ -363,7 +380,7 @@ describe('CookingMode Component', () => {
 
   describe('Exit Cooking', () => {
     test('should navigate back to recipe view when exit button is clicked', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {

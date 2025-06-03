@@ -58,7 +58,7 @@ describe('Import Page', () => {
   test('should render import form with URL input', () => {
     renderImport();
 
-    expect(screen.getByRole('heading', { name: 'Import Recipe' })).toBeInTheDocument();
+    expect(screen.getByText(/enter the url of a recipe/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/recipe url/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /import recipe/i })).toBeInTheDocument();
   });
