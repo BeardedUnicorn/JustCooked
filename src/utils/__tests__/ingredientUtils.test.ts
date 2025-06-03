@@ -229,21 +229,106 @@ describe('ingredientUtils', () => {
       expect(cleanIngredientName('onion, diced')).toBe('onion');
       expect(cleanIngredientName('garlic, minced')).toBe('garlic');
       expect(cleanIngredientName('tomatoes, chopped and seeded')).toBe('tomatoes');
+      expect(cleanIngredientName('onion, finely chopped')).toBe('onion');
+      expect(cleanIngredientName('butter, melted')).toBe('butter');
+      expect(cleanIngredientName('butter, softened')).toBe('butter');
+    });
+
+    test('should handle "divided" indicators', () => {
+      expect(cleanIngredientName('salt, divided')).toBe('salt');
+      expect(cleanIngredientName('Sugar, divided')).toBe('Sugar');
+      expect(cleanIngredientName('olive oil, divided')).toBe('olive oil');
+    });
+
+    test('should handle "or" alternatives', () => {
+      expect(cleanIngredientName('ground beef or turkey')).toBe('ground beef');
+      expect(cleanIngredientName('yellow mustard, or to taste')).toBe('yellow mustard');
+      expect(cleanIngredientName('chicken or beef broth')).toBe('chicken');
+    });
+
+    test('should handle "to taste" indicators', () => {
+      expect(cleanIngredientName('salt to taste')).toBe('salt');
+      expect(cleanIngredientName('pepper, to taste')).toBe('pepper');
+      expect(cleanIngredientName('yellow mustard, or to taste')).toBe('yellow mustard');
+    });
+
+    test('should handle "and" combinations with "to taste"', () => {
+      expect(cleanIngredientName('salt and ground black pepper to taste')).toBe('salt');
+      expect(cleanIngredientName('salt and pepper to taste')).toBe('salt');
+    });
+
+    test('should handle standalone preparation words', () => {
+      expect(cleanIngredientName('chopped onion')).toBe('onion');
+      expect(cleanIngredientName('diced tomatoes')).toBe('tomatoes');
+      expect(cleanIngredientName('melted butter')).toBe('butter');
+      expect(cleanIngredientName('softened cream cheese')).toBe('cream cheese');
+      expect(cleanIngredientName('fresh basil')).toBe('basil');
+      expect(cleanIngredientName('dried oregano')).toBe('oregano');
+    });
+
+    test('should preserve "ground" in meat types', () => {
+      expect(cleanIngredientName('ground beef')).toBe('ground beef');
+      expect(cleanIngredientName('ground turkey')).toBe('ground turkey');
+      expect(cleanIngredientName('ground chicken')).toBe('ground chicken');
+      expect(cleanIngredientName('ground pork')).toBe('ground pork');
+      expect(cleanIngredientName('ground lamb')).toBe('ground lamb');
+    });
+
+    test('should handle "Optional" prefix', () => {
+      expect(cleanIngredientName('Optional chopped dill pickles and lettuce')).toBe('dill pickles');
+      expect(cleanIngredientName('optional fresh herbs')).toBe('herbs');
+    });
+
+    test('should handle complex "and" combinations', () => {
+      expect(cleanIngredientName('chopped dill pickles and lettuce')).toBe('dill pickles');
+      expect(cleanIngredientName('diced onions and peppers')).toBe('onions');
+      expect(cleanIngredientName('sliced mushrooms and zucchini')).toBe('mushrooms');
+    });
+
+    test('should handle "split" preparation', () => {
+      expect(cleanIngredientName('buns, split')).toBe('buns');
+      expect(cleanIngredientName('rolls, split and toasted')).toBe('rolls');
     });
 
     test('should remove parenthetical content', () => {
       expect(cleanIngredientName('tomatoes (14.5 oz can)')).toBe('tomatoes');
       expect(cleanIngredientName('cheese (shredded)')).toBe('cheese');
+      expect(cleanIngredientName('butter (room temperature)')).toBe('butter');
     });
 
-    test('should handle empty results', () => {
+    test('should handle complex real-world examples', () => {
+      expect(cleanIngredientName('salt, divided')).toBe('salt');
+      expect(cleanIngredientName('ground beef or turkey')).toBe('ground beef');
+      expect(cleanIngredientName('onion, finely chopped')).toBe('onion');
+      expect(cleanIngredientName('butter, melted')).toBe('butter');
+      expect(cleanIngredientName('butter, softened')).toBe('butter');
+      expect(cleanIngredientName('chopped onion')).toBe('onion');
+      expect(cleanIngredientName('yellow mustard, or to taste')).toBe('yellow mustard');
+      expect(cleanIngredientName('salt and ground black pepper to taste')).toBe('salt');
+      expect(cleanIngredientName('buns, split')).toBe('buns');
+      expect(cleanIngredientName('Optional chopped dill pickles and lettuce')).toBe('dill pickles');
+    });
+
+    test('should handle edge cases', () => {
       expect(cleanIngredientName('(just parentheses)')).toBe('(just parentheses)');
       expect(cleanIngredientName('')).toBe('');
+      expect(cleanIngredientName('   ')).toBe('');
     });
 
     test('should preserve original if cleaning results in empty string', () => {
       const original = ', diced';
       expect(cleanIngredientName(original)).toBe(original);
+    });
+
+    test('should handle multiple spaces and trim properly', () => {
+      expect(cleanIngredientName('  onion,   finely   chopped  ')).toBe('onion');
+      expect(cleanIngredientName('ground   beef   or   turkey')).toBe('ground beef');
+    });
+
+    test('should be case insensitive for keywords', () => {
+      expect(cleanIngredientName('SALT, DIVIDED')).toBe('SALT');
+      expect(cleanIngredientName('Onion, Finely Chopped')).toBe('Onion');
+      expect(cleanIngredientName('GROUND BEEF OR TURKEY')).toBe('GROUND BEEF');
     });
   });
 
