@@ -77,7 +77,7 @@ fi
 print_status "Checking Integration Tests..."
 if cargo test --test integration_tests --no-run --quiet 2>/dev/null; then
     print_status "Running Integration Tests..."
-    if cargo test --test integration_tests test_url_validation test_image_url_validation --quiet; then
+    if cargo test --test integration_tests --quiet; then
         print_success "Integration tests passed"
     else
         print_warning "Some integration tests failed (may require external dependencies)"
@@ -88,7 +88,7 @@ fi
 
 # 6. Performance Tests
 print_status "Running Performance Tests..."
-if cargo test --test mod test_recipe_parsing_performance --quiet; then
+if cargo test --test mod --quiet; then
     print_success "Performance tests passed"
 else
     print_warning "Performance tests may require additional setup"
