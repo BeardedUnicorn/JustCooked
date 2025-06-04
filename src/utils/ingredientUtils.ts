@@ -207,6 +207,58 @@ export function normalizeUnit(unit: string): string {
   return unitMap[normalized] || unit;
 }
 
+// Parse ingredient name to separate base ingredient from preparation method
+export function parseIngredientNameAndPreparation(name: string): { ingredient: string; preparation: string } {
+  const trimmedName = name.trim();
+  
+  // Common preparation method patterns
+  const preparationPatterns = [
+    // Comma-separated preparations
+    /^(.+?),\s*(finely\s+)?(diced|chopped|sliced|minced|grated|shredded|crushed|ground)(.*)$/i,
+    /^(.+?),\s*(melted|softened|cooked|raw|fresh|dried|frozen)(.*)$/i,
+    /^(.+?),\s*(peeled|seeded|stemmed|trimmed|halved|quartered|split)(.*)$/i,
+    /^(.+?),\s*(room\s+temperature|at\s+room\s+temperature)(.*)$/i,
+    /^(.+?),\s*(divided)(.*)$/i,
+    /^(.+?),\s*(to\s+taste)(.*)$/i,
+    
+    // Standalone preparation words at the beginning (but preserve "ground beef", "ground turkey", etc.)
+    /^(finely\s+)?(diced|chopped|sliced|minced|grated|shredded|crushed)\s+(.+)$/i,
+    /^(melted|softened|cooked|raw|dried|frozen)\s+(.+)$/i,
+    /^(fresh)\s+(.+)$/i
+  ];
+  
+  for (const pattern of preparationPatterns) {
+    const match = trimmedName.match(pattern);
+    if (match) {
+      if (pattern.source.includes('^(.+?),')) {
+        // Comma-separated pattern
+        const ingredient = match[1].trim();
+        const prep1 = match[2] || '';
+        const prep2 = match[3] || '';
+        const prep3 = match[4] || '';
+        const preparation = (prep1 + prep2 + prep3).trim();
+        return { ingredient, preparation };
+      } else {
+        // Standalone preparation at beginning
+        const prep1 = match[1] || '';
+        const prep2 = match[2] || '';
+        const ingredient = match[3] || match[2] || '';
+        
+        // Don't separate "ground" from "ground beef", "ground turkey", etc.
+        if (prep2 === 'ground' && /^(beef|turkey|chicken|pork|lamb)$/i.test(ingredient)) {
+          return { ingredient: trimmedName, preparation: '' };
+        }
+        
+        const preparation = (prep1 + prep2).trim();
+        return { ingredient: ingredient.trim(), preparation };
+      }
+    }
+  }
+  
+  // No preparation method found
+  return { ingredient: trimmedName, preparation: '' };
+}
+
 // Format ingredient for display (handles empty units properly)
 export function formatIngredientForDisplay(ingredient: { amount: number; unit: string; name: string }): string {
   // Handle zero or negative amounts - return just the ingredient name

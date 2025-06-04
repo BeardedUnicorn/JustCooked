@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
   Box, Typography, Chip, Grid, Paper, List, ListItem, ListItemText,
-  Divider, Stack, Button, IconButton, TextField
+  Divider, Stack, Button, IconButton, TextField, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
@@ -14,7 +15,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { Recipe } from '@app-types';
 import { useImageUrl } from '@hooks/useImageUrl';
-import { formatIngredientForDisplay } from '@utils/ingredientUtils';
+import { formatIngredientForDisplay, parseIngredientNameAndPreparation, formatAmountForDisplay } from '@utils/ingredientUtils';
 import { formatTimeForDisplay, calculateTotalTime } from '@utils/timeUtils';
 import { scaleIngredients, isValidServingSize, getScalingDescription } from '@utils/servingUtils';
 
@@ -252,16 +253,45 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
               Ingredients
             </Typography>
             <Divider sx={{ mb: 2 }} />
-            <List disablePadding>
-              {scaledIngredients.map((ingredient, index) => (
-                <ListItem key={index} disablePadding sx={{ py: 0.5 }}>
-                  <CheckCircleOutlineIcon sx={{ mr: 1.5, color: 'text.disabled', fontSize: '1.2rem' }} />
-                  <ListItemText
-                    primary={formatIngredientForDisplay(ingredient)}
-                  />
-                </ListItem>
-              ))}
-            </List>
+            <TableContainer>
+              <Table size="small" sx={{ '& .MuiTableCell-root': { border: 'none', py: 1, px: 0.5 } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Amount</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Ingredient</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Preparation</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {scaledIngredients.map((ingredient, index) => {
+                    const { ingredient: ingredientName, preparation } = parseIngredientNameAndPreparation(ingredient.name);
+                    const amountWithUnit = ingredient.unit 
+                      ? `${formatAmountForDisplay(ingredient.amount)} ${ingredient.unit}`
+                      : formatAmountForDisplay(ingredient.amount);
+                    
+                    return (
+                      <TableRow key={index} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                        <TableCell sx={{ verticalAlign: 'top', minWidth: '80px' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {amountWithUnit}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ verticalAlign: 'top' }}>
+                          <Typography variant="body2">
+                            {ingredientName}
+                          </Typography>
+                        </TableCell>
+                        <TableCell sx={{ verticalAlign: 'top' }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: preparation ? 'italic' : 'normal' }}>
+                            {preparation || '—'}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Paper>
         </Grid>
 

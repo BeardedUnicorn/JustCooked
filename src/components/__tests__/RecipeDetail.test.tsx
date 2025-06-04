@@ -63,8 +63,22 @@ describe('RecipeDetail', () => {
   it('should render ingredients and instructions', () => {
     renderWithProviders(<RecipeDetail recipe={mockRecipe} />);
 
-    expect(screen.getByText('1 cup flour')).toBeInTheDocument();
-    expect(screen.getByText('2 piece eggs')).toBeInTheDocument();
+    // Check ingredients table headers
+    expect(screen.getByText('Amount')).toBeInTheDocument();
+    expect(screen.getByText('Ingredient')).toBeInTheDocument();
+    expect(screen.getByText('Preparation')).toBeInTheDocument();
+    
+    // Check ingredient amounts
+    expect(screen.getByText('1 cup')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('1/2 cup')).toBeInTheDocument();
+    
+    // Check ingredient names
+    expect(screen.getByText('flour')).toBeInTheDocument();
+    expect(screen.getByText('eggs')).toBeInTheDocument();
+    expect(screen.getByText('sugar')).toBeInTheDocument();
+    
+    // Check instructions
     expect(screen.getByText('Mix ingredients')).toBeInTheDocument();
     expect(screen.getByText('Bake for 30 minutes')).toBeInTheDocument();
   });
