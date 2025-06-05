@@ -68,3 +68,45 @@ export function cleanWhitespace(str: string): string {
     .replace(/[ ]+/g, ' ') // Replace multiple spaces with single space
     .trim();
 }
+
+// Decode HTML entities to their UTF-8 representation
+export function decodeHtmlEntities(str: string): string {
+  if (!str) return str;
+
+  // Create a temporary DOM element to decode HTML entities
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = str;
+  return textarea.value;
+}
+
+// Comprehensive HTML entity decoding that handles both named and numeric entities
+export function decodeAllHtmlEntities(str: string): string {
+  if (!str) return str;
+
+  let decoded = str;
+
+  // Handle malformed entities FIRST (before DOM decoding)
+  // Handle common malformed entities (like &amp;#39 instead of &#39;)
+  decoded = decoded.replace(/&amp;#(\d+);?/g, (match, dec) => {
+    return String.fromCharCode(parseInt(dec, 10));
+  });
+
+  decoded = decoded.replace(/&amp;#x([0-9a-fA-F]+);?/g, (match, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+
+  // Then decode using DOM method for most entities
+  decoded = decodeHtmlEntities(decoded);
+
+  // Handle additional numeric entities that might not be caught
+  decoded = decoded.replace(/&#(\d+);/g, (match, dec) => {
+    return String.fromCharCode(parseInt(dec, 10));
+  });
+
+  // Handle hexadecimal numeric entities
+  decoded = decoded.replace(/&#x([0-9a-fA-F]+);/g, (match, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+
+  return decoded;
+}

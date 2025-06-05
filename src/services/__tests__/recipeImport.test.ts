@@ -12,7 +12,10 @@ jest.mock('@tauri-apps/api/core');
 jest.mock('@services/recipeStorage');
 jest.mock('@services/ingredientStorage');
 jest.mock('@services/imageService');
-jest.mock('@utils/stringUtils');
+jest.mock('@utils/stringUtils', () => ({
+  parseTags: jest.fn((keywords: string) => keywords ? keywords.split(',').map(tag => tag.trim()) : []),
+  decodeAllHtmlEntities: jest.fn((str: string) => str || ''),
+}));
 jest.mock('@utils/timeUtils');
 
 // Mock urlUtils with specific implementation for isSupportedUrl

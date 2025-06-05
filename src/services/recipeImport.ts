@@ -7,7 +7,7 @@ import {
   parseIngredients
 } from '@utils/ingredientUtils';
 import { isSupportedUrl } from '@utils/urlUtils';
-import { parseTags } from '@utils/stringUtils';
+import { parseTags, decodeAllHtmlEntities } from '@utils/stringUtils';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
 // Interface matching the Rust ImportedRecipe struct
@@ -43,18 +43,29 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
 
     console.log('Imported recipe data:', importedRecipe);
 
-    // Transform the data to match our Recipe type
-    const parsedIngredients = parseIngredients(importedRecipe.ingredients || []);
-
     // Process the image (download and store locally if possible)
     const processedImageUrl = await processRecipeImage(
       importedRecipe.image || 'https://via.placeholder.com/400x300?text=No+Image'
     );
 
+    // Decode HTML entities in all text fields
+    const decodedTitle = decodeAllHtmlEntities(importedRecipe.name);
+    const decodedDescription = decodeAllHtmlEntities(importedRecipe.description || '');
+    const decodedIngredients = (importedRecipe.ingredients || []).map(ingredient => 
+      decodeAllHtmlEntities(ingredient)
+    );
+    const decodedInstructions = (importedRecipe.instructions || []).map(instruction => 
+      decodeAllHtmlEntities(instruction)
+    );
+    const decodedKeywords = decodeAllHtmlEntities(importedRecipe.keywords || '');
+
+    // Parse ingredients after decoding HTML entities
+    const parsedIngredients = parseIngredients(decodedIngredients);
+
     const recipe: Recipe = {
       id: crypto.randomUUID(),
-      title: importedRecipe.name,
-      description: importedRecipe.description || '',
+      title: decodedTitle,
+      description: decodedDescription,
       image: processedImageUrl,
       sourceUrl: url,
       prepTime: importedRecipe.prep_time || '',
@@ -62,8 +73,8 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
       totalTime: importedRecipe.total_time || '',
       servings: importedRecipe.servings || 0,
       ingredients: parsedIngredients,
-      instructions: importedRecipe.instructions || [],
-      tags: parseTags(importedRecipe.keywords || ''),
+      instructions: decodedInstructions,
+      tags: parseTags(decodedKeywords),
       dateAdded: getCurrentTimestamp(),
       dateModified: getCurrentTimestamp(),
     };

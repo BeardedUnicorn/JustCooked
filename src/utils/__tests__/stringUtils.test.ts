@@ -8,7 +8,9 @@ import {
   slugify,
   containsAnyKeyword,
   extractNumbers,
-  cleanWhitespace
+  cleanWhitespace,
+  decodeHtmlEntities,
+  decodeAllHtmlEntities
 } from '@utils/stringUtils';
 
 describe('stringUtils', () => {
@@ -226,6 +228,116 @@ describe('stringUtils', () => {
 
     test('should handle complex whitespace combinations', () => {
       expect(cleanWhitespace('  line1\r\n\t  line2   \n  line3  ')).toBe('line1\n line2 \n line3');
+    });
+  });
+
+  describe('decodeHtmlEntities', () => {
+    test('should decode common named HTML entities', () => {
+      expect(decodeHtmlEntities('&amp;')).toBe('&');
+      expect(decodeHtmlEntities('&lt;')).toBe('<');
+      expect(decodeHtmlEntities('&gt;')).toBe('>');
+      expect(decodeHtmlEntities('&quot;')).toBe('"');
+      expect(decodeHtmlEntities('&apos;')).toBe("'");
+    });
+
+    test('should decode numeric HTML entities', () => {
+      expect(decodeHtmlEntities('&#39;')).toBe("'");
+      expect(decodeHtmlEntities('&#34;')).toBe('"');
+      expect(decodeHtmlEntities('&#38;')).toBe('&');
+      expect(decodeHtmlEntities('&#60;')).toBe('<');
+      expect(decodeHtmlEntities('&#62;')).toBe('>');
+    });
+
+    test('should decode hexadecimal HTML entities', () => {
+      expect(decodeHtmlEntities('&#x27;')).toBe("'");
+      expect(decodeHtmlEntities('&#x22;')).toBe('"');
+      expect(decodeHtmlEntities('&#x26;')).toBe('&');
+    });
+
+    test('should handle mixed content', () => {
+      expect(decodeHtmlEntities('Tom&apos;s Recipe')).toBe("Tom's Recipe");
+      expect(decodeHtmlEntities('&lt;div&gt;Hello &amp; Goodbye&lt;/div&gt;')).toBe('<div>Hello & Goodbye</div>');
+    });
+
+    test('should handle empty or null input', () => {
+      expect(decodeHtmlEntities('')).toBe('');
+      expect(decodeHtmlEntities(null as any)).toBe(null);
+      expect(decodeHtmlEntities(undefined as any)).toBe(undefined);
+    });
+
+    test('should handle strings without entities', () => {
+      expect(decodeHtmlEntities('Plain text')).toBe('Plain text');
+      expect(decodeHtmlEntities('No entities here')).toBe('No entities here');
+    });
+  });
+
+  describe('decodeAllHtmlEntities', () => {
+    test('should decode malformed entities like &amp;#39', () => {
+      expect(decodeAllHtmlEntities('&amp;#39')).toBe("'");
+      expect(decodeAllHtmlEntities('&amp;#39;')).toBe("'");
+      expect(decodeAllHtmlEntities('Tom&amp;#39s Recipe')).toBe("Tom's Recipe");
+    });
+
+    test('should decode malformed hex entities', () => {
+      expect(decodeAllHtmlEntities('&amp;#x27')).toBe("'");
+      expect(decodeAllHtmlEntities('&amp;#x27;')).toBe("'");
+      expect(decodeAllHtmlEntities('&amp;#x22')).toBe('"');
+    });
+
+    test('should handle complex recipe text with multiple entity types', () => {
+      const input = 'Mom&amp;#39s Famous &quot;Chocolate&quot; Cake &amp; Cookies';
+      const expected = 'Mom\'s Famous "Chocolate" Cake & Cookies';
+      expect(decodeAllHtmlEntities(input)).toBe(expected);
+    });
+
+    test('should handle ingredient lists with entities', () => {
+      const input = '2 cups all-purpose flour&amp;#44; sifted';
+      const expected = '2 cups all-purpose flour, sifted';
+      expect(decodeAllHtmlEntities(input)).toBe(expected);
+    });
+
+    test('should handle instruction text with entities', () => {
+      const input = 'Preheat oven to 350&amp;#176;F &amp; bake for 25&amp;#45;30 minutes';
+      const expected = 'Preheat oven to 350°F & bake for 25-30 minutes';
+      expect(decodeAllHtmlEntities(input)).toBe(expected);
+    });
+
+    test('should handle multiple consecutive entities', () => {
+      expect(decodeAllHtmlEntities('&amp;#39;&amp;#39;')).toBe("''");
+      expect(decodeAllHtmlEntities('&amp;#34;&amp;#34;')).toBe('""');
+    });
+
+    test('should handle regular HTML entities alongside malformed ones', () => {
+      const input = '&lt;p&gt;Tom&amp;#39s &amp; Mary&apos;s Recipe&lt;/p&gt;';
+      const expected = '<p>Tom\'s & Mary\'s Recipe</p>';
+      expect(decodeAllHtmlEntities(input)).toBe(expected);
+    });
+
+    test('should handle empty or null input', () => {
+      expect(decodeAllHtmlEntities('')).toBe('');
+      expect(decodeAllHtmlEntities(null as any)).toBe(null);
+      expect(decodeAllHtmlEntities(undefined as any)).toBe(undefined);
+    });
+
+    test('should handle strings without entities', () => {
+      expect(decodeAllHtmlEntities('Plain text')).toBe('Plain text');
+      expect(decodeAllHtmlEntities('No entities here')).toBe('No entities here');
+    });
+
+    test('should handle common recipe-specific numeric entities', () => {
+      // Common entities found in recipe imports using numeric codes
+      expect(decodeAllHtmlEntities('&amp;#8217;')).toBe(String.fromCharCode(8217)); // Right single quotation mark
+      expect(decodeAllHtmlEntities('&amp;#8220;')).toBe(String.fromCharCode(8220)); // Left double quotation mark
+      expect(decodeAllHtmlEntities('&amp;#8221;')).toBe(String.fromCharCode(8221)); // Right double quotation mark
+      expect(decodeAllHtmlEntities('&amp;#8211;')).toBe(String.fromCharCode(8211)); // En dash
+      expect(decodeAllHtmlEntities('&amp;#8212;')).toBe(String.fromCharCode(8212)); // Em dash
+    });
+
+    test('should handle fractions and special characters', () => {
+      expect(decodeAllHtmlEntities('&amp;#189;')).toBe(String.fromCharCode(189)); // 1/2 fraction
+      expect(decodeAllHtmlEntities('&amp;#188;')).toBe(String.fromCharCode(188)); // 1/4 fraction
+      expect(decodeAllHtmlEntities('&amp;#190;')).toBe(String.fromCharCode(190)); // 3/4 fraction
+      expect(decodeAllHtmlEntities('&amp;#176;')).toBe(String.fromCharCode(176)); // Degree symbol
     });
   });
 });
