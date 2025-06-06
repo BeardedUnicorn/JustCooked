@@ -9,6 +9,7 @@ import AppLayout from '@components/AppLayout';
 import Home from '@pages/Home';
 import Import from '@pages/Import';
 import Search from '@pages/Search';
+import SmartCookbook from '@pages/SmartCookbook';
 import Collections from '@pages/Collections';
 import CollectionView from '@pages/CollectionView';
 import Pantry from '@pages/Pantry';
@@ -33,6 +34,7 @@ function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/import" element={<Import />} />
                   <Route path="/search" element={<Search />} />
+                  <Route path="/smart-cookbook" element={<SmartCookbook />} />
                   <Route path="/collections" element={<Collections />} />
                   <Route path="/collections/:id" element={<CollectionView />} />
                   <Route path="/pantry" element={<Pantry />} />

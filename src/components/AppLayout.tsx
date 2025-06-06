@@ -14,6 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import KitchenIcon from '@mui/icons-material/Kitchen';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import CollectionsIcon from '@mui/icons-material/Collections';
+import BookIcon from '@mui/icons-material/Book';
 import MenuIcon from '@mui/icons-material/Menu';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import SearchBar from './SearchBar';
@@ -51,6 +52,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { text: 'Home', icon: <HomeIcon />, path: '/', label: 'Home' },
     { text: 'Import Recipe', icon: <AddIcon />, path: '/import', label: 'Import' },
     { text: 'Search Recipes', icon: <SearchIcon />, path: '/search', label: 'Search' },
+    { text: 'Smart Cookbook', icon: <BookIcon />, path: '/smart-cookbook', label: 'Smart' },
     { text: 'Collections', icon: <CollectionsIcon />, path: '/collections', label: 'Collections' },
     { text: 'Pantry', icon: <KitchenIcon />, path: '/pantry', label: 'Pantry' },
     { text: 'Ingredients', icon: <InventoryIcon />, path: '/ingredients', label: 'Ingredients' },
@@ -82,6 +84,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         if (pathSegments.length > 1) {
           breadcrumbs.push({ label: 'Collection Details', path: location.pathname });
         }
+      } else if (pathSegments[0] === 'smart-cookbook') {
+        breadcrumbs.push({ label: 'Smart Cookbook', path: location.pathname });
       }
     }
 
