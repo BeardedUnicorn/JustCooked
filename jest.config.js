@@ -25,6 +25,10 @@ export default {
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^@styles/(.*)$': '<rootDir>/src/$1',
+    '^@store$': '<rootDir>/src/store',
+    '^@store/(.*)$': '<rootDir>/src/store/$1',
+    '^@store/slices$': '<rootDir>/src/store/slices',
+    '^@store/slices/(.*)$': '<rootDir>/src/store/slices/$1',
   },
 
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
