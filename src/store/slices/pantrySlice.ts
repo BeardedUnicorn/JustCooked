@@ -194,11 +194,17 @@ const pantrySlice = createSlice({
 
 export const { clearError } = pantrySlice.actions;
 
-// Selectors
-export const selectPantryItems = (state: { pantry: PantryState }) => state.pantry.items;
-export const selectPantryLoading = (state: { pantry: PantryState }) => state.pantry.loading;
-export const selectPantryError = (state: { pantry: PantryState }) => state.pantry.error;
-export const selectPantryItemById = (state: { pantry: PantryState }, id: string) => 
+// Selectors with proper typing
+export const selectPantryItems = (state: { pantry: PantryState }): PantryItem[] => 
+  state.pantry.items;
+
+export const selectPantryLoading = (state: { pantry: PantryState }): boolean => 
+  state.pantry.loading;
+
+export const selectPantryError = (state: { pantry: PantryState }): string | null => 
+  state.pantry.error;
+
+export const selectPantryItemById = (state: { pantry: PantryState }, id: string): PantryItem | null => 
   state.pantry.items.find(item => item.id === id) || null;
 
 export default pantrySlice.reducer;

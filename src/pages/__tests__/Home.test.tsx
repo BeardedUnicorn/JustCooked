@@ -4,6 +4,10 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import Home from '../../pages/Home';
 import recipesReducer from '../../store/slices/recipesSlice';
+import ingredientsReducer from '../../store/slices/ingredientsSlice';
+import pantryReducer from '../../store/slices/pantrySlice';
+import searchHistoryReducer from '../../store/slices/searchHistorySlice';
+import recipeCollectionsReducer from '../../store/slices/recipeCollectionsSlice';
 
 // Mock useNavigate
 const mockNavigate = jest.fn();
@@ -25,6 +29,10 @@ const createMockStore = (recipes = [], loading = false, error: string | null = n
   return configureStore({
     reducer: {
       recipes: recipesReducer,
+      ingredients: ingredientsReducer,
+      pantry: pantryReducer,
+      searchHistory: searchHistoryReducer,
+      recipeCollections: recipeCollectionsReducer,
     },
     preloadedState: {
       recipes: {
@@ -32,6 +40,28 @@ const createMockStore = (recipes = [], loading = false, error: string | null = n
         loading,
         error,
         currentRecipe: null,
+      },
+      ingredients: {
+        ingredients: [],
+        loading: false,
+        error: null,
+        searchResults: [],
+      },
+      pantry: {
+        items: [],
+        loading: false,
+        error: null,
+      },
+      searchHistory: {
+        searches: [],
+        loading: false,
+        error: null,
+      },
+      recipeCollections: {
+        collections: [],
+        loading: false,
+        error: null,
+        currentCollection: null,
       },
     },
   });

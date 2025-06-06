@@ -185,11 +185,17 @@ const searchHistorySlice = createSlice({
 
 export const { getSearchSuggestions, clearError } = searchHistorySlice.actions;
 
-// Selectors
-export const selectSearchHistory = (state: { searchHistory: SearchHistoryState }) => state.searchHistory.searches;
-export const selectSearchHistoryLoading = (state: { searchHistory: SearchHistoryState }) => state.searchHistory.loading;
-export const selectSearchHistoryError = (state: { searchHistory: SearchHistoryState }) => state.searchHistory.error;
-export const selectSearchSuggestions = (state: { searchHistory: SearchHistoryState }, query: string) => {
+// Selectors with proper typing
+export const selectSearchHistory = (state: { searchHistory: SearchHistoryState }): RecentSearch[] => 
+  state.searchHistory.searches;
+
+export const selectSearchHistoryLoading = (state: { searchHistory: SearchHistoryState }): boolean => 
+  state.searchHistory.loading;
+
+export const selectSearchHistoryError = (state: { searchHistory: SearchHistoryState }): string | null => 
+  state.searchHistory.error;
+
+export const selectSearchSuggestions = (state: { searchHistory: SearchHistoryState }, query: string): string[] => {
   if (!query.trim()) return [];
   
   const searches = state.searchHistory.searches;

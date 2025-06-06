@@ -21,6 +21,12 @@ export const store = configureStore({
         ignoredActions: ['persist/PERSIST', 'persist/REHYDRATE'],
       },
     }),
+  devTools: {
+    // Enable Redux DevTools for Tauri v2
+    name: 'JustCooked Redux Store',
+    trace: true,
+    traceLimit: 25,
+  },
 });
 
 export type RootState = ReturnType<typeof store.getState>;

@@ -347,12 +347,20 @@ const recipesSlice = createSlice({
 
 export const { setCurrentRecipe, clearError } = recipesSlice.actions;
 
-// Selectors
-export const selectRecipes = (state: { recipes: RecipesState }) => state.recipes.recipes;
-export const selectRecipesLoading = (state: { recipes: RecipesState }) => state.recipes.loading;
-export const selectRecipesError = (state: { recipes: RecipesState }) => state.recipes.error;
-export const selectCurrentRecipe = (state: { recipes: RecipesState }) => state.recipes.currentRecipe;
-export const selectRecipeById = (state: { recipes: RecipesState }, id: string) => 
-  state.recipes.recipes.find(recipe => recipe.id === id) || null;
+// Selectors with proper typing
+export const selectRecipes = (state: { recipes: RecipesState }): Recipe[] => 
+  state.recipes?.recipes || [];
+
+export const selectRecipesLoading = (state: { recipes: RecipesState }): boolean => 
+  state.recipes?.loading || false;
+
+export const selectRecipesError = (state: { recipes: RecipesState }): string | null => 
+  state.recipes?.error || null;
+
+export const selectCurrentRecipe = (state: { recipes: RecipesState }): Recipe | null => 
+  state.recipes?.currentRecipe || null;
+
+export const selectRecipeById = (state: { recipes: RecipesState }, id: string): Recipe | null => 
+  state.recipes?.recipes?.find(recipe => recipe.id === id) || null;
 
 export default recipesSlice.reducer;

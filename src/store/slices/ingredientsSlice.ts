@@ -322,12 +322,20 @@ const ingredientsSlice = createSlice({
 
 export const { searchIngredients, clearSearchResults, clearError } = ingredientsSlice.actions;
 
-// Selectors
-export const selectIngredients = (state: { ingredients: IngredientsState }) => state.ingredients.ingredients;
-export const selectIngredientsLoading = (state: { ingredients: IngredientsState }) => state.ingredients.loading;
-export const selectIngredientsError = (state: { ingredients: IngredientsState }) => state.ingredients.error;
-export const selectIngredientSearchResults = (state: { ingredients: IngredientsState }) => state.ingredients.searchResults;
-export const selectIngredientByName = (state: { ingredients: IngredientsState }, name: string) => {
+// Selectors with proper typing
+export const selectIngredients = (state: { ingredients: IngredientsState }): IngredientDatabase[] => 
+  state.ingredients.ingredients;
+
+export const selectIngredientsLoading = (state: { ingredients: IngredientsState }): boolean => 
+  state.ingredients.loading;
+
+export const selectIngredientsError = (state: { ingredients: IngredientsState }): string | null => 
+  state.ingredients.error;
+
+export const selectIngredientSearchResults = (state: { ingredients: IngredientsState }): IngredientSearchResult[] => 
+  state.ingredients.searchResults;
+
+export const selectIngredientByName = (state: { ingredients: IngredientsState }, name: string): IngredientDatabase | null => {
   const normalizedName = name.toLowerCase().trim();
   return state.ingredients.ingredients.find(ingredient => 
     ingredient.name.toLowerCase() === normalizedName ||

@@ -108,14 +108,13 @@ export const addRecipeToCollection = createAsyncThunk(
       return collection; // Recipe already in collection
     }
     
-    const updatedCollection = {
-      ...collection,
+    const updates = {
       recipeIds: [...collection.recipeIds, recipeId],
       dateModified: getCurrentTimestamp(),
     };
     
-    await dispatch(updateRecipeCollection({ id: collectionId, updates: updatedCollection }));
-    return updatedCollection;
+    await dispatch(updateRecipeCollection({ id: collectionId, updates }));
+    return { ...collection, ...updates };
   }
 );
 
@@ -130,14 +129,13 @@ export const removeRecipeFromCollection = createAsyncThunk(
       throw new Error('Recipe collection not found');
     }
     
-    const updatedCollection = {
-      ...collection,
+    const updates = {
       recipeIds: collection.recipeIds.filter(id => id !== recipeId),
       dateModified: getCurrentTimestamp(),
     };
     
-    await dispatch(updateRecipeCollection({ id: collectionId, updates: updatedCollection }));
-    return updatedCollection;
+    await dispatch(updateRecipeCollection({ id: collectionId, updates }));
+    return { ...collection, ...updates };
   }
 );
 
@@ -269,14 +267,23 @@ const recipeCollectionsSlice = createSlice({
 
 export const { setCurrentCollection, clearError } = recipeCollectionsSlice.actions;
 
-// Selectors
-export const selectRecipeCollections = (state: { recipeCollections: RecipeCollectionsState }) => state.recipeCollections.collections;
-export const selectRecipeCollectionsLoading = (state: { recipeCollections: RecipeCollectionsState }) => state.recipeCollections.loading;
-export const selectRecipeCollectionsError = (state: { recipeCollections: RecipeCollectionsState }) => state.recipeCollections.error;
-export const selectCurrentCollection = (state: { recipeCollections: RecipeCollectionsState }) => state.recipeCollections.currentCollection;
-export const selectRecipeCollectionById = (state: { recipeCollections: RecipeCollectionsState }, id: string) => 
+// Selectors with proper typing
+export const selectRecipeCollections = (state: { recipeCollections: RecipeCollectionsState }): RecipeCollection[] => 
+  state.recipeCollections.collections;
+
+export const selectRecipeCollectionsLoading = (state: { recipeCollections: RecipeCollectionsState }): boolean => 
+  state.recipeCollections.loading;
+
+export const selectRecipeCollectionsError = (state: { recipeCollections: RecipeCollectionsState }): string | null => 
+  state.recipeCollections.error;
+
+export const selectCurrentCollection = (state: { recipeCollections: RecipeCollectionsState }): RecipeCollection | null => 
+  state.recipeCollections.currentCollection;
+
+export const selectRecipeCollectionById = (state: { recipeCollections: RecipeCollectionsState }, id: string): RecipeCollection | null => 
   state.recipeCollections.collections.find(collection => collection.id === id) || null;
-export const selectCollectionsContainingRecipe = (state: { recipeCollections: RecipeCollectionsState }, recipeId: string) => 
+
+export const selectCollectionsContainingRecipe = (state: { recipeCollections: RecipeCollectionsState }, recipeId: string): RecipeCollection[] => 
   state.recipeCollections.collections.filter(collection => collection.recipeIds.includes(recipeId));
 
 export default recipeCollectionsSlice.reducer;
