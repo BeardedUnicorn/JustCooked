@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import {
   Box, Typography, TextField, Button, Paper, CircularProgress, Alert,
-  Snackbar, List, ListItem, ListItemText, Divider
+  Snackbar, List, ListItem, ListItemText, Divider, Card, CardContent,
+  CardActions, Grid
 } from '@mui/material';
+import {
+  Download as DownloadIcon,
+  CloudDownload as CloudDownloadIcon,
+} from '@mui/icons-material';
 import { importRecipeFromUrl } from '@services/recipeImport';
 import { formatIngredientForDisplay } from '@utils/ingredientUtils';
 import { Recipe } from '@app-types';
+import BatchImportDialog from '@components/BatchImportDialog';
 
 const Import: React.FC = () => {
   const [url, setUrl] = useState('');
@@ -13,6 +19,7 @@ const Import: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [importedRecipe, setImportedRecipe] = useState<Recipe | null>(null);
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
 
   const handleImport = async () => {
     const trimmedUrl = url.trim();
@@ -54,8 +61,62 @@ const Import: React.FC = () => {
     }
   };
 
+  const handleBatchImportComplete = (result: { successCount: number; failureCount: number }) => {
+    setBatchImportOpen(false);
+    setSuccess(true);
+    // You could show a more detailed success message here
+    console.log('Batch import completed:', result);
+  };
+
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
+    <Box sx={{ maxWidth: 1000, mx: 'auto', mt: 4 }}>
+      {/* Import Options */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <DownloadIcon color="primary" />
+                <Typography variant="h6">Single Recipe Import</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Import a single recipe from any supported recipe website by providing its URL.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Supported sites:</strong> AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <CloudDownloadIcon color="primary" />
+                <Typography variant="h6">Batch Recipe Import</Typography>
+              </Box>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                Import multiple recipes at once from AllRecipes category pages. Perfect for building your recipe collection quickly.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Features:</strong> Automatic category crawling, progress tracking, error handling, and rate limiting.
+              </Typography>
+            </CardContent>
+            <CardActions>
+              <Button
+                variant="contained"
+                startIcon={<CloudDownloadIcon />}
+                onClick={() => setBatchImportOpen(true)}
+                fullWidth
+              >
+                Start Batch Import
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
+      </Grid>
+
       <Paper sx={{ p: 4, mt: 4 }}>
         <Typography variant="body1" sx={{ mb: 3 }}>
           Enter the URL of a recipe from any supported site to import it into your cookbook.
@@ -144,6 +205,13 @@ const Import: React.FC = () => {
           </Box>
         )}
       </Paper>
+
+      {/* Batch Import Dialog */}
+      <BatchImportDialog
+        open={batchImportOpen}
+        onClose={() => setBatchImportOpen(false)}
+        onImportComplete={handleBatchImportComplete}
+      />
     </Box>
   );
 };

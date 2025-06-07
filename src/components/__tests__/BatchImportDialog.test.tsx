@@ -1,0 +1,356 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import BatchImportDialog from '@components/BatchImportDialog';
+import { batchImportService } from '@services/batchImport';
+import { BatchImportStatus } from '@app-types';
+
+// Mock the batch import service
+jest.mock('@services/batchImport');
+const mockBatchImportService = batchImportService as jest.Mocked<typeof batchImportService>;
+
+describe('BatchImportDialog', () => {
+  const defaultProps = {
+    open: true,
+    onClose: jest.fn(),
+    onImportComplete: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockBatchImportService.getSuggestedCategoryUrls.mockReturnValue([
+      {
+        name: 'Desserts',
+        url: 'https://www.allrecipes.com/recipes/79/desserts',
+        description: 'All dessert recipes',
+      },
+      {
+        name: 'Main Dishes',
+        url: 'https://www.allrecipes.com/recipes/17562/dinner/main-dishes',
+        description: 'Main course recipes',
+      },
+    ]);
+    mockBatchImportService.estimateImportTime.mockReturnValue({
+      minMinutes: 5,
+      maxMinutes: 10,
+      description: 'Medium import',
+    });
+  });
+
+  test('renders dialog with initial state', () => {
+    render(<BatchImportDialog {...defaultProps} />);
+
+    expect(screen.getByText('Batch Recipe Import')).toBeInTheDocument();
+    expect(screen.getByLabelText('Category URL')).toBeInTheDocument();
+    expect(screen.getByText('Start Import')).toBeDisabled();
+    expect(screen.getByText('Suggested Categories')).toBeInTheDocument();
+  });
+
+  test('does not render when closed', () => {
+    render(<BatchImportDialog {...defaultProps} open={false} />);
+
+    expect(screen.queryByText('Batch Recipe Import')).not.toBeInTheDocument();
+  });
+
+  test('enables start button when valid URL is entered', async () => {
+    const user = userEvent.setup();
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    expect(startButton).toBeDisabled();
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+
+    expect(startButton).toBeEnabled();
+  });
+
+  test('shows error for invalid URL', async () => {
+    const user = userEvent.setup();
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+
+    await user.type(urlInput, 'https://example.com/invalid');
+
+    expect(screen.getByText('Please enter a valid AllRecipes category URL')).toBeInTheDocument();
+    expect(screen.getByText('Start Import')).toBeDisabled();
+  });
+
+  test('allows selecting suggested URLs', async () => {
+    const user = userEvent.setup();
+    render(<BatchImportDialog {...defaultProps} />);
+
+    // Expand suggested categories
+    const suggestedAccordion = screen.getByText('Suggested Categories');
+    await user.click(suggestedAccordion);
+
+    // Click on a suggested URL
+    const dessertOption = screen.getByText('Desserts');
+    await user.click(dessertOption);
+
+    const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
+    expect(urlInput.value).toBe('https://www.allrecipes.com/recipes/79/desserts');
+  });
+
+  test('shows recipe limit options when enabled', async () => {
+    const user = userEvent.setup();
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const limitSwitch = screen.getByRole('checkbox', { name: /limit number of recipes/i });
+    await user.click(limitSwitch);
+
+    expect(screen.getByLabelText('Maximum recipes')).toBeInTheDocument();
+
+    // Add a recipe count to trigger the estimate
+    const maxRecipesInput = screen.getByLabelText('Maximum recipes');
+    await user.clear(maxRecipesInput);
+    await user.type(maxRecipesInput, '50');
+
+    // Wait for the estimated time to appear
+    await waitFor(() => {
+      expect(screen.getByText(/estimated time: 5-10 minutes/i)).toBeInTheDocument();
+    });
+  });
+
+  test('starts batch import when form is submitted', async () => {
+    const user = userEvent.setup();
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    expect(mockBatchImportService.startBatchImport).toHaveBeenCalledWith(
+      'https://www.allrecipes.com/recipes/79/desserts',
+      expect.objectContaining({
+        maxRecipes: undefined,
+        onProgress: expect.any(Function),
+      })
+    );
+  });
+
+  test('starts batch import with recipe limit', async () => {
+    const user = userEvent.setup();
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const limitSwitch = screen.getByRole('checkbox', { name: /limit number of recipes/i });
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(limitSwitch);
+
+    const maxRecipesInput = screen.getByLabelText('Maximum recipes');
+    await user.type(maxRecipesInput, '50');
+
+    await user.click(startButton);
+
+    expect(mockBatchImportService.startBatchImport).toHaveBeenCalledWith(
+      'https://www.allrecipes.com/recipes/79/desserts',
+      expect.objectContaining({
+        maxRecipes: 50,
+        onProgress: expect.any(Function),
+      })
+    );
+  });
+
+  test('handles import start error', async () => {
+    const user = userEvent.setup();
+    mockBatchImportService.startBatchImport.mockRejectedValue(new Error('Import failed'));
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Import failed')).toBeInTheDocument();
+    });
+  });
+
+  test('shows progress component during import', async () => {
+    const user = userEvent.setup();
+    let progressCallback: ((progress: any) => void) | undefined;
+
+    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
+      progressCallback = options?.onProgress;
+      return 'import-123';
+    });
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    // Simulate progress update
+    if (progressCallback) {
+      progressCallback({
+        status: BatchImportStatus.IMPORTING_RECIPES,
+        currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+        processedRecipes: 5,
+        totalRecipes: 20,
+        processedCategories: 2,
+        totalCategories: 5,
+        successfulImports: 4,
+        failedImports: 1,
+        errors: [],
+        startTime: '2024-01-01T00:00:00Z',
+        estimatedTimeRemaining: 300,
+      });
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText('Importing Recipes')).toBeInTheDocument();
+      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+    });
+  });
+
+  test('calls onImportComplete when import finishes', async () => {
+    const user = userEvent.setup();
+    let progressCallback: ((progress: any) => void) | undefined;
+
+    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
+      progressCallback = options?.onProgress;
+      return 'import-123';
+    });
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    // Simulate completion
+    if (progressCallback) {
+      progressCallback({
+        status: BatchImportStatus.COMPLETED,
+        currentUrl: undefined,
+        processedRecipes: 20,
+        totalRecipes: 20,
+        processedCategories: 5,
+        totalCategories: 5,
+        successfulImports: 18,
+        failedImports: 2,
+        errors: [],
+        startTime: '2024-01-01T00:00:00Z',
+        estimatedTimeRemaining: 0,
+      });
+    }
+
+    await waitFor(() => {
+      expect(defaultProps.onImportComplete).toHaveBeenCalledWith({
+        successCount: 18,
+        failureCount: 2,
+      });
+    });
+  });
+
+  test('cancels import when cancel button is clicked', async () => {
+    const user = userEvent.setup();
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+    mockBatchImportService.cancelBatchImport.mockResolvedValue();
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+    });
+
+    const cancelButton = screen.getByText('Cancel Import');
+    await user.click(cancelButton);
+
+    expect(mockBatchImportService.cancelBatchImport).toHaveBeenCalled();
+  });
+
+  test('cancels import when dialog is closed during import', async () => {
+    const user = userEvent.setup();
+    let progressCallback: ((progress: any) => void) | undefined;
+
+    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
+      progressCallback = options?.onProgress;
+      // Don't resolve immediately - keep the promise pending to simulate ongoing import
+      return new Promise((resolve) => {
+        setTimeout(() => resolve('import-123'), 1000);
+      });
+    });
+    mockBatchImportService.cancelBatchImport.mockResolvedValue();
+
+    render(<BatchImportDialog {...defaultProps} />);
+
+    const urlInput = screen.getByLabelText('Category URL');
+    const startButton = screen.getByText('Start Import');
+
+    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
+    await user.click(startButton);
+
+    // Simulate progress to keep import active
+    if (progressCallback) {
+      progressCallback({
+        status: BatchImportStatus.IMPORTING_RECIPES,
+        currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+        processedRecipes: 1,
+        totalRecipes: 10,
+        processedCategories: 1,
+        totalCategories: 2,
+        successfulImports: 1,
+        failedImports: 0,
+        errors: [],
+        startTime: '2024-01-01T00:00:00Z',
+        estimatedTimeRemaining: 300,
+      });
+    }
+
+    // Wait for import to start and cancel button to appear
+    await waitFor(() => {
+      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+    });
+
+    // Click the cancel button to trigger the cancel
+    const cancelButton = screen.getByText('Cancel Import');
+    await user.click(cancelButton);
+
+    expect(mockBatchImportService.cancelBatchImport).toHaveBeenCalled();
+  });
+
+  test('resets state when dialog reopens', () => {
+    const { rerender } = render(<BatchImportDialog {...defaultProps} open={false} />);
+
+    // Open dialog
+    rerender(<BatchImportDialog {...defaultProps} open={true} />);
+
+    const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
+    expect(urlInput.value).toBe('');
+    expect(screen.getByText('Start Import')).toBeDisabled();
+  });
+
+  test('cleans up on unmount', () => {
+    const { unmount } = render(<BatchImportDialog {...defaultProps} />);
+
+    unmount();
+
+    expect(mockBatchImportService.cleanup).toHaveBeenCalled();
+  });
+});

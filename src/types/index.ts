@@ -14,6 +14,18 @@ export type { StorageInfo } from './storageInfo';
 export type { PantryItem } from './pantryItem';
 export type { RecipeCollection } from './recipeCollection';
 
+// Batch import types
+export type {
+  BatchImportRequest,
+  BatchImportProgress,
+  BatchImportResult,
+  BatchImportError,
+  CategoryInfo,
+  RecipeUrlInfo,
+  BatchImportConfig
+} from './batchImport';
+export { BatchImportStatus, DEFAULT_BATCH_IMPORT_CONFIG } from './batchImport';
+
 // Search-related types
 export type { SearchFilters } from './searchFilters';
 export type { RecentSearch } from './recentSearch';
