@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { PantryItem } from '@app-types';
 import {
   readTextFile,
@@ -8,7 +8,7 @@ import {
   exists
 } from '@tauri-apps/plugin-fs';
 
-interface PantryState {
+export interface PantryState {
   items: PantryItem[];
   loading: boolean;
   error: string | null;

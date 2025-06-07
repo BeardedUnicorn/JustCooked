@@ -11,7 +11,7 @@ import {
 import { deleteRecipeImage } from '@services/imageService';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-interface RecipesState {
+export interface RecipesState {
   recipes: Recipe[];
   loading: boolean;
   error: string | null;
@@ -134,7 +134,7 @@ export const loadRecipeById = createAsyncThunk(
 
 export const saveRecipe = createAsyncThunk(
   'recipes/saveRecipe',
-  async (recipe: Recipe, { getState, dispatch }) => {
+  async (recipe: Recipe, { getState }) => {
     await ensureDirectory();
 
     try {
@@ -199,7 +199,7 @@ export const updateRecipe = createAsyncThunk(
 
 export const deleteRecipe = createAsyncThunk(
   'recipes/deleteRecipe',
-  async (id: string, { getState, dispatch }) => {
+  async (id: string, { getState }) => {
     await ensureDirectory();
 
     try {

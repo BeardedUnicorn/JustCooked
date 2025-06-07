@@ -3,7 +3,7 @@ import { IngredientDatabase, IngredientSearchResult } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 import { cleanIngredientName, detectIngredientCategory } from '@utils/ingredientUtils';
 
-interface IngredientsState {
+export interface IngredientsState {
   ingredients: IngredientDatabase[];
   loading: boolean;
   error: string | null;

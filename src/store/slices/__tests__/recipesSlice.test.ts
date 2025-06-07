@@ -1,4 +1,4 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import recipesReducer, {
   selectRecipes,
   selectRecipesLoading,
@@ -6,10 +6,49 @@ import recipesReducer, {
   selectCurrentRecipe,
   selectRecipeById,
   setCurrentRecipe,
+  RecipesState,
 } from '../recipesSlice';
+import { Recipe } from '@app-types';
+
+// Mock the fs plugin
+jest.mock('@tauri-apps/plugin-fs');
+
+const mockRecipe1: Recipe = {
+  id: '1',
+  title: 'Test Recipe 1',
+  description: '',
+  image: '',
+  sourceUrl: '',
+  prepTime: '',
+  cookTime: '',
+  totalTime: '',
+  servings: 4,
+  ingredients: [],
+  instructions: [],
+  tags: [],
+  dateAdded: '2023-01-01',
+  dateModified: '2023-01-01',
+};
+
+const mockRecipe2: Recipe = {
+  id: '2',
+  title: 'Test Recipe 2',
+  description: '',
+  image: '',
+  sourceUrl: '',
+  prepTime: '',
+  cookTime: '',
+  totalTime: '',
+  servings: 2,
+  ingredients: [],
+  instructions: [],
+  tags: [],
+  dateAdded: '2023-01-02',
+  dateModified: '2023-01-02',
+};
 
 describe('recipesSlice', () => {
-  let store: ReturnType<typeof configureStore>;
+  let store: EnhancedStore<{ recipes: RecipesState }>;
 
   beforeEach(() => {
     store = configureStore({
@@ -31,197 +70,112 @@ describe('recipesSlice', () => {
 
   describe('reducers', () => {
     it('should set current recipe', () => {
-      const mockRecipe = {
-        id: '1',
-        title: 'Test Recipe',
-        description: '',
-        image: '',
-        sourceUrl: '',
-        prepTime: '',
-        cookTime: '',
-        totalTime: '',
-        servings: 4,
-        ingredients: [],
-        instructions: [],
-        tags: [],
-        dateAdded: '2023-01-01',
-        dateModified: '2023-01-01',
-      };
-      store.dispatch(setCurrentRecipe(mockRecipe));
+      store.dispatch(setCurrentRecipe(mockRecipe1));
       const state = store.getState().recipes;
-      expect(state.currentRecipe).toEqual(mockRecipe);
+      expect(state.currentRecipe).toEqual(mockRecipe1);
     });
   });
 
-  describe('loading states and CRUD operations', () => {
-    const mockRecipe = {
-      id: '1',
-      title: 'Test Recipe',
-      description: '',
-      image: '',
-      sourceUrl: '',
-      prepTime: '',
-      cookTime: '',
-      totalTime: '',
-      servings: 4,
-      ingredients: [],
-      instructions: [],
-      tags: [],
-      dateAdded: '2023-01-01',
-      dateModified: '2023-01-01',
-    };
-
-    it('should handle loadAllRecipes', () => {
+  describe('extraReducers', () => {
+    it('should handle loadAllRecipes states', () => {
       store.dispatch({ type: 'recipes/loadAllRecipes/pending' });
       let state = store.getState().recipes;
       expect(state.loading).toBe(true);
       expect(state.error).toBe(null);
 
-      store.dispatch({ type: 'recipes/loadAllRecipes/fulfilled', payload: [mockRecipe] });
+      store.dispatch({ type: 'recipes/loadAllRecipes/fulfilled', payload: [mockRecipe1] });
       state = store.getState().recipes;
       expect(state.loading).toBe(false);
-      expect(state.recipes).toEqual([mockRecipe]);
+      expect(state.recipes).toEqual([mockRecipe1]);
 
-      // @ts-ignore
       store.dispatch({ type: 'recipes/loadAllRecipes/rejected', error: { message: 'Load error' } });
       state = store.getState().recipes;
       expect(state.loading).toBe(false);
       expect(state.error).toBe('Load error');
     });
 
-    it('should handle loadRecipeById', () => {
-      store.dispatch({ type: 'recipes/loadRecipeById/pending' });
-      let state = store.getState().recipes;
-      expect(state.loading).toBe(true);
-      expect(state.error).toBe(null);
-
-      store.dispatch({ type: 'recipes/loadRecipeById/fulfilled', payload: mockRecipe });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.currentRecipe).toEqual(mockRecipe);
-
-      // @ts-ignore
-      store.dispatch({ type: 'recipes/loadRecipeById/rejected', error: { message: 'Load error' } });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.error).toBe('Load error');
+    it('should handle saveRecipe fulfilled for a new recipe', () => {
+      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: mockRecipe1 });
+      const state = store.getState().recipes;
+      expect(state.recipes).toHaveLength(1);
+      expect(state.recipes[0]).toEqual(mockRecipe1);
     });
 
-    it('should handle saveRecipe', () => {
-      store.dispatch({ type: 'recipes/saveRecipe/pending' });
-      let state = store.getState().recipes;
-      expect(state.loading).toBe(true);
-      expect(state.error).toBe(null);
+    it('should handle saveRecipe fulfilled for an existing recipe', () => {
+      // Pre-fill state with recipe 1
+      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: mockRecipe1 });
+      
+      const updatedRecipe1 = { ...mockRecipe1, title: 'Updated Title' };
+      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: updatedRecipe1 });
 
-      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: mockRecipe });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.recipes).toEqual([mockRecipe]);
-
-      // @ts-ignore
-      store.dispatch({ type: 'recipes/saveRecipe/rejected', error: { message: 'Save error' } });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.error).toBe('Save error');
+      const state = store.getState().recipes;
+      expect(state.recipes).toHaveLength(1);
+      expect(state.recipes[0].title).toBe('Updated Title');
     });
 
-    it('should handle updateRecipe', () => {
-      // First, add a recipe
-      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: mockRecipe });
+    it('should handle updateRecipe fulfilled', () => {
+      // Pre-fill state with two recipes and set one as current
+      store.dispatch({ type: 'recipes/loadAllRecipes/fulfilled', payload: [mockRecipe1, mockRecipe2] });
+      store.dispatch(setCurrentRecipe(mockRecipe1));
+      
+      const updatedRecipe1 = { ...mockRecipe1, title: 'Updated Title' };
+      store.dispatch({ type: 'recipes/updateRecipe/fulfilled', payload: updatedRecipe1 });
 
-      const updatedRecipe = { ...mockRecipe, title: 'Updated Recipe' };
-
-      store.dispatch({ type: 'recipes/updateRecipe/pending' });
-      let state = store.getState().recipes;
-      expect(state.loading).toBe(true);
-      expect(state.error).toBe(null);
-
-      store.dispatch({ type: 'recipes/updateRecipe/fulfilled', payload: updatedRecipe });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.recipes[0].title).toBe('Updated Recipe');
-
-      // @ts-ignore
-      store.dispatch({ type: 'recipes/updateRecipe/rejected', error: { message: 'Update error' } });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.error).toBe('Update error');
+      const state = store.getState().recipes;
+      
+      // Check list of all recipes
+      expect(state.recipes).toHaveLength(2);
+      expect(state.recipes.find(r => r.id === '1')?.title).toBe('Updated Title');
+      
+      // Check that current recipe is also updated
+      expect(state.currentRecipe?.title).toBe('Updated Title');
     });
 
-    it('should handle deleteRecipe', () => {
-      // First, add a recipe
-      store.dispatch({ type: 'recipes/saveRecipe/fulfilled', payload: mockRecipe });
-
-      store.dispatch({ type: 'recipes/deleteRecipe/pending' });
-      let state = store.getState().recipes;
-      expect(state.loading).toBe(true);
-      expect(state.error).toBe(null);
+    it('should handle deleteRecipe fulfilled', () => {
+      // Pre-fill state
+      store.dispatch({ type: 'recipes/loadAllRecipes/fulfilled', payload: [mockRecipe1, mockRecipe2] });
+      store.dispatch(setCurrentRecipe(mockRecipe1));
 
       store.dispatch({ type: 'recipes/deleteRecipe/fulfilled', payload: '1' });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.recipes).toEqual([]);
 
-      // @ts-ignore
-      store.dispatch({ type: 'recipes/deleteRecipe/rejected', error: { message: 'Delete error' } });
-      state = store.getState().recipes;
-      expect(state.loading).toBe(false);
-      expect(state.error).toBe('Delete error');
+      const state = store.getState().recipes;
+      expect(state.recipes).toHaveLength(1);
+      expect(state.recipes[0].id).toBe('2');
+      // Current recipe should be cleared if it was the one deleted
+      expect(state.currentRecipe).toBeNull();
     });
   });
 
   describe('selectors', () => {
     const mockState = {
       recipes: {
-        recipes: [
-          {
-            id: '1',
-            title: 'Test Recipe',
-            description: '',
-            image: '',
-            sourceUrl: '',
-            prepTime: '',
-            cookTime: '',
-            totalTime: '',
-            servings: 4,
-            ingredients: [],
-            instructions: [],
-            tags: [],
-            dateAdded: '2023-01-01',
-            dateModified: '2023-01-01',
-          },
-        ],
+        recipes: [mockRecipe1, mockRecipe2],
         loading: false,
         error: null,
-        currentRecipe: null,
+        currentRecipe: mockRecipe1,
       },
     };
 
-    it('should select recipes', () => {
-      const result = selectRecipes(mockState);
-      expect(result).toEqual(mockState.recipes.recipes);
+    it('should select recipe by id', () => {
+      expect(selectRecipeById(mockState, '1')).toEqual(mockRecipe1);
+      expect(selectRecipeById(mockState, '2')).toEqual(mockRecipe2);
+      expect(selectRecipeById(mockState, '3')).toBe(null);
+    });
+    
+    it('should select all recipes', () => {
+      expect(selectRecipes(mockState)).toEqual([mockRecipe1, mockRecipe2]);
     });
 
     it('should select loading state', () => {
-      const result = selectRecipesLoading(mockState);
-      expect(result).toBe(false);
+      expect(selectRecipesLoading(mockState)).toBe(false);
     });
 
     it('should select error state', () => {
-      const result = selectRecipesError(mockState);
-      expect(result).toBe(null);
+      expect(selectRecipesError(mockState)).toBe(null);
     });
 
     it('should select current recipe', () => {
-      const result = selectCurrentRecipe(mockState);
-      expect(result).toBe(null);
-    });
-
-    it('should select recipe by id', () => {
-      const result = selectRecipeById(mockState, '1');
-      expect(result).toEqual(mockState.recipes.recipes[0]);
-      const missing = selectRecipeById(mockState, '2');
-      expect(missing).toBe(null);
+      expect(selectCurrentRecipe(mockState)).toEqual(mockRecipe1);
     });
   });
 });

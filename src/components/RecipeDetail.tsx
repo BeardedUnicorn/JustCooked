@@ -7,7 +7,6 @@ import {
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import PublicIcon from '@mui/icons-material/Public';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import PrepTimeIcon from '@mui/icons-material/Schedule';
 import CookTimeIcon from '@mui/icons-material/Whatshot';
@@ -15,11 +14,9 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { Recipe } from '@app-types';
 import { useImageUrl } from '@hooks/useImageUrl';
-import { formatIngredientForDisplay, parseIngredientNameAndPreparation, formatAmountForDisplay } from '@utils/ingredientUtils';
+import { parseIngredientNameAndPreparation, formatAmountForDisplay } from '@utils/ingredientUtils';
 import { formatTimeForDisplay, calculateTotalTime } from '@utils/timeUtils';
 import { scaleIngredients, isValidServingSize, getScalingDescription } from '@utils/servingUtils';
-
-
 
 interface RecipeDetailProps {
   recipe: Recipe;
@@ -56,8 +53,6 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
       setCurrentServings(newValue);
     }
   };
-
-
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto' }}>
@@ -147,6 +142,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                     size="small"
                     onClick={decrementServings}
                     disabled={currentServings <= 1}
+                    aria-label="decrease servings"
                     sx={{
                       width: 28,
                       height: 28,
@@ -184,6 +180,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                     size="small"
                     onClick={incrementServings}
                     disabled={currentServings >= 50}
+                    aria-label="increase servings"
                     sx={{
                       width: 28,
                       height: 28,
@@ -247,7 +244,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
 
       <Grid container spacing={4}>
         {/* Ingredients */}
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{xs: 12, md: 4}}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" component="h2" gutterBottom>
               Ingredients
@@ -296,7 +293,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
         </Grid>
 
         {/* Instructions */}
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{xs: 12, md: 8}}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" component="h2" gutterBottom>
               Instructions

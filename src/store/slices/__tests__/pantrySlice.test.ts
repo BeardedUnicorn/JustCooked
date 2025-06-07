@@ -1,15 +1,16 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import pantryReducer, {
   selectPantryItems,
   selectPantryLoading,
   selectPantryError,
   selectPantryItemById,
+  PantryState,
 } from '../pantrySlice';
 
 // Mock any necessary globals if needed, but for now, seems not required
 
 describe('pantrySlice', () => {
-  let store: ReturnType<typeof configureStore>;
+  let store: EnhancedStore<{ pantry: PantryState }>;
 
   beforeEach(() => {
     store = configureStore({

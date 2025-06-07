@@ -1,4 +1,4 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import ingredientsReducer, {
   searchIngredients,
   clearSearchResults,
@@ -6,6 +6,7 @@ import ingredientsReducer, {
   selectIngredientsLoading,
   selectIngredientsError,
   selectIngredientSearchResults,
+  IngredientsState,
 } from '../ingredientsSlice';
 
 // Mock localStorage
@@ -37,7 +38,7 @@ jest.mock('@utils/ingredientUtils', () => ({
 }));
 
 describe('ingredientsSlice', () => {
-  let store: ReturnType<typeof configureStore>;
+  let store: EnhancedStore<{ ingredients: IngredientsState }>;
 
   beforeEach(() => {
     store = configureStore({

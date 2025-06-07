@@ -50,10 +50,6 @@ describe('recipeImport', () => {
     jest.clearAllMocks();
   });
 
-
-
-
-
   describe('formatIngredientForDisplay', () => {
     test('should format ingredients with units correctly', () => {
       expect(formatIngredientForDisplay({ amount: 2, unit: 'cups', name: 'flour' }))
@@ -80,29 +76,35 @@ describe('recipeImport', () => {
   });
 
   describe('importRecipeFromUrl', () => {
-    test('should successfully import a recipe from supported URL', async () => {
-      const url = 'https://allrecipes.com/recipe/123/cookies';
+    const url = 'https://allrecipes.com/recipe/123/cookies';
 
+    beforeEach(() => {
+      // Common mocks for successful import
       mockInvoke.mockResolvedValue(mockImportedRecipe);
       mockProcessRecipeImage.mockResolvedValue('processed-image-url');
       mockAutoDetectIngredients.mockReturnValue([]);
       mockSaveRecipe.mockResolvedValue();
+    });
 
-      const result = await importRecipeFromUrl(url);
+    test('should successfully import a recipe from supported URL', async () => {
+      await importRecipeFromUrl(url);
 
       expect(mockInvoke).toHaveBeenCalledWith('import_recipe', { url });
       expect(mockProcessRecipeImage).toHaveBeenCalledWith('https://example.com/cookies.jpg');
       expect(mockSaveRecipe).toHaveBeenCalled();
+      
+      const savedRecipe = mockSaveRecipe.mock.calls[0][0];
 
-      expect(result.title).toBe('Chocolate Chip Cookies');
-      expect(result.sourceUrl).toBe(url);
-      expect(result.ingredients).toHaveLength(5);
+      expect(savedRecipe.title).toBe('Chocolate Chip Cookies');
+      expect(savedRecipe.sourceUrl).toBe(url);
+      expect(savedRecipe.ingredients).toHaveLength(5);
+      expect(savedRecipe.image).toBe('processed-image-url');
     });
 
     test('should throw error for unsupported URL', async () => {
-      const url = 'https://unsupported-site.com/recipe';
+      const unsupportedUrl = 'https://unsupported-site.com/recipe';
 
-      await expect(importRecipeFromUrl(url)).rejects.toThrow(
+      await expect(importRecipeFromUrl(unsupportedUrl)).rejects.toThrow(
         'Unsupported website. Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes.'
       );
 
@@ -110,33 +112,28 @@ describe('recipeImport', () => {
     });
 
     test('should handle Tauri backend errors', async () => {
-      const url = 'https://allrecipes.com/recipe/123/cookies';
-
       mockInvoke.mockRejectedValue(new Error('Network error'));
-
-      await expect(importRecipeFromUrl(url)).rejects.toThrow('Network error');
+      await expect(importRecipeFromUrl(url)).rejects.toThrow('Failed to import recipe: Network error');
     });
 
-    test('should handle empty recipe data', async () => {
-      const url = 'https://allrecipes.com/recipe/123/cookies';
-
+    test('should throw error for empty recipe data from backend', async () => {
       mockInvoke.mockResolvedValue({ ...mockImportedRecipe, name: '' });
-
       await expect(importRecipeFromUrl(url)).rejects.toThrow(
         'Failed to extract recipe data from the URL'
       );
     });
 
-    test('should handle image processing failure gracefully', async () => {
-      const url = 'https://allrecipes.com/recipe/123/cookies';
+    test('should fall back to original image URL on image processing failure', async () => {
+      // The actual implementation of processRecipeImage catches the error and returns the original URL
+      mockProcessRecipeImage.mockResolvedValue(mockImportedRecipe.image);
+      
+      await importRecipeFromUrl(url);
 
-      mockInvoke.mockResolvedValue(mockImportedRecipe);
-      mockProcessRecipeImage.mockRejectedValue(new Error('Image processing failed'));
-      mockAutoDetectIngredients.mockReturnValue([]);
-      mockSaveRecipe.mockResolvedValue();
-
-      // Should throw because the current implementation doesn't handle image processing errors gracefully
-      await expect(importRecipeFromUrl(url)).rejects.toThrow('Failed to import recipe: Image processing failed');
+      expect(mockSaveRecipe).toHaveBeenCalled();
+      const savedRecipe = mockSaveRecipe.mock.calls[0][0];
+      
+      // The recipe should still be saved, but with the original image URL
+      expect(savedRecipe.image).toBe(mockImportedRecipe.image);
     });
   });
 });

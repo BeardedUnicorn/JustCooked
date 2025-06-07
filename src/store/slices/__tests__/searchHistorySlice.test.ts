@@ -1,10 +1,11 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import searchHistoryReducer, {
   clearError,
   selectSearchHistory,
   selectSearchHistoryLoading,
   selectSearchHistoryError,
   selectSearchSuggestions,
+  SearchHistoryState,
 } from '../searchHistorySlice';
 
 // Mock localStorage
@@ -31,7 +32,7 @@ jest.mock('@utils/timeUtils', () => ({
 }));
 
 describe('searchHistorySlice', () => {
-  let store: ReturnType<typeof configureStore>;
+  let store: EnhancedStore<{ searchHistory: SearchHistoryState }>;
 
   beforeEach(() => {
     store = configureStore({

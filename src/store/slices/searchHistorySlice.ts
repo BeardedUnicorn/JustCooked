@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { RecentSearch, SearchFilters } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-interface SearchHistoryState {
+export interface SearchHistoryState {
   searches: RecentSearch[];
   loading: boolean;
   error: string | null;
@@ -105,7 +105,7 @@ const searchHistorySlice = createSlice({
   name: 'searchHistory',
   initialState,
   reducers: {
-    getSearchSuggestions: (state, action: PayloadAction<string>) => {
+    getSearchSuggestions: (_state, _action: PayloadAction<string>) => {
       // This is a synchronous selector-like action that doesn't modify state
       // The actual suggestions will be computed in a selector
     },

@@ -1,4 +1,4 @@
-import { configureStore } from '@reduxjs/toolkit';
+import { configureStore, EnhancedStore } from '@reduxjs/toolkit';
 import recipeCollectionsReducer, {
   selectRecipeCollections,
   selectRecipeCollectionsLoading,
@@ -7,10 +7,11 @@ import recipeCollectionsReducer, {
   selectRecipeCollectionById,
   selectCollectionsContainingRecipe,
   setCurrentCollection,
+  RecipeCollectionsState,
 } from '../recipeCollectionsSlice';
 
 describe('recipeCollectionsSlice', () => {
-  let store: ReturnType<typeof configureStore>;
+  let store: EnhancedStore<{ recipeCollections: RecipeCollectionsState }>;
 
   beforeEach(() => {
     store = configureStore({

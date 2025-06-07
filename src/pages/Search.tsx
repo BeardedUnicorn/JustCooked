@@ -4,7 +4,8 @@ import {
   FormControl, InputLabel, Select, MenuItem, Stack, Alert,
   Accordion, AccordionSummary, AccordionDetails, Slider,
   Button, Paper, List, ListItem, ListItemText,
-  IconButton, Rating
+  IconButton, Rating,
+  ListItemButton
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -91,7 +92,7 @@ const Search: React.FC = () => {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(r =>
         r.title.toLowerCase().includes(term) ||
-        r.description.toLowerCase().includes(term) ||
+        (r.description && r.description.toLowerCase().includes(term)) ||
         r.ingredients.some(i => i.name.toLowerCase().includes(term))
       );
     }
@@ -201,6 +202,69 @@ const Search: React.FC = () => {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 4 }}>
+      {/* Search Input */}
+      <Box sx={{ position: 'relative', mb: 3 }}>
+        <TextField
+          fullWidth
+          variant="outlined"
+          placeholder="Search recipes, ingredients..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+          onFocus={() => setShowSearchSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)} // Delay to allow click on suggestion
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearchTerm('')} aria-label="clear search">
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+        {showSearchSuggestions && recentSearches.length > 0 && (
+          <Paper sx={{ position: 'absolute', zIndex: 1, width: '100%', mt: 1 }}>
+            <List dense>
+              <ListItem>
+                <Typography variant="caption" color="text.secondary">
+                  <HistoryIcon fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  Recent Searches
+                </Typography>
+              </ListItem>
+              {recentSearches.map((search) => (
+                <ListItem
+                  key={search.id}
+                  disablePadding
+                  secondaryAction={
+                    <IconButton
+                      edge="end"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSearch(search.id);
+                        setRecentSearches(getRecentSearches());
+                      }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  }
+                >
+                  <ListItemButton onClick={() => handleRecentSearchClick(search.query)}>
+                    <ListItemText primary={search.query} />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        )}
+      </Box>
+
       {/* Filter Controls */}
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }}>
         <FormControl sx={{ minWidth: 150 }}>
@@ -227,7 +291,7 @@ const Search: React.FC = () => {
           Filters {getActiveFilterCount() > 0 && `(${getActiveFilterCount()})`}
         </Button>
 
-        {getActiveFilterCount() > 0 && (
+        {(getActiveFilterCount() > 0 || searchTerm) && (
           <Button
             startIcon={<ClearIcon />}
             onClick={handleClearFilters}
@@ -394,7 +458,7 @@ const Search: React.FC = () => {
               <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
                 Try adjusting your search criteria or filters to find more recipes.
               </Typography>
-              {getActiveFilterCount() > 0 && (
+              {(getActiveFilterCount() > 0 || searchTerm) && (
                 <Button
                   variant="outlined"
                   onClick={handleClearFilters}

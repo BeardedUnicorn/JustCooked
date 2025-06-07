@@ -2,7 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { RecipeCollection } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-interface RecipeCollectionsState {
+export interface RecipeCollectionsState {
   collections: RecipeCollection[];
   loading: boolean;
   error: string | null;
