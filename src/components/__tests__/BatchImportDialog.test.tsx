@@ -131,7 +131,6 @@ describe('BatchImportDialog', () => {
       'https://www.allrecipes.com/recipes/79/desserts',
       expect.objectContaining({
         maxRecipes: undefined,
-        onProgress: expect.any(Function),
       })
     );
   });
@@ -158,7 +157,6 @@ describe('BatchImportDialog', () => {
       'https://www.allrecipes.com/recipes/79/desserts',
       expect.objectContaining({
         maxRecipes: 50,
-        onProgress: expect.any(Function),
       })
     );
   });
@@ -182,11 +180,20 @@ describe('BatchImportDialog', () => {
 
   test('shows progress component during import', async () => {
     const user = userEvent.setup();
-    let progressCallback: ((progress: any) => void) | undefined;
 
-    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
-      progressCallback = options?.onProgress;
-      return 'import-123';
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+    mockBatchImportService.getProgress.mockResolvedValue({
+      status: BatchImportStatus.IMPORTING_RECIPES,
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+      processedRecipes: 5,
+      totalRecipes: 20,
+      processedCategories: 2,
+      totalCategories: 5,
+      successfulImports: 4,
+      failedImports: 1,
+      errors: [],
+      startTime: '2024-01-01T00:00:00Z',
+      estimatedTimeRemaining: 300,
     });
 
     render(<BatchImportDialog {...defaultProps} />);
@@ -196,23 +203,6 @@ describe('BatchImportDialog', () => {
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
     await user.click(startButton);
-
-    // Simulate progress update
-    if (progressCallback) {
-      progressCallback({
-        status: BatchImportStatus.IMPORTING_RECIPES,
-        currentUrl: 'https://www.allrecipes.com/recipe/123/test',
-        processedRecipes: 5,
-        totalRecipes: 20,
-        processedCategories: 2,
-        totalCategories: 5,
-        successfulImports: 4,
-        failedImports: 1,
-        errors: [],
-        startTime: '2024-01-01T00:00:00Z',
-        estimatedTimeRemaining: 300,
-      });
-    }
 
     await waitFor(() => {
       expect(screen.getByText('Importing Recipes')).toBeInTheDocument();
@@ -222,11 +212,20 @@ describe('BatchImportDialog', () => {
 
   test('calls onImportComplete when import finishes', async () => {
     const user = userEvent.setup();
-    let progressCallback: ((progress: any) => void) | undefined;
 
-    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
-      progressCallback = options?.onProgress;
-      return 'import-123';
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+    mockBatchImportService.getProgress.mockResolvedValue({
+      status: BatchImportStatus.COMPLETED,
+      currentUrl: undefined,
+      processedRecipes: 20,
+      totalRecipes: 20,
+      processedCategories: 5,
+      totalCategories: 5,
+      successfulImports: 18,
+      failedImports: 2,
+      errors: [],
+      startTime: '2024-01-01T00:00:00Z',
+      estimatedTimeRemaining: 0,
     });
 
     render(<BatchImportDialog {...defaultProps} />);
@@ -236,23 +235,6 @@ describe('BatchImportDialog', () => {
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
     await user.click(startButton);
-
-    // Simulate completion
-    if (progressCallback) {
-      progressCallback({
-        status: BatchImportStatus.COMPLETED,
-        currentUrl: undefined,
-        processedRecipes: 20,
-        totalRecipes: 20,
-        processedCategories: 5,
-        totalCategories: 5,
-        successfulImports: 18,
-        failedImports: 2,
-        errors: [],
-        startTime: '2024-01-01T00:00:00Z',
-        estimatedTimeRemaining: 0,
-      });
-    }
 
     await waitFor(() => {
       expect(defaultProps.onImportComplete).toHaveBeenCalledWith({
@@ -266,6 +248,19 @@ describe('BatchImportDialog', () => {
     const user = userEvent.setup();
     mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
     mockBatchImportService.cancelBatchImport.mockResolvedValue();
+    mockBatchImportService.getProgress.mockResolvedValue({
+      status: BatchImportStatus.IMPORTING_RECIPES,
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+      processedRecipes: 5,
+      totalRecipes: 20,
+      processedCategories: 2,
+      totalCategories: 5,
+      successfulImports: 4,
+      failedImports: 1,
+      errors: [],
+      startTime: '2024-01-01T00:00:00Z',
+      estimatedTimeRemaining: 300,
+    });
 
     render(<BatchImportDialog {...defaultProps} />);
 
@@ -289,13 +284,7 @@ describe('BatchImportDialog', () => {
     const user = userEvent.setup();
     let progressCallback: ((progress: any) => void) | undefined;
 
-    mockBatchImportService.startBatchImport.mockImplementation(async (url, options) => {
-      progressCallback = options?.onProgress;
-      // Don't resolve immediately - keep the promise pending to simulate ongoing import
-      return new Promise((resolve) => {
-        setTimeout(() => resolve('import-123'), 1000);
-      });
-    });
+    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
     mockBatchImportService.cancelBatchImport.mockResolvedValue();
 
     render(<BatchImportDialog {...defaultProps} />);
@@ -306,22 +295,19 @@ describe('BatchImportDialog', () => {
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
     await user.click(startButton);
 
-    // Simulate progress to keep import active
-    if (progressCallback) {
-      progressCallback({
-        status: BatchImportStatus.IMPORTING_RECIPES,
-        currentUrl: 'https://www.allrecipes.com/recipe/123/test',
-        processedRecipes: 1,
-        totalRecipes: 10,
-        processedCategories: 1,
-        totalCategories: 2,
-        successfulImports: 1,
-        failedImports: 0,
-        errors: [],
-        startTime: '2024-01-01T00:00:00Z',
-        estimatedTimeRemaining: 300,
-      });
-    }
+    mockBatchImportService.getProgress.mockResolvedValue({
+      status: BatchImportStatus.IMPORTING_RECIPES,
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+      processedRecipes: 1,
+      totalRecipes: 10,
+      processedCategories: 1,
+      totalCategories: 2,
+      successfulImports: 1,
+      failedImports: 0,
+      errors: [],
+      startTime: '2024-01-01T00:00:00Z',
+      estimatedTimeRemaining: 300,
+    });
 
     // Wait for import to start and cancel button to appear
     await waitFor(() => {

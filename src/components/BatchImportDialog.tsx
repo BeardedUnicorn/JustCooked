@@ -68,6 +68,43 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     };
   }, []);
 
+  // Poll for progress when importing
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | undefined;
+    if (isImporting) {
+      const fetchProgress = async () => {
+        try {
+          const newProgress = await batchImportService.getProgress();
+          if (newProgress) {
+            setProgress(newProgress);
+            if (
+              newProgress.status === BatchImportStatus.COMPLETED ||
+              newProgress.status === BatchImportStatus.CANCELLED ||
+              newProgress.status === BatchImportStatus.ERROR
+            ) {
+              setIsImporting(false);
+              if (newProgress.status === BatchImportStatus.COMPLETED && onImportComplete) {
+                onImportComplete({
+                  successCount: newProgress.successfulImports,
+                  failureCount: newProgress.failedImports,
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch progress:', error);
+        }
+      };
+
+      fetchProgress(); // Initial fetch
+
+      intervalId = setInterval(fetchProgress, 2000);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [isImporting, onImportComplete]);
+
   const handleStartImport = async () => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
@@ -81,25 +118,6 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     try {
       const options = {
         maxRecipes: limitRecipes && maxRecipes ? Number(maxRecipes) : undefined,
-        onProgress: (newProgress: BatchImportProgress) => {
-          setProgress(newProgress);
-
-          // Check if import is complete
-          if (
-            newProgress.status === BatchImportStatus.COMPLETED ||
-            newProgress.status === BatchImportStatus.CANCELLED ||
-            newProgress.status === BatchImportStatus.ERROR
-          ) {
-            setIsImporting(false);
-
-            if (newProgress.status === BatchImportStatus.COMPLETED && onImportComplete) {
-              onImportComplete({
-                successCount: newProgress.successfulImports,
-                failureCount: newProgress.failedImports,
-              });
-            }
-          }
-        },
       };
 
       await batchImportService.startBatchImport(trimmedUrl, options);
