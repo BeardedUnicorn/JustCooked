@@ -6,10 +6,12 @@
 mod recipe_import;
 mod image_storage;
 mod batch_import;
+mod database;
 
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, NutritionalInfo};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -213,6 +215,172 @@ async fn save_imported_recipe(
 // Global state for batch import
 type BatchImporterMap = Arc<Mutex<HashMap<String, Arc<BatchImporter>>>>;
 
+// Database commands
+#[tauri::command]
+async fn db_save_recipe(
+    app: tauri::AppHandle,
+    recipe: FrontendRecipe,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let db_recipe = convert_frontend_to_db_recipe(recipe);
+    db.save_recipe(&db_recipe).await.map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_all_recipes(app: tauri::AppHandle) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.get_all_recipes().await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_recipe_by_id(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Option<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipe = db.get_recipe_by_id(&id).await.map_err(|e| e.to_string())?;
+    let frontend_recipe = recipe.map(convert_db_to_frontend_recipe);
+    
+    Ok(frontend_recipe)
+}
+
+#[tauri::command]
+async fn db_delete_recipe(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let deleted = db.delete_recipe(&id).await.map_err(|e| e.to_string())?;
+    
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_search_recipes(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.search_recipes(&query).await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_recipes_by_tag(
+    app: tauri::AppHandle,
+    tag: String,
+) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.get_recipes_by_tag(&tag).await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_favorite_recipes(app: tauri::AppHandle) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.get_favorite_recipes().await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_existing_recipe_urls(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let urls = db.get_existing_recipe_urls().await.map_err(|e| e.to_string())?;
+    
+    Ok(urls)
+}
+
+// Conversion functions
+fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
+    use chrono::{DateTime, Utc};
+    
+    let ingredients = frontend.ingredients.into_iter().map(|ing| DbIngredient {
+        name: ing.name,
+        amount: ing.amount.to_string(),
+        unit: ing.unit,
+        category: None,
+    }).collect();
+    
+    let date_added = DateTime::parse_from_rfc3339(&frontend.date_added)
+        .unwrap_or_else(|_| Utc::now().into())
+        .with_timezone(&Utc);
+    let date_modified = DateTime::parse_from_rfc3339(&frontend.date_modified)
+        .unwrap_or_else(|_| Utc::now().into())
+        .with_timezone(&Utc);
+    
+    DbRecipe {
+        id: frontend.id,
+        title: frontend.title,
+        description: frontend.description,
+        image: frontend.image,
+        source_url: frontend.source_url,
+        prep_time: frontend.prep_time,
+        cook_time: frontend.cook_time,
+        total_time: frontend.total_time,
+        servings: frontend.servings as i32,
+        ingredients,
+        instructions: frontend.instructions,
+        tags: frontend.tags,
+        date_added,
+        date_modified,
+        rating: frontend.rating.map(|r| r as i32),
+        difficulty: frontend.difficulty,
+        is_favorite: frontend.is_favorite,
+        personal_notes: frontend.personal_notes,
+        collections: frontend.collections.unwrap_or_default(),
+        nutritional_info: None,
+    }
+}
+
+fn convert_db_to_frontend_recipe(db: DbRecipe) -> FrontendRecipe {
+    let ingredients = db.ingredients.into_iter().map(|ing| FrontendIngredient {
+        name: ing.name,
+        amount: ing.amount.parse().unwrap_or(1.0),
+        unit: ing.unit,
+    }).collect();
+    
+    FrontendRecipe {
+        id: db.id,
+        title: db.title,
+        description: db.description,
+        image: db.image,
+        source_url: db.source_url,
+        prep_time: db.prep_time,
+        cook_time: db.cook_time,
+        total_time: db.total_time,
+        servings: db.servings as u32,
+        ingredients,
+        instructions: db.instructions,
+        tags: db.tags,
+        date_added: db.date_added.to_rfc3339(),
+        date_modified: db.date_modified.to_rfc3339(),
+        rating: db.rating.map(|r| r as u32),
+        difficulty: db.difficulty,
+        is_favorite: db.is_favorite,
+        personal_notes: db.personal_notes,
+        collections: Some(db.collections),
+    }
+}
+
 #[tauri::command]
 async fn start_batch_import(
     app: tauri::AppHandle,
@@ -293,7 +461,15 @@ pub fn run() {
             save_imported_recipe,
             start_batch_import,
             get_batch_import_progress,
-            cancel_batch_import
+            cancel_batch_import,
+            db_save_recipe,
+            db_get_all_recipes,
+            db_get_recipe_by_id,
+            db_delete_recipe,
+            db_search_recipes,
+            db_get_recipes_by_tag,
+            db_get_favorite_recipes,
+            db_get_existing_recipe_urls
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
