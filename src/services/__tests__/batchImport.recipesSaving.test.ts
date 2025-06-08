@@ -41,10 +41,10 @@ describe('BatchImport Recipe Saving', () => {
 
     mockInvoke.mockImplementation((command: string) => {
       if (command === 'start_batch_import') {
-        return Promise.resolve(mockImportId);
+        return Promise.resolve(mockImportId as any);
       }
       if (command === 'get_batch_import_progress') {
-        return Promise.resolve(mockProgress);
+        return Promise.resolve(mockProgress as any);
       }
       return Promise.reject(new Error(`Unknown command: ${command}`));
     });
@@ -129,7 +129,7 @@ describe('BatchImport Recipe Saving', () => {
 
     mockInvoke.mockImplementation((command: string) => {
       if (command === 'start_batch_import') {
-        return Promise.resolve(mockImportId);
+        return Promise.resolve(mockImportId as any);
       }
       if (command === 'get_batch_import_progress') {
         const progress = progressStates[Math.min(progressCallCount, progressStates.length - 1)];
@@ -143,7 +143,10 @@ describe('BatchImport Recipe Saving', () => {
           errors: [],
           startTime: new Date().toISOString(),
           estimatedTimeRemaining: null,
-        });
+        } as any);
+      }
+      if (command === 'cancel_batch_import') {
+        return Promise.resolve(undefined as any);
       }
       return Promise.reject(new Error(`Unknown command: ${command}`));
     });
@@ -178,10 +181,10 @@ describe('BatchImport Recipe Saving', () => {
     
     mockInvoke.mockImplementation((command: string) => {
       if (command === 'start_batch_import') {
-        return Promise.resolve(mockImportId);
+        return Promise.resolve(mockImportId as any);
       }
       if (command === 'cancel_batch_import') {
-        return Promise.resolve();
+        return Promise.resolve(undefined as any);
       }
       return Promise.reject(new Error(`Unknown command: ${command}`));
     });
@@ -271,7 +274,7 @@ describe('BatchImport Recipe Saving Integration', () => {
 
     mockInvoke.mockImplementation((command: string) => {
       if (command === 'start_batch_import') {
-        return Promise.resolve(mockImportId);
+        return Promise.resolve(mockImportId as any);
       }
       if (command === 'get_batch_import_progress') {
         return Promise.resolve({
@@ -287,9 +290,9 @@ describe('BatchImport Recipe Saving Integration', () => {
           errors: [],
           startTime: new Date().toISOString(),
           estimatedTimeRemaining: 0,
-        });
+        } as any);
       }
-      return Promise.resolve(mockResult);
+      return Promise.resolve(mockResult as any);
     });
 
     const startUrl = 'https://www.allrecipes.com/recipes/79/desserts';
@@ -336,12 +339,12 @@ describe('BatchImport Recipe Saving Integration', () => {
 
     mockInvoke.mockImplementation((command: string) => {
       if (command === 'start_batch_import') {
-        return Promise.resolve(mockImportId);
+        return Promise.resolve(mockImportId as any);
       }
       if (command === 'get_batch_import_progress') {
-        return Promise.resolve(mockProgressWithErrors);
+        return Promise.resolve(mockProgressWithErrors as any);
       }
-      return Promise.resolve();
+      return Promise.resolve(undefined as any);
     });
 
     const progressCallback = jest.fn();
