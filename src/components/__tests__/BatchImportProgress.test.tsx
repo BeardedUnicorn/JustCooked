@@ -14,6 +14,7 @@ describe('BatchImportProgress', () => {
     totalCategories: 5,
     successfulImports: 4,
     failedImports: 1,
+    skippedRecipes: 0,
     errors: [],
     startTime: '2024-01-01T10:00:00Z',
     estimatedTimeRemaining: 300,
@@ -57,6 +58,7 @@ describe('BatchImportProgress', () => {
       { status: BatchImportStatus.STARTING, label: 'Starting...' },
       { status: BatchImportStatus.CRAWLING_CATEGORIES, label: 'Finding Categories' },
       { status: BatchImportStatus.EXTRACTING_RECIPES, label: 'Extracting Recipes' },
+      { status: BatchImportStatus.FILTERING_EXISTING, label: 'Filtering Existing' },
       { status: BatchImportStatus.IMPORTING_RECIPES, label: 'Importing Recipes' },
       { status: BatchImportStatus.COMPLETED, label: 'Completed' },
       { status: BatchImportStatus.CANCELLED, label: 'Cancelled' },
@@ -149,7 +151,7 @@ describe('BatchImportProgress', () => {
       url: `https://www.allrecipes.com/recipe/${i}/test`,
       message: `Error ${i}`,
       timestamp: '2024-01-01T10:00:00Z',
-      errorType: 'TestError',
+      errorType: 'ParseError' as const,
     }));
 
     const progress = createMockProgress({ errors });
@@ -167,22 +169,24 @@ describe('BatchImportProgress', () => {
       status: BatchImportStatus.COMPLETED,
       successfulImports: 18,
       failedImports: 2,
+      skippedRecipes: 5,
     });
     render(<BatchImportProgress progress={progress} />);
 
     expect(screen.getByText('Batch import completed successfully!')).toBeInTheDocument();
-    expect(screen.getByText('Imported 18 recipes with 2 failures.')).toBeInTheDocument();
+    expect(screen.getByText('Imported 18 recipes with 2 failures and 5 skipped.')).toBeInTheDocument();
   });
 
   test('shows cancellation message for cancelled status', () => {
     const progress = createMockProgress({
       status: BatchImportStatus.CANCELLED,
       successfulImports: 5,
+      skippedRecipes: 3,
     });
     render(<BatchImportProgress progress={progress} />);
 
     expect(screen.getByText('Batch import was cancelled.')).toBeInTheDocument();
-    expect(screen.getByText('Imported 5 recipes before cancellation.')).toBeInTheDocument();
+    expect(screen.getByText('Imported 5 recipes before cancellation with 3 skipped.')).toBeInTheDocument();
   });
 
   test('shows error message for error status', () => {
@@ -223,7 +227,7 @@ describe('BatchImportProgress', () => {
     });
     render(<BatchImportProgress progress={progress} />);
 
-    expect(screen.getByText('2m 5s')).toBeInTheDocument();
+    expect(screen.getByText(/2m 5s/)).toBeInTheDocument();
   });
 
   test('handles invalid start time gracefully', () => {
@@ -244,8 +248,7 @@ describe('BatchImportProgress', () => {
     render(<BatchImportProgress progress={progress} />);
 
     // Should show "Unknown" for remaining time
-    const remainingElements = screen.getAllByText('Unknown');
-    expect(remainingElements.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Unknown/)).toBeInTheDocument();
   });
 
   test('does not show current URL when not provided', () => {

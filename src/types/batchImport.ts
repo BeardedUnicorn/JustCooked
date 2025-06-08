@@ -2,6 +2,7 @@ export interface BatchImportRequest {
   startUrl: string;
   maxRecipes?: number;
   maxDepth?: number;
+  existingUrls?: string[];
 }
 
 export interface BatchImportProgress {
@@ -13,6 +14,7 @@ export interface BatchImportProgress {
   totalCategories: number;
   successfulImports: number;
   failedImports: number;
+  skippedRecipes: number;
   errors: BatchImportError[];
   startTime: string;
   estimatedTimeRemaining?: number;
@@ -23,6 +25,7 @@ export interface BatchImportResult {
   totalProcessed: number;
   successfulImports: number;
   failedImports: number;
+  skippedRecipes: number;
   errors: BatchImportError[];
   importedRecipeIds: string[];
   duration: number;
@@ -54,6 +57,7 @@ export enum BatchImportStatus {
   STARTING = 'starting',
   CRAWLING_CATEGORIES = 'crawling_categories',
   EXTRACTING_RECIPES = 'extracting_recipes',
+  FILTERING_EXISTING = 'filtering_existing',
   IMPORTING_RECIPES = 'importing_recipes',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',

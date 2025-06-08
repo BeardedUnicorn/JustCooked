@@ -2,10 +2,9 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   BatchImportRequest,
   BatchImportProgress,
-  BatchImportResult,
-  BatchImportStatus,
-  DEFAULT_BATCH_IMPORT_CONFIG
+  BatchImportStatus
 } from '@app-types';
+import { getExistingRecipeUrls } from '@services/recipeStorage';
 
 export class BatchImportService {
   private currentImportId: string | null = null;
@@ -34,10 +33,16 @@ export class BatchImportService {
         await this.cancelBatchImport();
       }
 
+      // Get existing recipe URLs to skip
+      console.log('Getting existing recipe URLs...');
+      const existingUrls = await getExistingRecipeUrls();
+      console.log(`Found ${existingUrls.length} existing recipe URLs`);
+
       const request: BatchImportRequest = {
         startUrl,
         maxRecipes: options?.maxRecipes,
         maxDepth: options?.maxDepth,
+        existingUrls,
       };
 
       console.log('Starting batch import:', request);
@@ -248,6 +253,5 @@ export const batchImportService = new BatchImportService();
 
 // Export utility functions
 export {
-  DEFAULT_BATCH_IMPORT_CONFIG,
   BatchImportStatus,
 } from '@app-types';

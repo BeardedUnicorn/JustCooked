@@ -13,7 +13,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Grid,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -49,6 +48,8 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
         return { label: 'Finding Categories', color: 'primary' as const, icon: <SearchIcon /> };
       case BatchImportStatus.EXTRACTING_RECIPES:
         return { label: 'Extracting Recipes', color: 'primary' as const, icon: <CategoryIcon /> };
+      case BatchImportStatus.FILTERING_EXISTING:
+        return { label: 'Filtering Existing', color: 'primary' as const, icon: <SearchIcon /> };
       case BatchImportStatus.IMPORTING_RECIPES:
         return { label: 'Importing Recipes', color: 'primary' as const, icon: <DownloadIcon /> };
       case BatchImportStatus.COMPLETED:
@@ -179,48 +180,47 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
           <Typography variant="h6" gutterBottom>
             Import Statistics
           </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" color="success.main">
-                  {progress.successfulImports}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Successful
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" color="error.main">
-                  {progress.failedImports}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Failed
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" color="primary.main">
-                  {formatDuration(progress.startTime)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Elapsed
-                </Typography>
-              </Box>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Box sx={{ textAlign: 'center' }}>
-                <Typography variant="h4" color="text.secondary">
-                  {formatEstimatedTime(progress.estimatedTimeRemaining)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Remaining
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
+          <Box sx={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: 2 }}>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+              <Typography variant="h4" color="success.main">
+                {progress.successfulImports}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Successful
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+              <Typography variant="h4" color="error.main">
+                {progress.failedImports}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Failed
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+              <Typography variant="h4" color="warning.main">
+                {progress.skippedRecipes}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Skipped
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+              <Typography variant="h4" color="primary.main">
+                {formatDuration(progress.startTime)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Elapsed
+              </Typography>
+            </Box>
+          </Box>
+          
+          {/* Time Information */}
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Estimated time remaining: {formatEstimatedTime(progress.estimatedTimeRemaining)}
+            </Typography>
+          </Box>
         </CardContent>
       </Card>
 
@@ -277,7 +277,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
             Batch import completed successfully!
           </Typography>
           <Typography variant="body2">
-            Imported {progress.successfulImports} recipes with {progress.failedImports} failures.
+            Imported {progress.successfulImports} recipes with {progress.failedImports} failures and {progress.skippedRecipes} skipped.
           </Typography>
         </Alert>
       )}
@@ -288,7 +288,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
             Batch import was cancelled.
           </Typography>
           <Typography variant="body2">
-            Imported {progress.successfulImports} recipes before cancellation.
+            Imported {progress.successfulImports} recipes before cancellation with {progress.skippedRecipes} skipped.
           </Typography>
         </Alert>
       )}

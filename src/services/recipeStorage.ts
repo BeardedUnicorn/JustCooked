@@ -235,3 +235,16 @@ export async function deleteRecipe(id: string): Promise<void> {
     throw new Error('Failed to delete recipe');
   }
 }
+
+// Get all existing recipe source URLs
+export async function getExistingRecipeUrls(): Promise<string[]> {
+  try {
+    const recipes = await getAllRecipes();
+    return recipes
+      .map(recipe => recipe.sourceUrl)
+      .filter(url => url && url.trim() !== ''); // Filter out empty or null URLs
+  } catch (error) {
+    console.error('Failed to get existing recipe URLs:', error);
+    return [];
+  }
+}

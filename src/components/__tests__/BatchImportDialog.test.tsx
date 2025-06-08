@@ -1,5 +1,4 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import BatchImportDialog from '@components/BatchImportDialog';
@@ -184,15 +183,16 @@ describe('BatchImportDialog', () => {
     mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
     mockBatchImportService.getProgress.mockResolvedValue({
       status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
       processedRecipes: 5,
       totalRecipes: 20,
       processedCategories: 2,
       totalCategories: 5,
-      successfulImports: 4,
-      failedImports: 1,
+      successfulImports: 3,
+      failedImports: 2,
+      skippedRecipes: 0,
       errors: [],
-      startTime: '2024-01-01T00:00:00Z',
+      startTime: new Date().toISOString(),
       estimatedTimeRemaining: 300,
     });
 
@@ -223,8 +223,9 @@ describe('BatchImportDialog', () => {
       totalCategories: 5,
       successfulImports: 18,
       failedImports: 2,
+      skippedRecipes: 0,
       errors: [],
-      startTime: '2024-01-01T00:00:00Z',
+      startTime: new Date().toISOString(),
       estimatedTimeRemaining: 0,
     });
 
@@ -250,15 +251,16 @@ describe('BatchImportDialog', () => {
     mockBatchImportService.cancelBatchImport.mockResolvedValue();
     mockBatchImportService.getProgress.mockResolvedValue({
       status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
       processedRecipes: 5,
       totalRecipes: 20,
       processedCategories: 2,
       totalCategories: 5,
-      successfulImports: 4,
-      failedImports: 1,
+      successfulImports: 3,
+      failedImports: 2,
+      skippedRecipes: 0,
       errors: [],
-      startTime: '2024-01-01T00:00:00Z',
+      startTime: new Date().toISOString(),
       estimatedTimeRemaining: 300,
     });
 
@@ -282,7 +284,6 @@ describe('BatchImportDialog', () => {
 
   test('cancels import when dialog is closed during import', async () => {
     const user = userEvent.setup();
-    let progressCallback: ((progress: any) => void) | undefined;
 
     mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
     mockBatchImportService.cancelBatchImport.mockResolvedValue();
@@ -297,15 +298,16 @@ describe('BatchImportDialog', () => {
 
     mockBatchImportService.getProgress.mockResolvedValue({
       status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test',
-      processedRecipes: 1,
-      totalRecipes: 10,
-      processedCategories: 1,
-      totalCategories: 2,
-      successfulImports: 1,
-      failedImports: 0,
+      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
+      processedRecipes: 5,
+      totalRecipes: 20,
+      processedCategories: 2,
+      totalCategories: 5,
+      successfulImports: 3,
+      failedImports: 2,
+      skippedRecipes: 0,
       errors: [],
-      startTime: '2024-01-01T00:00:00Z',
+      startTime: new Date().toISOString(),
       estimatedTimeRemaining: 300,
     });
 

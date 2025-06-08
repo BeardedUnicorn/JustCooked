@@ -7,6 +7,11 @@ import { BatchImportStatus, BatchImportProgress } from '@app-types';
 jest.mock('@tauri-apps/api/core');
 const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
 
+// Mock recipe storage
+jest.mock('@services/recipeStorage', () => ({
+  getExistingRecipeUrls: jest.fn(() => Promise.resolve([])),
+}));
+
 describe('BatchImportService', () => {
   let service: BatchImportService;
 
@@ -33,6 +38,7 @@ describe('BatchImportService', () => {
           startUrl,
           maxRecipes: undefined,
           maxDepth: undefined,
+          existingUrls: [],
         },
       });
     });
@@ -55,6 +61,7 @@ describe('BatchImportService', () => {
           startUrl,
           maxRecipes: 50,
           maxDepth: 2,
+          existingUrls: [],
         },
       });
     });
@@ -128,6 +135,7 @@ describe('BatchImportService', () => {
         totalCategories: 5,
         successfulImports: 4,
         failedImports: 1,
+        skippedRecipes: 0,
         errors: [],
         startTime: '2024-01-01T00:00:00Z',
         estimatedTimeRemaining: 300,

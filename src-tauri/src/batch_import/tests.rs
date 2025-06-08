@@ -44,6 +44,7 @@ mod tests {
             start_url: "invalid-url".to_string(),
             max_recipes: None,
             max_depth: None,
+            existing_urls: None,
         };
 
         let result = importer.start_batch_import(request).await;
@@ -58,6 +59,7 @@ mod tests {
             start_url: "https://example.com/recipes".to_string(),
             max_recipes: None,
             max_depth: None,
+            existing_urls: None,
         };
 
         let result = importer.start_batch_import(request).await;
@@ -238,6 +240,7 @@ mod tests {
             start_url: "https://www.allrecipes.com/recipes/79/desserts".to_string(),
             max_recipes: Some(3), // Limit to 3 recipes
             max_depth: None,
+            existing_urls: None,
         };
 
         // Test that the request is properly formed and would be accepted
@@ -268,6 +271,7 @@ mod tests {
             start_url: "https://www.allrecipes.com/recipes/79/desserts".to_string(),
             max_recipes: Some(100),
             max_depth: Some(2),
+            existing_urls: None,
         };
 
         let serialized = serde_json::to_string(&request).unwrap();

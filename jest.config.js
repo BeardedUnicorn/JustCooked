@@ -31,7 +31,7 @@ export default {
     '^@store/slices/(.*)$': '<rootDir>/src/store/slices/$1',
   },
 
-  setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/jest-setup.ts'],
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.(test|spec).(ts|tsx|js)',
     '<rootDir>/src/**/*.(test|spec).(ts|tsx|js)',

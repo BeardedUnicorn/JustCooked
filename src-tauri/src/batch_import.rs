@@ -17,6 +17,7 @@ pub struct BatchImportRequest {
     pub start_url: String,
     pub max_recipes: Option<u32>,
     pub max_depth: Option<u32>,
+    pub existing_urls: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +31,7 @@ pub struct BatchImportProgress {
     pub total_categories: u32,
     pub successful_imports: u32,
     pub failed_imports: u32,
+    pub skipped_recipes: u32,
     pub errors: Vec<BatchImportError>,
     pub start_time: String,
     pub estimated_time_remaining: Option<u32>,
@@ -42,6 +44,7 @@ pub struct BatchImportResult {
     pub total_processed: u32,
     pub successful_imports: u32,
     pub failed_imports: u32,
+    pub skipped_recipes: u32,
     pub errors: Vec<BatchImportError>,
     pub imported_recipe_ids: Vec<String>,
     pub duration: u32,
@@ -62,6 +65,7 @@ pub enum BatchImportStatus {
     Starting,
     CrawlingCategories,
     ExtractingRecipes,
+    FilteringExisting,
     ImportingRecipes,
     Completed,
     Cancelled,
@@ -78,6 +82,7 @@ pub struct BatchImporter {
     client: reqwest::Client,
     cancelled: Arc<Mutex<bool>>,
     start_time: Arc<Mutex<Option<Instant>>>,
+    imported_recipe_ids: Arc<Mutex<Vec<String>>>,
 }
 
 impl BatchImporter {
@@ -97,6 +102,7 @@ impl BatchImporter {
             total_categories: 0,
             successful_imports: 0,
             failed_imports: 0,
+            skipped_recipes: 0,
             errors: Vec::new(),
             start_time: chrono::Utc::now().to_rfc3339(),
             estimated_time_remaining: None,
@@ -107,6 +113,7 @@ impl BatchImporter {
             client,
             cancelled: Arc::new(Mutex::new(false)),
             start_time: Arc::new(Mutex::new(None)),
+            imported_recipe_ids: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -165,7 +172,7 @@ impl BatchImporter {
         progress.estimated_time_remaining = estimated_time;
     }
 
-    pub async fn start_batch_import(&self, request: BatchImportRequest) -> Result<BatchImportResult, String> {
+    pub async fn start_batch_import(&self, app: tauri::AppHandle, request: BatchImportRequest) -> Result<BatchImportResult, String> {
         let start_time = Instant::now();
 
         // Reset state
@@ -179,6 +186,7 @@ impl BatchImporter {
             progress.processed_recipes = 0;
             progress.successful_imports = 0;
             progress.failed_imports = 0;
+            progress.skipped_recipes = 0;
             progress.estimated_time_remaining = None;
         }
 
@@ -220,22 +228,31 @@ impl BatchImporter {
             return Ok(self.build_result(start_time));
         }
 
+        // Step 3: Filter out existing URLs
+        self.update_status(BatchImportStatus::FilteringExisting);
+        let (filtered_urls, skipped_count) = self.filter_existing_urls(recipe_urls, &request.existing_urls);
+
         // Apply max_recipes limit if specified
         let limited_urls = if let Some(max) = request.max_recipes {
-            recipe_urls.into_iter().take(max as usize).collect()
+            filtered_urls.into_iter().take(max as usize).collect()
         } else {
-            recipe_urls
+            filtered_urls
         };
 
-        // Update total count
+        // Update counts
         {
             let mut progress = self.progress.lock().unwrap();
             progress.total_recipes = limited_urls.len() as u32;
+            progress.skipped_recipes = skipped_count;
         }
 
-        // Step 3: Import recipes
+        if self.is_cancelled() {
+            return Ok(self.build_result(start_time));
+        }
+
+        // Step 4: Import recipes
         self.update_status(BatchImportStatus::ImportingRecipes);
-        self.import_recipes(limited_urls).await;
+        self.import_recipes(app, limited_urls).await;
 
         self.update_status(BatchImportStatus::Completed);
         Ok(self.build_result(start_time))
@@ -418,7 +435,28 @@ impl BatchImporter {
         false
     }
 
-    async fn import_recipes(&self, recipe_urls: Vec<String>) {
+    fn filter_existing_urls(&self, recipe_urls: Vec<String>, existing_urls: &Option<Vec<String>>) -> (Vec<String>, u32) {
+        if let Some(existing) = existing_urls {
+            let existing_set: HashSet<&String> = existing.iter().collect();
+            let mut filtered = Vec::new();
+            let mut skipped_count = 0;
+
+            for url in recipe_urls {
+                if existing_set.contains(&url) {
+                    skipped_count += 1;
+                } else {
+                    filtered.push(url);
+                }
+            }
+
+            (filtered, skipped_count)
+        } else {
+            // No existing URLs provided, return all URLs with 0 skipped
+            (recipe_urls, 0)
+        }
+    }
+
+    async fn import_recipes(&self, app: tauri::AppHandle, recipe_urls: Vec<String>) {
         // Check for cancellation before starting
         if self.is_cancelled() {
             return;
@@ -436,9 +474,30 @@ impl BatchImporter {
             }
 
             match import_recipe_from_url(url).await {
-                Ok(_recipe) => {
-                    let mut progress = self.progress.lock().unwrap();
-                    progress.successful_imports += 1;
+                Ok(recipe) => {
+                    // Call the save function directly
+                    match crate::save_imported_recipe(app.clone(), recipe).await {
+                        Ok(recipe_id) => {
+                            // Track the imported recipe ID
+                            {
+                                let mut imported_ids = self.imported_recipe_ids.lock().unwrap();
+                                imported_ids.push(recipe_id);
+                            }
+                            
+                            let mut progress = self.progress.lock().unwrap();
+                            progress.successful_imports += 1;
+                        }
+                        Err(save_error) => {
+                            let mut progress = self.progress.lock().unwrap();
+                            progress.failed_imports += 1;
+
+                            self.add_error(
+                                url.clone(),
+                                format!("Failed to save recipe: {}", save_error),
+                                "SaveError".to_string(),
+                            );
+                        }
+                    }
                 }
                 Err(e) => {
                     let mut progress = self.progress.lock().unwrap();
@@ -476,13 +535,15 @@ impl BatchImporter {
 
     fn build_result(&self, start_time: Instant) -> BatchImportResult {
         let progress = self.progress.lock().unwrap();
+        let imported_ids = self.imported_recipe_ids.lock().unwrap();
         BatchImportResult {
             success: matches!(progress.status, BatchImportStatus::Completed),
             total_processed: progress.processed_recipes,
             successful_imports: progress.successful_imports,
             failed_imports: progress.failed_imports,
+            skipped_recipes: progress.skipped_recipes,
             errors: progress.errors.clone(),
-            imported_recipe_ids: Vec::new(), // TODO: Track actual imported IDs
+            imported_recipe_ids: imported_ids.clone(),
             duration: start_time.elapsed().as_secs() as u32,
         }
     }
