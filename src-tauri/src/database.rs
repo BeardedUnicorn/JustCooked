@@ -47,6 +47,56 @@ pub struct Recipe {
     pub nutritional_info: Option<NutritionalInfo>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IngredientDatabase {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub aliases: Vec<String>,
+    pub date_added: String,
+    pub date_modified: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PantryItem {
+    pub id: String,
+    pub ingredient_name: String,
+    pub quantity: f64,
+    pub unit: String,
+    pub expiry_date: Option<String>,
+    pub location: Option<String>,
+    pub notes: Option<String>,
+    pub date_added: String,
+    pub date_modified: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecipeCollection {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub recipe_ids: Vec<String>,
+    pub date_created: String,
+    pub date_modified: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentSearch {
+    pub id: String,
+    pub query: String,
+    pub filters: SearchFilters,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchFilters {
+    pub tags: Option<Vec<String>>,
+    pub difficulty: Option<String>,
+    pub max_prep_time: Option<i32>,
+    pub max_cook_time: Option<i32>,
+    pub is_favorite: Option<bool>,
+}
+
 pub struct Database {
     pool: SqlitePool,
 }
@@ -116,6 +166,75 @@ impl Database {
         .await
         .context("Failed to create recipes table")?;
 
+        // Create ingredients table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS ingredients (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                aliases TEXT NOT NULL, -- JSON array
+                date_added TEXT NOT NULL,
+                date_modified TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create ingredients table")?;
+
+        // Create pantry items table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS pantry_items (
+                id TEXT PRIMARY KEY,
+                ingredient_name TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                unit TEXT NOT NULL,
+                expiry_date TEXT,
+                location TEXT,
+                notes TEXT,
+                date_added TEXT NOT NULL,
+                date_modified TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create pantry_items table")?;
+
+        // Create recipe collections table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS recipe_collections (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                recipe_ids TEXT NOT NULL, -- JSON array
+                date_created TEXT NOT NULL,
+                date_modified TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create recipe_collections table")?;
+
+        // Create search history table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS search_history (
+                id TEXT PRIMARY KEY,
+                query TEXT NOT NULL,
+                filters TEXT NOT NULL, -- JSON object
+                timestamp TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create search_history table")?;
+
         // Create indexes for better performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title)")
             .execute(&self.pool)
@@ -131,6 +250,21 @@ impl Database {
             .execute(&self.pool)
             .await
             .context("Failed to create is_favorite index")?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_ingredients_name ON ingredients(name)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create ingredients name index")?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_pantry_ingredient ON pantry_items(ingredient_name)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create pantry ingredient index")?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_search_timestamp ON search_history(timestamp)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create search timestamp index")?;
 
         Ok(())
     }
@@ -212,6 +346,78 @@ impl Database {
         Ok(recipes)
     }
 
+    pub async fn get_recipes_paginated(&self, page: i32, page_size: i32) -> Result<Vec<Recipe>> {
+        let offset = (page - 1) * page_size;
+        let rows = sqlx::query("SELECT * FROM recipes ORDER BY date_added DESC LIMIT ? OFFSET ?")
+            .bind(page_size)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch paginated recipes")?;
+
+        let mut recipes = Vec::new();
+        for row in rows {
+            recipes.push(self.row_to_recipe(row)?);
+        }
+
+        Ok(recipes)
+    }
+
+    pub async fn get_recipe_count(&self) -> Result<i64> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recipes")
+            .fetch_one(&self.pool)
+            .await
+            .context("Failed to get recipe count")?;
+
+        Ok(count)
+    }
+
+    pub async fn search_recipes_paginated(&self, query: &str, page: i32, page_size: i32) -> Result<Vec<Recipe>> {
+        let search_pattern = format!("%{}%", query);
+        let offset = (page - 1) * page_size;
+        let rows = sqlx::query(
+            r#"
+            SELECT * FROM recipes 
+            WHERE title LIKE ? OR description LIKE ? OR tags LIKE ?
+            ORDER BY date_added DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to search recipes with pagination")?;
+
+        let mut recipes = Vec::new();
+        for row in rows {
+            recipes.push(self.row_to_recipe(row)?);
+        }
+
+        Ok(recipes)
+    }
+
+    pub async fn search_recipes_count(&self, query: &str) -> Result<i64> {
+        let search_pattern = format!("%{}%", query);
+        let count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM recipes 
+            WHERE title LIKE ? OR description LIKE ? OR tags LIKE ?
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .fetch_one(&self.pool)
+        .await
+        .context("Failed to get search results count")?;
+
+        Ok(count)
+    }
+
     pub async fn delete_recipe(&self, id: &str) -> Result<bool> {
         let result = sqlx::query("DELETE FROM recipes WHERE id = ?")
             .bind(id)
@@ -277,86 +483,124 @@ impl Database {
         let mut error_count = 0;
 
         // Process recipes in smaller batches to avoid large transactions
-        const BATCH_SIZE: usize = 100;
+        const BATCH_SIZE: usize = 50; // Reduced batch size for better reliability
         
         for chunk in index_data.chunks(BATCH_SIZE) {
-            let mut tx = self.begin_transaction().await?;
-            let mut batch_migrated = 0;
-
-            for item in chunk {
-                if let Some(recipe_id) = item.get("id").and_then(|v| v.as_str()) {
-                    // Check if recipe already exists in database using transaction
-                    match self.recipe_exists_in_transaction(&mut tx, recipe_id).await {
-                        Ok(exists) if exists => {
-                            skipped_count += 1;
-                            continue; // Skip existing recipes
+            // Retry logic for transaction failures
+            let mut retry_count = 0;
+            const MAX_RETRIES: usize = 3;
+            
+            loop {
+                let mut tx = match self.begin_transaction().await {
+                    Ok(transaction) => transaction,
+                    Err(e) => {
+                        eprintln!("Failed to begin transaction (attempt {}): {}", retry_count + 1, e);
+                        if retry_count >= MAX_RETRIES {
+                            return Err(e);
                         }
-                        Ok(_) => {}, // Recipe doesn't exist, continue processing
-                        Err(e) => {
-                            eprintln!("Error checking if recipe {} exists: {}", recipe_id, e);
-                            error_count += 1;
-                            continue;
-                        }
-                    }
-
-                    // Read the individual recipe file
-                    let recipe_file = recipes_dir.join(format!("{}.json", recipe_id));
-                    if !recipe_file.exists() {
-                        eprintln!("Recipe file not found: {}", recipe_file.display());
-                        error_count += 1;
+                        retry_count += 1;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100 * retry_count as u64)).await;
                         continue;
                     }
+                };
+                
+                let mut batch_migrated = 0;
+                let mut batch_failed = false;
 
-                    let recipe_content = match fs::read_to_string(&recipe_file).await {
-                        Ok(content) => content,
-                        Err(e) => {
-                            eprintln!("Failed to read recipe file {}: {}", recipe_file.display(), e);
+                for item in chunk {
+                    if let Some(recipe_id) = item.get("id").and_then(|v| v.as_str()) {
+                        // Check if recipe already exists in database using transaction
+                        match self.recipe_exists_in_transaction(&mut tx, recipe_id).await {
+                            Ok(exists) if exists => {
+                                skipped_count += 1;
+                                continue; // Skip existing recipes
+                            }
+                            Ok(_) => {}, // Recipe doesn't exist, continue processing
+                            Err(e) => {
+                                eprintln!("Error checking if recipe {} exists: {}", recipe_id, e);
+                                error_count += 1;
+                                continue;
+                            }
+                        }
+
+                        // Read the individual recipe file
+                        let recipe_file = recipes_dir.join(format!("{}.json", recipe_id));
+                        if !recipe_file.exists() {
+                            eprintln!("Recipe file not found: {}", recipe_file.display());
                             error_count += 1;
                             continue;
                         }
-                    };
 
-                    let json_recipe: serde_json::Value = match serde_json::from_str(&recipe_content) {
-                        Ok(json) => json,
-                        Err(e) => {
-                            eprintln!("Failed to parse recipe JSON for {}: {}", recipe_id, e);
-                            error_count += 1;
-                            continue;
-                        }
-                    };
+                        let recipe_content = match fs::read_to_string(&recipe_file).await {
+                            Ok(content) => content,
+                            Err(e) => {
+                                eprintln!("Failed to read recipe file {}: {}", recipe_file.display(), e);
+                                error_count += 1;
+                                continue;
+                            }
+                        };
 
-                    // Convert JSON recipe to database recipe
-                    let db_recipe = match self.convert_json_to_db_recipe(json_recipe) {
-                        Ok(recipe) => recipe,
-                        Err(e) => {
-                            eprintln!("Failed to convert recipe {}: {}", recipe_id, e);
-                            error_count += 1;
-                            continue;
-                        }
-                    };
+                        let json_recipe: serde_json::Value = match serde_json::from_str(&recipe_content) {
+                            Ok(json) => json,
+                            Err(e) => {
+                                eprintln!("Failed to parse recipe JSON for {}: {}", recipe_id, e);
+                                error_count += 1;
+                                continue;
+                            }
+                        };
 
-                    // Save recipe in transaction
-                    match self.save_recipe_in_transaction(&mut tx, &db_recipe).await {
-                        Ok(_) => {
-                            batch_migrated += 1;
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to save recipe {} in transaction: {}", recipe_id, e);
-                            error_count += 1;
-                            continue;
+                        // Convert JSON recipe to database recipe
+                        let db_recipe = match self.convert_json_to_db_recipe(json_recipe) {
+                            Ok(recipe) => recipe,
+                            Err(e) => {
+                                eprintln!("Failed to convert recipe {}: {}", recipe_id, e);
+                                error_count += 1;
+                                continue;
+                            }
+                        };
+
+                        // Save recipe in transaction
+                        match self.save_recipe_in_transaction(&mut tx, &db_recipe).await {
+                            Ok(_) => {
+                                batch_migrated += 1;
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to save recipe {} in transaction: {}", recipe_id, e);
+                                error_count += 1;
+                                batch_failed = true;
+                                break; // Exit the batch on transaction error
+                            }
                         }
                     }
                 }
-            }
 
-            // Commit the batch
-            match tx.commit().await {
-                Ok(_) => {
-                    migrated_count += batch_migrated;
-                }
-                Err(e) => {
-                    eprintln!("Failed to commit batch transaction: {}", e);
-                    return Err(e.into());
+                // Attempt to commit the batch
+                if !batch_failed {
+                    match tx.commit().await {
+                        Ok(_) => {
+                            migrated_count += batch_migrated;
+                            break; // Success, exit retry loop
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to commit batch transaction (attempt {}): {}", retry_count + 1, e);
+                            if retry_count >= MAX_RETRIES {
+                                return Err(e.into());
+                            }
+                            retry_count += 1;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100 * retry_count as u64)).await;
+                            continue; // Retry the entire batch
+                        }
+                    }
+                } else {
+                    // Rollback failed transaction
+                    let _ = tx.rollback().await;
+                    if retry_count >= MAX_RETRIES {
+                        eprintln!("Max retries exceeded for batch, skipping...");
+                        break;
+                    }
+                    retry_count += 1;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100 * retry_count as u64)).await;
+                    continue; // Retry the entire batch
                 }
             }
         }
@@ -648,6 +892,291 @@ impl Database {
         .context("Failed to save recipe in transaction")?;
 
         Ok(())
+    }
+
+    // Ingredient database methods
+    pub async fn save_ingredient(&self, ingredient: &IngredientDatabase) -> Result<()> {
+        let aliases_json = serde_json::to_string(&ingredient.aliases)
+            .context("Failed to serialize aliases")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO ingredients (
+                id, name, category, aliases, date_added, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&ingredient.id)
+        .bind(&ingredient.name)
+        .bind(&ingredient.category)
+        .bind(&aliases_json)
+        .bind(ingredient.date_added.clone())
+        .bind(ingredient.date_modified.clone())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save ingredient")?;
+
+        Ok(())
+    }
+
+    pub async fn get_all_ingredients(&self) -> Result<Vec<IngredientDatabase>> {
+        let rows = sqlx::query("SELECT * FROM ingredients ORDER BY name")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch all ingredients")?;
+
+        let mut ingredients = Vec::new();
+        for row in rows {
+            ingredients.push(self.row_to_ingredient(row)?);
+        }
+
+        Ok(ingredients)
+    }
+
+    pub async fn delete_ingredient(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM ingredients WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete ingredient")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn search_ingredients(&self, query: &str) -> Result<Vec<IngredientDatabase>> {
+        let search_pattern = format!("%{}%", query);
+        let rows = sqlx::query(
+            r#"
+            SELECT * FROM ingredients 
+            WHERE name LIKE ? OR aliases LIKE ?
+            ORDER BY name
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to search ingredients")?;
+
+        let mut ingredients = Vec::new();
+        for row in rows {
+            ingredients.push(self.row_to_ingredient(row)?);
+        }
+
+        Ok(ingredients)
+    }
+
+    // Pantry database methods
+    pub async fn save_pantry_item(&self, item: &PantryItem) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO pantry_items (
+                id, ingredient_name, quantity, unit, expiry_date, location, notes, date_added, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&item.id)
+        .bind(&item.ingredient_name)
+        .bind(item.quantity)
+        .bind(&item.unit)
+        .bind(&item.expiry_date)
+        .bind(&item.location)
+        .bind(&item.notes)
+        .bind(item.date_added.clone())
+        .bind(item.date_modified.clone())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save pantry item")?;
+
+        Ok(())
+    }
+
+    pub async fn get_all_pantry_items(&self) -> Result<Vec<PantryItem>> {
+        let rows = sqlx::query("SELECT * FROM pantry_items ORDER BY ingredient_name")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch all pantry items")?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(self.row_to_pantry_item(row)?);
+        }
+
+        Ok(items)
+    }
+
+    pub async fn delete_pantry_item(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM pantry_items WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete pantry item")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    // Recipe collection database methods
+    pub async fn save_recipe_collection(&self, collection: &RecipeCollection) -> Result<()> {
+        let recipe_ids_json = serde_json::to_string(&collection.recipe_ids)
+            .context("Failed to serialize recipe IDs")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO recipe_collections (
+                id, name, description, recipe_ids, date_created, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&collection.id)
+        .bind(&collection.name)
+        .bind(&collection.description)
+        .bind(&recipe_ids_json)
+        .bind(collection.date_created.clone())
+        .bind(collection.date_modified.clone())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save recipe collection")?;
+
+        Ok(())
+    }
+
+    pub async fn get_all_recipe_collections(&self) -> Result<Vec<RecipeCollection>> {
+        let rows = sqlx::query("SELECT * FROM recipe_collections ORDER BY name")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch all recipe collections")?;
+
+        let mut collections = Vec::new();
+        for row in rows {
+            collections.push(self.row_to_recipe_collection(row)?);
+        }
+
+        Ok(collections)
+    }
+
+    pub async fn delete_recipe_collection(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM recipe_collections WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete recipe collection")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    // Search history database methods
+    pub async fn save_search_history(&self, search: &RecentSearch) -> Result<()> {
+        let filters_json = serde_json::to_string(&search.filters)
+            .context("Failed to serialize search filters")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO search_history (
+                id, query, filters, timestamp
+            ) VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(&search.id)
+        .bind(&search.query)
+        .bind(&filters_json)
+        .bind(search.timestamp.clone())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save search history")?;
+
+        Ok(())
+    }
+
+    pub async fn get_recent_searches(&self, limit: i32) -> Result<Vec<RecentSearch>> {
+        let rows = sqlx::query("SELECT * FROM search_history ORDER BY timestamp DESC LIMIT ?")
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch recent searches")?;
+
+        let mut searches = Vec::new();
+        for row in rows {
+            searches.push(self.row_to_recent_search(row)?);
+        }
+
+        Ok(searches)
+    }
+
+    pub async fn delete_search_history(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM search_history WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete search history")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn clear_search_history(&self) -> Result<()> {
+        sqlx::query("DELETE FROM search_history")
+            .execute(&self.pool)
+            .await
+            .context("Failed to clear search history")?;
+
+        Ok(())
+    }
+
+    // Helper methods for row conversion
+    fn row_to_ingredient(&self, row: sqlx::sqlite::SqliteRow) -> Result<IngredientDatabase> {
+        let aliases_json: String = row.get("aliases");
+        let aliases: Vec<String> = serde_json::from_str(&aliases_json)
+            .context("Failed to deserialize aliases")?;
+
+        Ok(IngredientDatabase {
+            id: row.get("id"),
+            name: row.get("name"),
+            category: row.get("category"),
+            aliases,
+            date_added: row.get("date_added"),
+            date_modified: row.get("date_modified"),
+        })
+    }
+
+    fn row_to_pantry_item(&self, row: sqlx::sqlite::SqliteRow) -> Result<PantryItem> {
+        Ok(PantryItem {
+            id: row.get("id"),
+            ingredient_name: row.get("ingredient_name"),
+            quantity: row.get("quantity"),
+            unit: row.get("unit"),
+            expiry_date: row.get("expiry_date"),
+            location: row.get("location"),
+            notes: row.get("notes"),
+            date_added: row.get("date_added"),
+            date_modified: row.get("date_modified"),
+        })
+    }
+
+    fn row_to_recipe_collection(&self, row: sqlx::sqlite::SqliteRow) -> Result<RecipeCollection> {
+        let recipe_ids_json: String = row.get("recipe_ids");
+        let recipe_ids: Vec<String> = serde_json::from_str(&recipe_ids_json)
+            .context("Failed to deserialize recipe IDs")?;
+
+        Ok(RecipeCollection {
+            id: row.get("id"),
+            name: row.get("name"),
+            description: row.get("description"),
+            recipe_ids,
+            date_created: row.get("date_created"),
+            date_modified: row.get("date_modified"),
+        })
+    }
+
+    fn row_to_recent_search(&self, row: sqlx::sqlite::SqliteRow) -> Result<RecentSearch> {
+        let filters_json: String = row.get("filters");
+        let filters: SearchFilters = serde_json::from_str(&filters_json)
+            .context("Failed to deserialize search filters")?;
+
+        Ok(RecentSearch {
+            id: row.get("id"),
+            query: row.get("query"),
+            filters,
+            timestamp: row.get("timestamp"),
+        })
     }
 
     fn row_to_recipe(&self, row: sqlx::sqlite::SqliteRow) -> Result<Recipe> {

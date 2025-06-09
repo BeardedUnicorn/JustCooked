@@ -56,10 +56,10 @@ const Collections: React.FC = () => {
     loadCollections();
   }, []);
 
-  const loadCollections = () => {
+  const loadCollections = async () => {
     try {
       setLoading(true);
-      const collectionsData = getAllCollections();
+      const collectionsData = await getAllCollections();
       // Sort by date modified (most recent first)
       const sortedCollections = collectionsData.sort((a, b) => 
         new Date(b.dateModified).getTime() - new Date(a.dateModified).getTime()
@@ -74,11 +74,11 @@ const Collections: React.FC = () => {
     }
   };
 
-  const handleCreateCollection = () => {
+  const handleCreateCollection = async () => {
     if (!newCollectionName.trim()) return;
 
     try {
-      const newCollection = createCollection(
+      const newCollection = await createCollection(
         newCollectionName.trim(),
         newCollectionDescription.trim() || undefined
       );
@@ -93,7 +93,7 @@ const Collections: React.FC = () => {
     }
   };
 
-  const handleEditCollection = () => {
+  const handleEditCollection = async () => {
     if (!editingCollection || !editName.trim()) return;
 
     try {
@@ -103,7 +103,7 @@ const Collections: React.FC = () => {
         description: editDescription.trim() || undefined,
       };
       
-      saveCollection(updatedCollection);
+      await saveCollection(updatedCollection);
       setCollections(prev => 
         prev.map(col => col.id === updatedCollection.id ? updatedCollection : col)
       );
@@ -118,11 +118,11 @@ const Collections: React.FC = () => {
     }
   };
 
-  const handleDeleteCollection = () => {
+  const handleDeleteCollection = async () => {
     if (!deletingCollection) return;
 
     try {
-      deleteCollection(deletingCollection.id);
+      await deleteCollection(deletingCollection.id);
       setCollections(prev => prev.filter(col => col.id !== deletingCollection.id));
       setDeleteDialogOpen(false);
       setDeletingCollection(null);

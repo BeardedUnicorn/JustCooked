@@ -1,86 +1,202 @@
-import {
-  readTextFile,
-  writeTextFile,
-  mkdir,
-  BaseDirectory,
-  exists
-} from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { PantryItem } from '@app-types';
+import { getCurrentTimestamp } from '@utils/timeUtils';
 
-const PANTRY_DIR = 'pantry';
-const PANTRY_FILE = 'pantry/items.json';
+// Database-backed pantry storage service
+// This service now uses SQLite database instead of JSON files
 
-// Ensure the pantry directory exists
-async function ensureDirectory() {
-  try {
-    const dirExists = await exists(PANTRY_DIR, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (!dirExists) {
-      await mkdir(PANTRY_DIR, {
-        baseDir: BaseDirectory.AppLocalData,
-        recursive: true
-      });
-      console.log('Pantry directory created successfully');
-    }
-  } catch (error) {
-    console.debug('Pantry directory check/create result:', error);
-  }
-}
-
-// Get all pantry items
+// Get all pantry items from database
 export async function getPantryItems(): Promise<PantryItem[]> {
-  await ensureDirectory();
-
   try {
-    const fileExists = await exists(PANTRY_FILE, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (!fileExists) {
-      return [];
-    }
-
-    const content = await readTextFile(PANTRY_FILE, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-    return JSON.parse(content);
+    return await invoke<PantryItem[]>('db_get_all_pantry_items');
   } catch (error) {
-    console.debug('Error getting pantry items:', error);
+    console.error('Error getting pantry items:', error);
     return [];
   }
 }
 
-// Save all pantry items
-async function savePantryItems(items: PantryItem[]): Promise<void> {
-  await ensureDirectory();
-  await writeTextFile(PANTRY_FILE, JSON.stringify(items, null, 2), {
-    baseDir: BaseDirectory.AppLocalData
-  });
+// Save pantry item to database
+async function savePantryItem(item: PantryItem): Promise<void> {
+  try {
+    await invoke('db_save_pantry_item', { item });
+  } catch (error) {
+    console.error('Failed to save pantry item:', error);
+    throw new Error('Failed to save pantry item');
+  }
 }
 
 // Add a pantry item
-export async function addPantryItem(item: PantryItem): Promise<void> {
-  const items = await getPantryItems();
-  items.push(item);
-  await savePantryItems(items);
+export async function addPantryItem(item: Omit<PantryItem, 'id' | 'dateAdded' | 'dateModified'>): Promise<void> {
+  const newItem: PantryItem = {
+    ...item,
+    id: crypto.randomUUID(),
+    dateAdded: getCurrentTimestamp(),
+    dateModified: getCurrentTimestamp(),
+  };
+
+  await savePantryItem(newItem);
 }
 
 // Update a pantry item
 export async function updatePantryItem(updatedItem: PantryItem): Promise<void> {
-  const items = await getPantryItems();
-  const index = items.findIndex(item => item.id === updatedItem.id);
+  const itemWithUpdatedDate: PantryItem = {
+    ...updatedItem,
+    dateModified: getCurrentTimestamp(),
+  };
 
-  if (index >= 0) {
-    items[index] = updatedItem;
-    await savePantryItems(items);
-  }
+  await savePantryItem(itemWithUpdatedDate);
 }
 
 // Delete a pantry item
 export async function deletePantryItem(id: string): Promise<void> {
-  const items = await getPantryItems();
-  const filteredItems = items.filter(item => item.id !== id);
-  await savePantryItems(filteredItems);
+  try {
+    const deleted = await invoke<boolean>('db_delete_pantry_item', { id });
+    if (!deleted) {
+      throw new Error('Pantry item not found or could not be deleted');
+    }
+  } catch (error) {
+    console.error('Failed to delete pantry item:', error);
+    throw new Error('Failed to delete pantry item');
+  }
+}
+
+// Get pantry item by ID
+export async function getPantryItemById(id: string): Promise<PantryItem | null> {
+  try {
+    const items = await getPantryItems();
+    return items.find(item => item.id === id) || null;
+  } catch (error) {
+    console.error('Failed to get pantry item by ID:', error);
+    return null;
+  }
+}
+
+// Search pantry items by ingredient name
+export async function searchPantryItems(query: string): Promise<PantryItem[]> {
+  try {
+    const items = await getPantryItems();
+    const normalizedQuery = query.toLowerCase().trim();
+    
+    if (!normalizedQuery) {
+      return items;
+    }
+    
+    return items.filter(item => 
+      item.ingredientName.toLowerCase().includes(normalizedQuery) ||
+      (item.location && item.location.toLowerCase().includes(normalizedQuery)) ||
+      (item.notes && item.notes.toLowerCase().includes(normalizedQuery))
+    );
+  } catch (error) {
+    console.error('Failed to search pantry items:', error);
+    return [];
+  }
+}
+
+// Get pantry items by ingredient name
+export async function getPantryItemsByIngredient(ingredientName: string): Promise<PantryItem[]> {
+  try {
+    const items = await getPantryItems();
+    return items.filter(item => 
+      item.ingredientName.toLowerCase() === ingredientName.toLowerCase()
+    );
+  } catch (error) {
+    console.error('Failed to get pantry items by ingredient:', error);
+    return [];
+  }
+}
+
+// Get expiring items (within specified days)
+export async function getExpiringItems(withinDays: number = 7): Promise<PantryItem[]> {
+  try {
+    const items = await getPantryItems();
+    const now = new Date();
+    const futureDate = new Date(now.getTime() + (withinDays * 24 * 60 * 60 * 1000));
+    
+    return items.filter(item => {
+      if (!item.expiryDate) return false;
+      
+      const expiryDate = new Date(item.expiryDate);
+      return expiryDate <= futureDate && expiryDate >= now;
+    }).sort((a, b) => {
+      if (!a.expiryDate || !b.expiryDate) return 0;
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    });
+  } catch (error) {
+    console.error('Failed to get expiring items:', error);
+    return [];
+  }
+}
+
+// Get expired items
+export async function getExpiredItems(): Promise<PantryItem[]> {
+  try {
+    const items = await getPantryItems();
+    const now = new Date();
+    
+    return items.filter(item => {
+      if (!item.expiryDate) return false;
+      
+      const expiryDate = new Date(item.expiryDate);
+      return expiryDate < now;
+    }).sort((a, b) => {
+      if (!a.expiryDate || !b.expiryDate) return 0;
+      return new Date(b.expiryDate).getTime() - new Date(a.expiryDate).getTime();
+    });
+  } catch (error) {
+    console.error('Failed to get expired items:', error);
+    return [];
+  }
+}
+
+// Get pantry items grouped by location
+export async function getPantryItemsByLocation(): Promise<Record<string, PantryItem[]>> {
+  try {
+    const items = await getPantryItems();
+    const grouped: Record<string, PantryItem[]> = {};
+    
+    for (const item of items) {
+      const location = item.location || 'Unspecified';
+      if (!grouped[location]) {
+        grouped[location] = [];
+      }
+      grouped[location].push(item);
+    }
+    
+    return grouped;
+  } catch (error) {
+    console.error('Failed to get pantry items by location:', error);
+    return {};
+  }
+}
+
+// Update pantry item quantity
+export async function updatePantryItemQuantity(id: string, newQuantity: number): Promise<void> {
+  try {
+    const item = await getPantryItemById(id);
+    if (!item) {
+      throw new Error('Pantry item not found');
+    }
+    
+    const updatedItem: PantryItem = {
+      ...item,
+      quantity: newQuantity,
+      dateModified: getCurrentTimestamp(),
+    };
+    
+    await savePantryItem(updatedItem);
+  } catch (error) {
+    console.error('Failed to update pantry item quantity:', error);
+    throw new Error('Failed to update pantry item quantity');
+  }
+}
+
+// Bulk delete pantry items
+export async function bulkDeletePantryItems(ids: string[]): Promise<void> {
+  try {
+    const deletePromises = ids.map(id => deletePantryItem(id));
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error('Failed to bulk delete pantry items:', error);
+    throw new Error('Failed to delete some pantry items');
+  }
 }

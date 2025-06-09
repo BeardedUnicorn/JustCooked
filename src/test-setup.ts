@@ -1,16 +1,18 @@
-import { jest } from '@jest/globals';
-import '@testing-library/jest-dom';
+// Mock TextEncoder/TextDecoder for Node.js environment FIRST
 import { TextEncoder, TextDecoder } from 'util';
-
-// Mock TextEncoder/TextDecoder for Node.js environment
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder as any;
 
+import { jest } from '@jest/globals';
+import '@testing-library/jest-dom';
+
 // Mock crypto.randomUUID for consistent test results
+const mockRandomUUID = jest.fn(() => 'test-uuid-123');
 Object.defineProperty(global, 'crypto', {
   value: {
-    randomUUID: jest.fn(() => 'test-uuid-123'),
+    randomUUID: mockRandomUUID,
   },
+  writable: true,
 });
 
 // Mock localStorage with actual storage behavior

@@ -11,7 +11,7 @@ mod database;
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, SearchFilters};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -151,63 +151,12 @@ async fn save_imported_recipe(
     let frontend_recipe = convert_imported_recipe_to_frontend(imported_recipe);
     let recipe_id = frontend_recipe.id.clone();
     
-    // Get the app local data directory
-    let app_local_data_dir = app.path().app_local_data_dir()
-        .map_err(|e| format!("Failed to get app local data directory: {}", e))?;
+    // Convert frontend recipe to database recipe and save to database
+    let db_recipe = convert_frontend_to_db_recipe(frontend_recipe);
     
-    // Create recipes directory path
-    let recipes_dir = app_local_data_dir.join("recipes");
-    let recipe_file_path = recipes_dir.join(format!("{}.json", recipe_id));
-    let index_file_path = recipes_dir.join("index.json");
-    
-    // Ensure the recipes directory exists
-    if !recipes_dir.exists() {
-        fs::create_dir_all(&recipes_dir)
-            .map_err(|e| format!("Failed to create recipes directory: {}", e))?;
-    }
-    
-    // Write the recipe file
-    let recipe_json = serde_json::to_string_pretty(&frontend_recipe)
-        .map_err(|e| format!("Failed to serialize recipe: {}", e))?;
-    
-    fs::write(&recipe_file_path, recipe_json)
-        .map_err(|e| format!("Failed to write recipe file: {}", e))?;
-    
-    // Update the index
-    let mut recipes_index: Vec<serde_json::Value> = Vec::new();
-    
-    // Try to read existing index
-    if index_file_path.exists() {
-        if let Ok(index_content) = fs::read_to_string(&index_file_path) {
-            if let Ok(existing_index) = serde_json::from_str::<Vec<serde_json::Value>>(&index_content) {
-                recipes_index = existing_index;
-            }
-        }
-    }
-    
-    // Create index entry
-    let index_entry = serde_json::json!({
-        "id": frontend_recipe.id,
-        "title": frontend_recipe.title,
-        "image": frontend_recipe.image,
-        "tags": frontend_recipe.tags,
-        "dateAdded": frontend_recipe.date_added,
-        "dateModified": frontend_recipe.date_modified,
-    });
-    
-    // Add or update the recipe in the index
-    if let Some(existing_index) = recipes_index.iter_mut().find(|r| r["id"] == frontend_recipe.id) {
-        *existing_index = index_entry;
-    } else {
-        recipes_index.push(index_entry);
-    }
-    
-    // Write updated index
-    let index_json = serde_json::to_string_pretty(&recipes_index)
-        .map_err(|e| format!("Failed to serialize index: {}", e))?;
-    
-    fs::write(&index_file_path, index_json)
-        .map_err(|e| format!("Failed to write index file: {}", e))?;
+    // Initialize database and save recipe
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.save_recipe(&db_recipe).await.map_err(|e| e.to_string())?;
     
     Ok(recipe_id)
 }
@@ -237,6 +186,56 @@ async fn db_get_all_recipes(app: tauri::AppHandle) -> Result<Vec<FrontendRecipe>
     let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
     
     Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_recipes_paginated(
+    app: tauri::AppHandle,
+    page: i32,
+    page_size: i32,
+) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.get_recipes_paginated(page, page_size).await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_get_recipe_count(app: tauri::AppHandle) -> Result<i64, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let count = db.get_recipe_count().await.map_err(|e| e.to_string())?;
+    
+    Ok(count)
+}
+
+#[tauri::command]
+async fn db_search_recipes_paginated(
+    app: tauri::AppHandle,
+    query: String,
+    page: i32,
+    page_size: i32,
+) -> Result<Vec<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let recipes = db.search_recipes_paginated(&query, page, page_size).await.map_err(|e| e.to_string())?;
+    let frontend_recipes = recipes.into_iter().map(convert_db_to_frontend_recipe).collect();
+    
+    Ok(frontend_recipes)
+}
+
+#[tauri::command]
+async fn db_search_recipes_count(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<i64, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let count = db.search_recipes_count(&query).await.map_err(|e| e.to_string())?;
+    
+    Ok(count)
 }
 
 #[tauri::command]
@@ -316,6 +315,120 @@ async fn db_migrate_json_recipes(app: tauri::AppHandle) -> Result<usize, String>
     let migrated_count = db.migrate_json_recipes(&app).await.map_err(|e| e.to_string())?;
     
     Ok(migrated_count)
+}
+
+// Ingredient database commands
+#[tauri::command]
+async fn db_save_ingredient(
+    app: tauri::AppHandle,
+    ingredient: IngredientDatabase,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.save_ingredient(&ingredient).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_all_ingredients(app: tauri::AppHandle) -> Result<Vec<IngredientDatabase>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let ingredients = db.get_all_ingredients().await.map_err(|e| e.to_string())?;
+    Ok(ingredients)
+}
+
+#[tauri::command]
+async fn db_delete_ingredient(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_ingredient(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_search_ingredients(app: tauri::AppHandle, query: String) -> Result<Vec<IngredientDatabase>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let ingredients = db.search_ingredients(&query).await.map_err(|e| e.to_string())?;
+    Ok(ingredients)
+}
+
+// Pantry database commands
+#[tauri::command]
+async fn db_save_pantry_item(
+    app: tauri::AppHandle,
+    item: PantryItem,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.save_pantry_item(&item).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_all_pantry_items(app: tauri::AppHandle) -> Result<Vec<PantryItem>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let items = db.get_all_pantry_items().await.map_err(|e| e.to_string())?;
+    Ok(items)
+}
+
+#[tauri::command]
+async fn db_delete_pantry_item(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_pantry_item(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+// Recipe collection database commands
+#[tauri::command]
+async fn db_save_recipe_collection(
+    app: tauri::AppHandle,
+    collection: RecipeCollection,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.save_recipe_collection(&collection).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_all_recipe_collections(app: tauri::AppHandle) -> Result<Vec<RecipeCollection>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let collections = db.get_all_recipe_collections().await.map_err(|e| e.to_string())?;
+    Ok(collections)
+}
+
+#[tauri::command]
+async fn db_delete_recipe_collection(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_recipe_collection(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+// Search history database commands
+#[tauri::command]
+async fn db_save_search_history(
+    app: tauri::AppHandle,
+    search: RecentSearch,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.save_search_history(&search).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_recent_searches(app: tauri::AppHandle, limit: i32) -> Result<Vec<RecentSearch>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let searches = db.get_recent_searches(limit).await.map_err(|e| e.to_string())?;
+    Ok(searches)
+}
+
+#[tauri::command]
+async fn db_delete_search_history(app: tauri::AppHandle, id: String) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_search_history(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_clear_search_history(app: tauri::AppHandle) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.clear_search_history().await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // Conversion functions
@@ -473,13 +586,31 @@ pub fn run() {
             cancel_batch_import,
             db_save_recipe,
             db_get_all_recipes,
+            db_get_recipes_paginated,
+            db_get_recipe_count,
+            db_search_recipes_paginated,
+            db_search_recipes_count,
             db_get_recipe_by_id,
             db_delete_recipe,
             db_search_recipes,
             db_get_recipes_by_tag,
             db_get_favorite_recipes,
             db_get_existing_recipe_urls,
-            db_migrate_json_recipes
+            db_migrate_json_recipes,
+            db_save_ingredient,
+            db_get_all_ingredients,
+            db_delete_ingredient,
+            db_search_ingredients,
+            db_save_pantry_item,
+            db_get_all_pantry_items,
+            db_delete_pantry_item,
+            db_save_recipe_collection,
+            db_get_all_recipe_collections,
+            db_delete_recipe_collection,
+            db_save_search_history,
+            db_get_recent_searches,
+            db_delete_search_history,
+            db_clear_search_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

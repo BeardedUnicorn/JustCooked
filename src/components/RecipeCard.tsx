@@ -255,6 +255,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
 
           {/* Quick Action Overlay - moved outside CardActionArea */}
           <Box
+            data-testid="cook-overlay"
             sx={{
               position: 'absolute',
               top: 0,

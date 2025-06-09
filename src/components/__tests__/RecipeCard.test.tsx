@@ -1,11 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
-import RecipeCard from '@components/RecipeCard';
-import { Recipe } from '@app-types';
-import { mockRecipe } from '@/__tests__/fixtures/recipes';
-import darkTheme from '@styles/theme';
+import RecipeCard from '../RecipeCard';
+import { Recipe } from '../../types';
+import { mockRecipe } from '../../__tests__/fixtures/recipes';
+import darkTheme from '../../theme';
 
 // Mock services
 jest.mock('@services/recipeStorage', () => ({
@@ -108,11 +108,14 @@ describe('RecipeCard Component', () => {
     });
 
     test('should navigate to cooking mode when cook now button is clicked', async () => {
-      const user = userEvent.setup();
       renderRecipeCard();
 
+      const overlay = screen.getByTestId('cook-overlay');
       const cookButton = screen.getByRole('button', { name: /cook now/i });
-      await user.click(cookButton);
+      
+      // Simulate hover and click using fireEvent to bypass pointer-events restrictions
+      fireEvent.mouseEnter(overlay);
+      fireEvent.click(cookButton);
 
       expect(mockNavigate).toHaveBeenCalledWith('/recipe/test-recipe-123/cook');
     });

@@ -31,6 +31,7 @@ export default {
     '^@store/slices/(.*)$': '<rootDir>/src/store/slices/$1',
   },
 
+  setupFiles: ['<rootDir>/src/jest-globals.js'],
   setupFilesAfterEnv: ['<rootDir>/src/test-setup.ts'],
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.(test|spec).(ts|tsx|js)',

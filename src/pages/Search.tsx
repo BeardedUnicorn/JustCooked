@@ -5,7 +5,7 @@ import {
   Accordion, AccordionSummary, AccordionDetails, Slider,
   Button, Paper, List, ListItem, ListItemText,
   IconButton, Rating,
-  ListItemButton
+  ListItemButton, CircularProgress
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -15,10 +15,12 @@ import {
   History as HistoryIcon,
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
-import { getAllRecipes } from '@services/recipeStorage';
+import { getRecipesPaginated, getRecipeCount, searchRecipesPaginated, getSearchRecipesCount } from '@services/recipeStorage';
 import { Recipe, SearchFilters } from '@app-types';
 import RecipeCard from '@components/RecipeCard';
 import { getRecentSearches, saveSearch, removeSearch } from '@services/searchHistoryStorage';
+
+const PAGE_SIZE = 24; // Number of recipes per page
 
 const Search: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -28,8 +30,12 @@ const Search: React.FC = () => {
   const [sortBy, setSortBy] = useState('dateAdded');
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
   // Advanced filters
   const [filters, setFilters] = useState<SearchFilters>({
@@ -39,33 +45,69 @@ const Search: React.FC = () => {
     dietaryRestrictions: [],
   });
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [recentSearches, setRecentSearches] = useState(getRecentSearches());
+  const [recentSearches, setRecentSearches] = useState<any[]>([]);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
 
   const difficultyOptions = ['Easy', 'Medium', 'Hard'];
   const dietaryOptions = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Keto', 'Low-Carb', 'High-Protein'];
 
-  const fetchRecipes = async () => {
-    try {
-      setLoading(true);
-      const allRecipes = await getAllRecipes();
-      setRecipes(allRecipes);
+  // Load recent searches
+  useEffect(() => {
+    const loadRecentSearches = async () => {
+      const searches = await getRecentSearches();
+      setRecentSearches(searches);
+    };
+    loadRecentSearches();
+  }, []);
 
-      // Extract unique tags
-      const tags = Array.from(new Set(allRecipes.flatMap(r => r.tags)));
-      setAllTags(tags);
+  const fetchRecipes = async (page: number = 1, isLoadMore: boolean = false) => {
+    try {
+      if (!isLoadMore) {
+        setLoading(true);
+        setRecipes([]);
+        setCurrentPage(1);
+      } else {
+        setLoadingMore(true);
+      }
+
+      let newRecipes: Recipe[] = [];
+      let count = 0;
+
+      if (searchTerm.trim()) {
+        // Search with pagination
+        newRecipes = await searchRecipesPaginated(searchTerm, page, PAGE_SIZE);
+        count = await getSearchRecipesCount(searchTerm);
+      } else {
+        // Get all recipes with pagination
+        newRecipes = await getRecipesPaginated(page, PAGE_SIZE);
+        count = await getRecipeCount();
+      }
+
+      if (isLoadMore) {
+        setRecipes(prev => [...prev, ...newRecipes]);
+      } else {
+        setRecipes(newRecipes);
+        // Extract unique tags from first page for tag filtering
+        const tags = Array.from(new Set(newRecipes.flatMap((r: Recipe) => r.tags)));
+        setAllTags(tags);
+      }
+
+      setTotalCount(count);
+      setHasMore(newRecipes.length === PAGE_SIZE && (page * PAGE_SIZE) < count);
+      setCurrentPage(page);
       setError(null);
     } catch (err) {
       setError('Failed to load recipes');
       console.error('Error fetching recipes:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
   useEffect(() => {
     fetchRecipes();
-  }, []);
+  }, [searchTerm]);
 
   // Handle URL search parameters
   useEffect(() => {
@@ -76,7 +118,11 @@ const Search: React.FC = () => {
       setSearchTerm(queryParam);
       // Save the search to history when coming from URL
       saveSearch(queryParam, { ...filters, query: queryParam, tags: selectedTags });
-      setRecentSearches(getRecentSearches());
+      const loadRecentSearches = async () => {
+        const searches = await getRecentSearches();
+        setRecentSearches(searches);
+      };
+      loadRecentSearches();
     }
     
     if (tagParam && !selectedTags.includes(tagParam)) {
@@ -87,33 +133,23 @@ const Search: React.FC = () => {
   const applyFilters = useCallback(() => {
     let filtered = [...recipes];
 
-    // Apply search term filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(r =>
-        r.title.toLowerCase().includes(term) ||
-        (r.description && r.description.toLowerCase().includes(term)) ||
-        r.ingredients.some(i => i.name.toLowerCase().includes(term))
-      );
-    }
-
     // Apply tag filter
     if (selectedTags.length > 0) {
-      filtered = filtered.filter(r =>
+      filtered = filtered.filter((r: Recipe) =>
         selectedTags.every(tag => r.tags.includes(tag))
       );
     }
 
     // Apply difficulty filter
     if (filters.difficulty && filters.difficulty.length > 0) {
-      filtered = filtered.filter(r =>
+      filtered = filtered.filter((r: Recipe) =>
         r.difficulty && filters.difficulty!.includes(r.difficulty)
       );
     }
 
     // Apply time filter
     if (filters.maxTotalTime && filters.maxTotalTime < 120) {
-      filtered = filtered.filter(r => {
+      filtered = filtered.filter((r: Recipe) => {
         const totalTime = parseInt(r.totalTime) || parseInt(r.prepTime) + parseInt(r.cookTime) || 0;
         return totalTime <= filters.maxTotalTime!;
       });
@@ -121,14 +157,14 @@ const Search: React.FC = () => {
 
     // Apply rating filter
     if (filters.minRating && filters.minRating > 0) {
-      filtered = filtered.filter(r =>
+      filtered = filtered.filter((r: Recipe) =>
         r.rating && r.rating >= filters.minRating!
       );
     }
 
     // Apply dietary restrictions filter
     if (filters.dietaryRestrictions && filters.dietaryRestrictions.length > 0) {
-      filtered = filtered.filter(r =>
+      filtered = filtered.filter((r: Recipe) =>
         filters.dietaryRestrictions!.some(restriction =>
           r.tags.some(tag => tag.toLowerCase().includes(restriction.toLowerCase()))
         )
@@ -152,7 +188,7 @@ const Search: React.FC = () => {
     });
 
     setFilteredRecipes(filtered);
-  }, [recipes, searchTerm, selectedTags, sortBy, filters]);
+  }, [recipes, selectedTags, sortBy, filters]);
 
   useEffect(() => {
     applyFilters();
@@ -169,7 +205,11 @@ const Search: React.FC = () => {
   const handleSearchSubmit = () => {
     if (searchTerm.trim()) {
       saveSearch(searchTerm, { ...filters, query: searchTerm, tags: selectedTags });
-      setRecentSearches(getRecentSearches());
+      const loadRecentSearches = async () => {
+        const searches = await getRecentSearches();
+        setRecentSearches(searches);
+      };
+      loadRecentSearches();
     }
     setShowSearchSuggestions(false);
   };
@@ -188,6 +228,12 @@ const Search: React.FC = () => {
       minRating: 0,
       dietaryRestrictions: [],
     });
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !loadingMore) {
+      fetchRecipes(currentPage + 1, true);
+    }
   };
 
   const getActiveFilterCount = () => {
@@ -237,7 +283,7 @@ const Search: React.FC = () => {
                   Recent Searches
                 </Typography>
               </ListItem>
-              {recentSearches.map((search) => (
+              {recentSearches.map((search: any) => (
                 <ListItem
                   key={search.id}
                   disablePadding
@@ -248,7 +294,11 @@ const Search: React.FC = () => {
                       onClick={(e) => {
                         e.stopPropagation();
                         removeSearch(search.id);
-                        setRecentSearches(getRecentSearches());
+                        const loadRecentSearches = async () => {
+                          const searches = await getRecentSearches();
+                          setRecentSearches(searches);
+                        };
+                        loadRecentSearches();
                       }}
                     >
                       <ClearIcon fontSize="small" />
@@ -426,7 +476,7 @@ const Search: React.FC = () => {
       {/* Results Summary */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body1" color="text.secondary">
-          {loading ? 'Loading...' : `${filteredRecipes.length} recipe${filteredRecipes.length !== 1 ? 's' : ''} found`}
+          {loading ? 'Loading...' : `${filteredRecipes.length} of ${totalCount} recipe${totalCount !== 1 ? 's' : ''} shown`}
         </Typography>
 
         {searchTerm && (
@@ -472,13 +522,28 @@ const Search: React.FC = () => {
         ) : (
           <Grid size={12}>
             <Box sx={{ textAlign: 'center', py: 6 }}>
-              <Typography variant="h6" color="text.secondary">
+              <CircularProgress />
+              <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
                 Loading recipes...
               </Typography>
             </Box>
           </Grid>
         )}
       </Grid>
+
+      {/* Load More Button */}
+      {hasMore && filteredRecipes.length > 0 && (
+        <Box sx={{ textAlign: 'center', mt: 4 }}>
+          <Button
+            variant="outlined"
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            startIcon={loadingMore ? <CircularProgress size={20} /> : undefined}
+          >
+            {loadingMore ? 'Loading...' : 'Load More Recipes'}
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 };

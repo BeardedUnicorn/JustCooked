@@ -65,17 +65,17 @@ const Ingredients: React.FC = () => {
     filterIngredients();
   }, [ingredients, searchQuery, selectedCategory]);
 
-  const loadIngredientsData = () => {
-    const loadedIngredients = loadIngredients();
+  const loadIngredientsData = async () => {
+    const loadedIngredients = await loadIngredients();
     setIngredients(loadedIngredients);
   };
 
-  const filterIngredients = () => {
+  const filterIngredients = async () => {
     let filtered = ingredients;
 
     // Filter by search query
     if (searchQuery.trim()) {
-      const searchResults = searchIngredients(searchQuery);
+      const searchResults = await searchIngredients(searchQuery);
       filtered = searchResults.map(result => result.ingredient);
     }
 
@@ -114,7 +114,7 @@ const Ingredients: React.FC = () => {
     setError(null);
   };
 
-  const handleSaveIngredient = () => {
+  const handleSaveIngredient = async () => {
     if (!formData.name.trim()) {
       setError('Ingredient name is required');
       return;
@@ -128,31 +128,31 @@ const Ingredients: React.FC = () => {
     try {
       if (editingIngredient) {
         // Update existing ingredient
-        updateIngredient(editingIngredient.id, {
+        await updateIngredient(editingIngredient.id, {
           name: formData.name.trim(),
           category: formData.category,
           aliases,
         });
       } else {
         // Add new ingredient
-        addIngredient({
+        await addIngredient({
           name: formData.name.trim(),
           category: formData.category,
           aliases,
         });
       }
 
-      loadIngredientsData();
+      await loadIngredientsData();
       handleCloseDialog();
     } catch (err) {
       setError('Failed to save ingredient');
     }
   };
 
-  const handleDeleteIngredient = (id: string) => {
+  const handleDeleteIngredient = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this ingredient?')) {
-      deleteIngredient(id);
-      loadIngredientsData();
+      await deleteIngredient(id);
+      await loadIngredientsData();
     }
   };
 
@@ -166,10 +166,12 @@ const Ingredients: React.FC = () => {
     return category?.color || '#9E9E9E';
   };
 
-  const paginatedIngredients = filteredIngredients.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
+  const paginatedIngredients = Array.isArray(filteredIngredients) 
+    ? filteredIngredients.slice(
+        page * rowsPerPage,
+        page * rowsPerPage + rowsPerPage
+      )
+    : [];
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 4 }}>
@@ -204,7 +206,7 @@ const Ingredients: React.FC = () => {
         </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} found
+          {Array.isArray(filteredIngredients) ? filteredIngredients.length : 0} ingredient{(Array.isArray(filteredIngredients) ? filteredIngredients.length : 0) !== 1 ? 's' : ''} found
         </Typography>
 
         <TableContainer>
@@ -284,7 +286,7 @@ const Ingredients: React.FC = () => {
 
         <TablePagination
           component="div"
-          count={filteredIngredients.length}
+          count={Array.isArray(filteredIngredients) ? filteredIngredients.length : 0}
           page={page}
           onPageChange={(_, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}

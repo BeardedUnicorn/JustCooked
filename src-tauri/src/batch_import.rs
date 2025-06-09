@@ -462,6 +462,19 @@ impl BatchImporter {
             return;
         }
 
+        // Initialize database connection
+        let db = match crate::database::Database::new(&app).await {
+            Ok(database) => database,
+            Err(e) => {
+                self.add_error(
+                    "database".to_string(),
+                    format!("Failed to initialize database: {}", e),
+                    "DatabaseError".to_string(),
+                );
+                return;
+            }
+        };
+
         for (index, url) in recipe_urls.iter().enumerate() {
             if self.is_cancelled() {
                 break;
@@ -474,14 +487,17 @@ impl BatchImporter {
             }
 
             match import_recipe_from_url(url).await {
-                Ok(recipe) => {
-                    // Call the save function directly
-                    match crate::save_imported_recipe(app.clone(), recipe).await {
-                        Ok(recipe_id) => {
+                Ok(imported_recipe) => {
+                    // Convert imported recipe to database recipe
+                    let db_recipe = self.convert_imported_to_db_recipe(imported_recipe);
+                    
+                    // Save recipe to database
+                    match db.save_recipe(&db_recipe).await {
+                        Ok(_) => {
                             // Track the imported recipe ID
                             {
                                 let mut imported_ids = self.imported_recipe_ids.lock().unwrap();
-                                imported_ids.push(recipe_id);
+                                imported_ids.push(db_recipe.id.clone());
                             }
                             
                             let mut progress = self.progress.lock().unwrap();
@@ -493,7 +509,7 @@ impl BatchImporter {
 
                             self.add_error(
                                 url.clone(),
-                                format!("Failed to save recipe: {}", save_error),
+                                format!("Failed to save recipe in transaction: {}", save_error),
                                 "SaveError".to_string(),
                             );
                         }
@@ -530,6 +546,70 @@ impl BatchImporter {
             progress.current_url = None;
             progress.estimated_time_remaining = Some(0);
             // Don't override processed_count if we were cancelled early
+        }
+    }
+
+    fn convert_imported_to_db_recipe(&self, imported: crate::recipe_import::ImportedRecipe) -> crate::database::Recipe {
+        use chrono::Utc;
+        
+        let recipe_id = uuid::Uuid::new_v4().to_string();
+        let current_time = Utc::now();
+        
+        // Parse ingredients from strings to structured format
+        let ingredients = imported.ingredients.iter().map(|ingredient_str| {
+            // Simple parsing - split on first space for amount, then unit/name
+            let parts: Vec<&str> = ingredient_str.splitn(3, ' ').collect();
+            let (amount, unit, name) = if parts.len() >= 3 {
+                let amount_str = parts[0];
+                let amount = amount_str.parse::<f64>().unwrap_or(1.0).to_string();
+                let unit = parts[1].to_string();
+                let name = parts[2..].join(" ");
+                (amount, unit, name)
+            } else if parts.len() == 2 {
+                let amount_str = parts[0];
+                let amount = amount_str.parse::<f64>().unwrap_or(1.0).to_string();
+                let name = parts[1].to_string();
+                (amount, "".to_string(), name)
+            } else {
+                ("1".to_string(), "".to_string(), ingredient_str.clone())
+            };
+            
+            crate::database::Ingredient {
+                name,
+                amount,
+                unit,
+                category: None,
+            }
+        }).collect();
+        
+        // Parse tags from keywords
+        let tags: Vec<String> = if imported.keywords.is_empty() {
+            Vec::new()
+        } else {
+            imported.keywords.split(',').map(|s| s.trim().to_string()).collect()
+        };
+        
+        crate::database::Recipe {
+            id: recipe_id,
+            title: imported.name,
+            description: imported.description,
+            image: imported.image,
+            source_url: imported.source_url,
+            prep_time: imported.prep_time,
+            cook_time: imported.cook_time,
+            total_time: imported.total_time,
+            servings: imported.servings as i32,
+            ingredients,
+            instructions: imported.instructions,
+            tags,
+            date_added: current_time,
+            date_modified: current_time,
+            rating: None,
+            difficulty: None,
+            is_favorite: Some(false),
+            personal_notes: None,
+            collections: Vec::new(),
+            nutritional_info: None,
         }
     }
 

@@ -57,6 +57,60 @@ export async function getAllRecipes(): Promise<Recipe[]> {
   }
 }
 
+// Get recipes with pagination
+export async function getRecipesPaginated(page: number, pageSize: number): Promise<Recipe[]> {
+  try {
+    const frontendRecipes = await invoke<any[]>('db_get_recipes_paginated', { 
+      page: page, 
+      pageSize: pageSize 
+    });
+    
+    // Convert from Tauri format to frontend Recipe format
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
+  } catch (error) {
+    console.error('Failed to get paginated recipes:', error);
+    return [];
+  }
+}
+
+// Get total recipe count
+export async function getRecipeCount(): Promise<number> {
+  try {
+    const count = await invoke<number>('db_get_recipe_count');
+    return count;
+  } catch (error) {
+    console.error('Failed to get recipe count:', error);
+    return 0;
+  }
+}
+
+// Search recipes with pagination
+export async function searchRecipesPaginated(query: string, page: number, pageSize: number): Promise<Recipe[]> {
+  try {
+    const frontendRecipes = await invoke<any[]>('db_search_recipes_paginated', { 
+      query: query,
+      page: page, 
+      pageSize: pageSize 
+    });
+    
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
+  } catch (error) {
+    console.error('Failed to search recipes with pagination:', error);
+    return [];
+  }
+}
+
+// Get search results count
+export async function getSearchRecipesCount(query: string): Promise<number> {
+  try {
+    const count = await invoke<number>('db_search_recipes_count', { query: query });
+    return count;
+  } catch (error) {
+    console.error('Failed to get search results count:', error);
+    return 0;
+  }
+}
+
 // Get a specific recipe by ID
 export async function getRecipeById(id: string): Promise<Recipe | null> {
   try {
