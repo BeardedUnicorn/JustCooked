@@ -1,10 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import Collections from '../Collections';
-import darkTheme from '@styles/theme';
-import * as recipeCollectionStorage from '@services/recipeCollectionStorage';
+import darkTheme from '../../theme';
+import * as recipeCollectionStorage from '../../services/recipeCollectionStorage';
 
 // Mock the navigation
 const mockNavigate = jest.fn();
@@ -14,7 +15,7 @@ jest.mock('react-router-dom', () => ({
 }));
 
 // Mock the storage service
-jest.mock('@services/recipeCollectionStorage');
+jest.mock('../../services/recipeCollectionStorage');
 
 const mockCollections = [
   {
@@ -48,14 +49,16 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('Collections', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (recipeCollectionStorage.getAllCollections as jest.Mock).mockReturnValue(mockCollections);
+    (recipeCollectionStorage.getAllCollections as jest.Mock).mockResolvedValue(mockCollections);
   });
 
-  it('renders collections page with header', () => {
+  it('renders collections page with header', async () => {
     renderWithProviders(<Collections />);
     
-    expect(screen.getByText('Collections')).toBeInTheDocument();
-    expect(screen.getByText('Add Collection')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Collections')).toBeInTheDocument();
+      expect(screen.getByText('Add Collection')).toBeInTheDocument();
+    });
   });
 
   it('displays collections when they exist', async () => {
@@ -73,7 +76,7 @@ describe('Collections', () => {
   });
 
   it('displays empty state when no collections exist', async () => {
-    (recipeCollectionStorage.getAllCollections as jest.Mock).mockReturnValue([]);
+    (recipeCollectionStorage.getAllCollections as jest.Mock).mockResolvedValue([]);
     
     renderWithProviders(<Collections />);
     
@@ -87,6 +90,10 @@ describe('Collections', () => {
 
   it('opens create collection dialog when add button is clicked', async () => {
     renderWithProviders(<Collections />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Add Collection')).toBeInTheDocument();
+    });
     
     fireEvent.click(screen.getByText('Add Collection'));
     
@@ -110,6 +117,10 @@ describe('Collections', () => {
     (recipeCollectionStorage.createCollection as jest.Mock).mockImplementation(mockCreateCollection);
     
     renderWithProviders(<Collections />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Add Collection')).toBeInTheDocument();
+    });
     
     fireEvent.click(screen.getByText('Add Collection'));
     
@@ -249,6 +260,10 @@ describe('Collections', () => {
 
   it('disables create button when name is empty', async () => {
     renderWithProviders(<Collections />);
+    
+    await waitFor(() => {
+      expect(screen.getByText('Add Collection')).toBeInTheDocument();
+    });
     
     fireEvent.click(screen.getByText('Add Collection'));
     

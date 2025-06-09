@@ -1,11 +1,12 @@
 export interface PantryItem {
   id: string;
-  ingredientName: string;
-  quantity: number;
+  name: string;
+  amount: number;
   unit: string;
+  category?: string;
   expiryDate?: string;
   location?: string;
   notes?: string;
-  dateAdded: string;
-  dateModified: string;
+  dateAdded?: string;
+  dateModified?: string;
 }

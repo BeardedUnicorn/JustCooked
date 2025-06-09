@@ -2,9 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { RecipeCollection } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-// Database-backed recipe collection storage service
-// This service now uses SQLite database instead of localStorage
-
 export const getAllCollections = async (): Promise<RecipeCollection[]> => {
   try {
     return await invoke<RecipeCollection[]>('db_get_all_recipe_collections');
@@ -42,10 +39,13 @@ export const deleteCollection = async (id: string): Promise<void> => {
   try {
     const deleted = await invoke<boolean>('db_delete_recipe_collection', { id });
     if (!deleted) {
-      throw new Error('Collection not found or could not be deleted');
+      throw new Error('Collection not found');
     }
   } catch (error) {
     console.error('Failed to delete collection:', error);
+    if (error instanceof Error && error.message === 'Collection not found') {
+      throw error;
+    }
     throw new Error('Failed to delete collection');
   }
 };

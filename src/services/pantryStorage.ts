@@ -2,9 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { PantryItem } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-// Database-backed pantry storage service
-// This service now uses SQLite database instead of JSON files
-
 // Get all pantry items from database
 export async function getPantryItems(): Promise<PantryItem[]> {
   try {
@@ -21,7 +18,7 @@ async function savePantryItem(item: PantryItem): Promise<void> {
     await invoke('db_save_pantry_item', { item });
   } catch (error) {
     console.error('Failed to save pantry item:', error);
-    throw new Error('Failed to save pantry item');
+    throw error;
   }
 }
 
@@ -52,10 +49,13 @@ export async function deletePantryItem(id: string): Promise<void> {
   try {
     const deleted = await invoke<boolean>('db_delete_pantry_item', { id });
     if (!deleted) {
-      throw new Error('Pantry item not found or could not be deleted');
+      throw new Error('Pantry item not found');
     }
   } catch (error) {
     console.error('Failed to delete pantry item:', error);
+    if (error instanceof Error && error.message === 'Pantry item not found') {
+      throw error;
+    }
     throw new Error('Failed to delete pantry item');
   }
 }
@@ -82,7 +82,7 @@ export async function searchPantryItems(query: string): Promise<PantryItem[]> {
     }
     
     return items.filter(item => 
-      item.ingredientName.toLowerCase().includes(normalizedQuery) ||
+      item.name.toLowerCase().includes(normalizedQuery) ||
       (item.location && item.location.toLowerCase().includes(normalizedQuery)) ||
       (item.notes && item.notes.toLowerCase().includes(normalizedQuery))
     );
@@ -97,7 +97,7 @@ export async function getPantryItemsByIngredient(ingredientName: string): Promis
   try {
     const items = await getPantryItems();
     return items.filter(item => 
-      item.ingredientName.toLowerCase() === ingredientName.toLowerCase()
+      item.name.toLowerCase() === ingredientName.toLowerCase()
     );
   } catch (error) {
     console.error('Failed to get pantry items by ingredient:', error);
@@ -179,11 +179,11 @@ export async function updatePantryItemQuantity(id: string, newQuantity: number):
     
     const updatedItem: PantryItem = {
       ...item,
-      quantity: newQuantity,
+      amount: newQuantity,
       dateModified: getCurrentTimestamp(),
     };
     
-    await savePantryItem(updatedItem);
+    await updatePantryItem(updatedItem);
   } catch (error) {
     console.error('Failed to update pantry item quantity:', error);
     throw new Error('Failed to update pantry item quantity');

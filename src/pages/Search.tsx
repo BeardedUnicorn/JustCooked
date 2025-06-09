@@ -131,6 +131,11 @@ const Search: React.FC = () => {
   }, [searchParams]);
 
   const applyFilters = useCallback(() => {
+    if (!recipes || !Array.isArray(recipes)) {
+      setFilteredRecipes([]);
+      return;
+    }
+    
     let filtered = [...recipes];
 
     // Apply tag filter

@@ -69,7 +69,7 @@ const CollectionView: React.FC = () => {
     }
 
     try {
-      const collectionData = getCollectionById(id);
+      const collectionData = await getCollectionById(id);
       if (!collectionData) {
         setError('Collection not found');
         setLoading(false);

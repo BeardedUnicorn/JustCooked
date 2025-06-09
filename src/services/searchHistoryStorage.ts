@@ -2,228 +2,165 @@ import { invoke } from '@tauri-apps/api/core';
 import { RecentSearch, SearchFilters } from '@app-types';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-// Database-backed search history storage service
-// This service now uses SQLite database instead of localStorage
+const MAX_SEARCH_HISTORY = 50; // Maximum number of searches to keep
 
-const MAX_RECENT_SEARCHES = 10;
-
-export const getRecentSearches = async (): Promise<RecentSearch[]> => {
+// Get recent searches from database
+export async function getRecentSearches(limit: number = 10): Promise<RecentSearch[]> {
   try {
-    return await invoke<RecentSearch[]>('db_get_recent_searches', { limit: MAX_RECENT_SEARCHES });
+    return await invoke<RecentSearch[]>('db_get_recent_searches', { limit });
   } catch (error) {
     console.error('Failed to get recent searches:', error);
     return [];
   }
-};
+}
 
-export const saveSearch = async (query: string, filters: SearchFilters): Promise<void> => {
-  if (!query.trim()) return;
-  
+// Save a search to history
+export async function saveSearch(query: string, filters?: SearchFilters): Promise<void> {
   try {
-    // Check if this exact search already exists and remove it first
-    const existingSearches = await getRecentSearches();
+    // Check if this exact search already exists
+    const existingSearches = await getRecentSearches(MAX_SEARCH_HISTORY);
     const existingSearch = existingSearches.find(search => 
       search.query.toLowerCase() === query.toLowerCase()
     );
-    
+
     if (existingSearch) {
-      await invoke('db_delete_search_history', { id: existingSearch.id });
+      // Update the existing search with new timestamp
+      const updatedSearch: RecentSearch = {
+        ...existingSearch,
+        timestamp: getCurrentTimestamp(),
+        filters: filters || existingSearch.filters,
+      };
+      await invoke('db_save_search_history', { search: updatedSearch });
+    } else {
+      // Create new search entry
+      const newSearch: RecentSearch = {
+        id: crypto.randomUUID(),
+        query: query.trim(),
+        timestamp: getCurrentTimestamp(),
+        filters: filters || {},
+      };
+      await invoke('db_save_search_history', { search: newSearch });
     }
-    
-    // Add new search
-    const newSearch: RecentSearch = {
-      id: crypto.randomUUID(),
-      query: query.trim(),
-      filters,
-      timestamp: getCurrentTimestamp(),
-    };
-
-    await invoke('db_save_search_history', { search: newSearch });
-
-    // Clean up old searches if we exceed the limit
-    await cleanupOldSearches();
   } catch (error) {
     console.error('Failed to save search:', error);
   }
-};
+}
 
-export const clearSearchHistory = async (): Promise<void> => {
+// Remove a specific search from history
+export async function removeSearch(id: string): Promise<void> {
+  try {
+    await invoke('db_delete_search_history', { id });
+  } catch (error) {
+    console.error('Failed to remove search:', error);
+  }
+}
+
+// Clear all search history
+export async function clearSearchHistory(): Promise<void> {
   try {
     await invoke('db_clear_search_history');
   } catch (error) {
     console.error('Failed to clear search history:', error);
-    throw new Error('Failed to clear search history');
   }
-};
+}
 
-export const removeSearch = async (id: string): Promise<void> => {
+// Get search suggestions based on partial query
+export async function getSearchSuggestions(partialQuery: string, limit: number = 5): Promise<string[]> {
   try {
-    const deleted = await invoke<boolean>('db_delete_search_history', { id });
-    if (!deleted) {
-      throw new Error('Search history item not found or could not be deleted');
+    const searches = await getRecentSearches(MAX_SEARCH_HISTORY);
+    const normalizedQuery = partialQuery.toLowerCase().trim();
+    
+    if (!normalizedQuery) {
+      return [];
     }
-  } catch (error) {
-    console.error('Failed to remove search:', error);
-    throw new Error('Failed to remove search');
-  }
-};
-
-export const getSearchSuggestions = async (query: string): Promise<string[]> => {
-  if (!query.trim()) return [];
-  
-  try {
-    const searches = await getRecentSearches();
+    
     const suggestions = searches
-      .filter(search => 
-        search.query.toLowerCase().includes(query.toLowerCase()) &&
-        search.query.toLowerCase() !== query.toLowerCase()
-      )
+      .filter(search => search.query.toLowerCase().includes(normalizedQuery))
       .map(search => search.query)
-      .slice(0, 5);
+      .slice(0, limit);
     
     return suggestions;
   } catch (error) {
     console.error('Failed to get search suggestions:', error);
     return [];
   }
-};
+}
 
-// Get search history for a specific time period
-export const getSearchHistoryByDateRange = async (
-  startDate: string, 
-  endDate: string
-): Promise<RecentSearch[]> => {
+// Get popular search terms (most frequently searched)
+export async function getPopularSearches(limit: number = 10): Promise<{ query: string; count: number }[]> {
   try {
-    const allSearches = await getRecentSearches();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const searches = await getRecentSearches(MAX_SEARCH_HISTORY);
+    const queryCount: Record<string, number> = {};
     
-    return allSearches.filter(search => {
-      const searchDate = new Date(search.timestamp);
-      return searchDate >= start && searchDate <= end;
-    });
-  } catch (error) {
-    console.error('Failed to get search history by date range:', error);
-    return [];
-  }
-};
-
-// Get most popular search terms
-export const getPopularSearchTerms = async (limit: number = 5): Promise<Array<{
-  query: string;
-  count: number;
-  lastSearched: string;
-}>> => {
-  try {
-    const searches = await getRecentSearches();
-    const termCounts = new Map<string, { count: number; lastSearched: string }>();
-    
-    for (const search of searches) {
+    // Count occurrences of each query
+    searches.forEach(search => {
       const normalizedQuery = search.query.toLowerCase();
-      const existing = termCounts.get(normalizedQuery);
-      
-      if (existing) {
-        existing.count++;
-        // Keep the most recent timestamp
-        if (search.timestamp > existing.lastSearched) {
-          existing.lastSearched = search.timestamp;
-        }
-      } else {
-        termCounts.set(normalizedQuery, {
-          count: 1,
-          lastSearched: search.timestamp,
-        });
-      }
-    }
+      queryCount[normalizedQuery] = (queryCount[normalizedQuery] || 0) + 1;
+    });
     
-    return Array.from(termCounts.entries())
-      .map(([query, data]) => ({
-        query,
-        count: data.count,
-        lastSearched: data.lastSearched,
-      }))
+    // Convert to array and sort by count
+    const popularSearches = Object.entries(queryCount)
+      .map(([query, count]) => ({ query, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, limit);
+    
+    return popularSearches;
   } catch (error) {
-    console.error('Failed to get popular search terms:', error);
+    console.error('Failed to get popular searches:', error);
     return [];
   }
-};
+}
 
-// Get searches with specific filters
-export const getSearchesWithFilters = async (): Promise<RecentSearch[]> => {
+// Get search history statistics
+export async function getSearchHistoryStats(): Promise<{
+  totalSearches: number;
+  uniqueQueries: number;
+  mostRecentSearch?: string;
+  oldestSearch?: string;
+}> {
   try {
-    const searches = await getRecentSearches();
-    return searches.filter(search => {
-      const { filters } = search;
-      return (
-        (filters.tags && filters.tags.length > 0) ||
-        filters.difficulty ||
-        filters.maxPrepTime ||
-        filters.maxCookTime ||
-        filters.isFavorite !== undefined
-      );
-    });
+    const searches = await getRecentSearches(MAX_SEARCH_HISTORY);
+    const uniqueQueries = new Set(searches.map(s => s.query.toLowerCase())).size;
+    
+    const stats = {
+      totalSearches: searches.length,
+      uniqueQueries,
+      mostRecentSearch: searches[0]?.query,
+      oldestSearch: searches[searches.length - 1]?.query,
+    };
+    
+    return stats;
   } catch (error) {
-    console.error('Failed to get searches with filters:', error);
-    return [];
+    console.error('Failed to get search history stats:', error);
+    return {
+      totalSearches: 0,
+      uniqueQueries: 0,
+    };
   }
-};
+}
 
-// Clean up old searches beyond the limit
-const cleanupOldSearches = async (): Promise<void> => {
+// Export search history (for backup/export functionality)
+export async function exportSearchHistory(): Promise<RecentSearch[]> {
   try {
-    const searches = await getRecentSearches();
-    if (searches.length > MAX_RECENT_SEARCHES) {
-      // Sort by timestamp (newest first) and remove the oldest ones
-      const sortedSearches = searches.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-      
-      const searchesToDelete = sortedSearches.slice(MAX_RECENT_SEARCHES);
-      
-      for (const search of searchesToDelete) {
-        await invoke('db_delete_search_history', { id: search.id });
-      }
-    }
-  } catch (error) {
-    console.error('Failed to cleanup old searches:', error);
-  }
-};
-
-// Export search history to JSON
-export const exportSearchHistory = async (): Promise<string> => {
-  try {
-    const searches = await getRecentSearches();
-    return JSON.stringify(searches, null, 2);
+    return await getRecentSearches(MAX_SEARCH_HISTORY);
   } catch (error) {
     console.error('Failed to export search history:', error);
-    throw new Error('Failed to export search history');
+    return [];
   }
-};
+}
 
-// Import search history from JSON
-export const importSearchHistory = async (jsonData: string): Promise<void> => {
+// Import search history (for restore/import functionality)
+export async function importSearchHistory(searches: RecentSearch[]): Promise<void> {
   try {
-    const searches: RecentSearch[] = JSON.parse(jsonData);
+    // Clear existing history first
+    await clearSearchHistory();
     
-    // Validate the data structure
-    if (!Array.isArray(searches)) {
-      throw new Error('Invalid search history format');
-    }
-    
+    // Import new searches
     for (const search of searches) {
-      if (!search.id || !search.query || !search.filters || !search.timestamp) {
-        throw new Error('Invalid search history item format');
-      }
-      
       await invoke('db_save_search_history', { search });
     }
-    
-    // Clean up after import
-    await cleanupOldSearches();
   } catch (error) {
     console.error('Failed to import search history:', error);
     throw new Error('Failed to import search history');
   }
-};
+}

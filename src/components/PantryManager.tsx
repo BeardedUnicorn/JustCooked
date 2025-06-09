@@ -39,10 +39,11 @@ const PantryManager: React.FC<PantryManagerProps> = ({
 
   // Group items by category
   const groupedItems = items.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
+    const itemCategory = item.category || 'Other';
+    if (!acc[itemCategory]) {
+      acc[itemCategory] = [];
     }
-    acc[item.category].push(item);
+    acc[itemCategory].push(item);
     return acc;
   }, {} as Record<string, PantryItem[]>);
 
@@ -52,7 +53,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
       setName(item.name);
       setAmount(item.amount);
       setUnit(item.unit);
-      setCategory(item.category);
+      setCategory(item.category || 'Other');
       setExpiryDate(item.expiryDate || '');
     } else {
       resetForm();

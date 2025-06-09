@@ -1,84 +1,39 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import {
-  readTextFile,
-  writeTextFile,
-  mkdir,
-  exists,
-  BaseDirectory,
-} from '@tauri-apps/plugin-fs';
-import {
   getPantryItems,
   addPantryItem,
   updatePantryItem,
   deletePantryItem,
-} from '@services/pantryStorage';
-import { mockPantryItems } from '@/__tests__/fixtures/recipes';
+  getPantryItemById,
+  searchPantryItems,
+} from '../pantryStorage';
+import { mockPantryItems } from '../../__tests__/fixtures/recipes';
 
-// Mock the dependencies
-jest.mock('@tauri-apps/plugin-fs');
-
-const mockReadTextFile = readTextFile as jest.MockedFunction<typeof readTextFile>;
-const mockWriteTextFile = writeTextFile as jest.MockedFunction<typeof writeTextFile>;
-const mockMkdir = mkdir as jest.MockedFunction<typeof mkdir>;
-const mockExists = exists as jest.MockedFunction<typeof exists>;
+// Mock Tauri invoke
+const mockInvoke = jest.fn() as jest.MockedFunction<any>;
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: any[]) => mockInvoke(...args),
+}));
 
 describe('pantryStorage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset crypto.randomUUID mock
+    (global.crypto.randomUUID as jest.Mock).mockReturnValue('test-uuid-123');
   });
 
   describe('getPantryItems', () => {
-    test('should return pantry items when file exists', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
+    test('should return pantry items from database', async () => {
+      mockInvoke.mockResolvedValue(mockPantryItems);
 
       const items = await getPantryItems();
 
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
       expect(items).toEqual(mockPantryItems);
-      expect(mockReadTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        { baseDir: BaseDirectory.AppLocalData }
-      );
     });
 
-    test('should return empty array when file does not exist', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
-
-      const items = await getPantryItems();
-
-      expect(items).toEqual([]);
-    });
-
-    test('should create directory if it does not exist', async () => {
-      mockExists.mockResolvedValueOnce(false); // Directory doesn't exist
-      mockMkdir.mockResolvedValue();
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
-
-      const items = await getPantryItems();
-
-      expect(mockMkdir).toHaveBeenCalledWith('pantry', {
-        baseDir: BaseDirectory.AppLocalData,
-        recursive: true,
-      });
-      expect(items).toEqual([]);
-    });
-
-    test('should handle file read errors gracefully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockRejectedValue(new Error('Read error'));
-
-      const items = await getPantryItems();
-
-      expect(items).toEqual([]);
-    });
-
-    test('should handle corrupted JSON gracefully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue('invalid json');
+    test('should return empty array when database call fails', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
       const items = await getPantryItems();
 
@@ -87,69 +42,39 @@ describe('pantryStorage', () => {
   });
 
   describe('addPantryItem', () => {
-    test('should add item to empty pantry', async () => {
+    test('should add item to pantry', async () => {
       const newItem = {
-        id: 'new-item',
         name: 'Olive Oil',
         amount: 1,
         unit: 'bottle',
         category: 'oils',
       };
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+      mockInvoke.mockResolvedValue(undefined);
 
       await addPantryItem(newItem);
 
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify([newItem], null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_pantry_item', {
+        item: expect.objectContaining({
+          ...newItem,
+          id: 'test-uuid-123',
+          dateAdded: expect.any(String),
+          dateModified: expect.any(String),
+        }),
+      });
     });
 
-    test('should add item to existing pantry', async () => {
+    test('should handle database save errors', async () => {
       const newItem = {
-        id: 'new-item',
         name: 'Olive Oil',
         amount: 1,
         unit: 'bottle',
         category: 'oils',
       };
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      await addPantryItem(newItem);
-
-      const expectedItems = [...mockPantryItems, newItem];
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify(expectedItems, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
-    });
-
-    test('should handle file system errors', async () => {
-      const newItem = {
-        id: 'new-item',
-        name: 'Olive Oil',
-        amount: 1,
-        unit: 'bottle',
-        category: 'oils',
-      };
-
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockRejectedValue(new Error('Write error'));
-
-      await expect(addPantryItem(newItem)).rejects.toThrow('Write error');
+      await expect(addPantryItem(newItem)).rejects.toThrow('Database error');
     });
   });
 
@@ -161,131 +86,119 @@ describe('pantryStorage', () => {
         unit: 'kg',
       };
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+      mockInvoke.mockResolvedValue(undefined);
 
       await updatePantryItem(updatedItem);
 
-      const expectedItems = [updatedItem, mockPantryItems[1]];
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify(expectedItems, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_pantry_item', {
+        item: expect.objectContaining({
+          ...updatedItem,
+          dateModified: expect.any(String),
+        }),
+      });
     });
 
-    test('should handle non-existent item gracefully', async () => {
-      const nonExistentItem = {
-        id: 'non-existent',
-        name: 'Non-existent',
-        amount: 1,
-        unit: 'unit',
-        category: 'other',
-      };
-
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
-
-      await updatePantryItem(nonExistentItem);
-
-      // Should not call writeTextFile since item was not found
-      expect(mockWriteTextFile).not.toHaveBeenCalled();
-    });
-
-    test('should handle empty pantry', async () => {
+    test('should handle database save errors', async () => {
       const updatedItem = {
-        id: 'some-id',
-        name: 'Some Item',
-        amount: 1,
-        unit: 'unit',
-        category: 'other',
+        ...mockPantryItems[0],
+        amount: 10,
       };
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      await updatePantryItem(updatedItem);
-
-      // Should not call writeTextFile since item was not found in empty pantry
-      expect(mockWriteTextFile).not.toHaveBeenCalled();
+      await expect(updatePantryItem(updatedItem)).rejects.toThrow('Database error');
     });
   });
 
   describe('deletePantryItem', () => {
     test('should delete existing item', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+      mockInvoke.mockResolvedValue(true);
 
       await deletePantryItem(mockPantryItems[0].id);
 
-      const expectedItems = [mockPantryItems[1]]; // Only second item remains
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify(expectedItems, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+      expect(mockInvoke).toHaveBeenCalledWith('db_delete_pantry_item', {
+        id: mockPantryItems[0].id,
+      });
     });
 
-    test('should handle non-existent item gracefully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockPantryItems));
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+    test('should handle non-existent item', async () => {
+      mockInvoke.mockResolvedValue(false);
 
-      await deletePantryItem('non-existent-id');
-
-      // Should save original items unchanged
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify(mockPantryItems, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+      await expect(deletePantryItem('non-existent-id')).rejects.toThrow('Pantry item not found');
     });
 
-    test('should handle empty pantry', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(false); // Pantry file doesn't exist
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      await deletePantryItem('some-id');
+      await expect(deletePantryItem('some-id')).rejects.toThrow('Failed to delete pantry item');
+    });
+  });
 
-      // Should save empty array (deletePantryItem always saves the filtered result)
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify([], null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+  describe('getPantryItemById', () => {
+    test('should return item when found', async () => {
+      mockInvoke.mockResolvedValue(mockPantryItems);
+
+      const item = await getPantryItemById(mockPantryItems[0].id);
+
+      expect(item).toEqual(mockPantryItems[0]);
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
     });
 
-    test('should delete all items with same ID', async () => {
-      const duplicateItems = [
-        ...mockPantryItems,
-        { ...mockPantryItems[0], name: 'Duplicate Flour' }, // Same ID as first item
+    test('should return null when item not found', async () => {
+      mockInvoke.mockResolvedValue(mockPantryItems);
+
+      const item = await getPantryItemById('non-existent-id');
+
+      expect(item).toBeNull();
+    });
+
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const item = await getPantryItemById('some-id');
+
+      expect(item).toBeNull();
+    });
+  });
+
+  describe('searchPantryItems', () => {
+    test('should search items by name', async () => {
+      mockInvoke.mockResolvedValue(mockPantryItems);
+
+      const results = await searchPantryItems('Flour');
+
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe('Flour');
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
+    });
+
+    test('should return all items for empty query', async () => {
+      mockInvoke.mockResolvedValue(mockPantryItems);
+
+      const results = await searchPantryItems('');
+
+      expect(results).toEqual(mockPantryItems);
+    });
+
+    test('should search by location and notes', async () => {
+      const itemsWithLocation = [
+        { ...mockPantryItems[0], location: 'pantry' },
+        { ...mockPantryItems[1], notes: 'organic sugar' },
       ];
+      mockInvoke.mockResolvedValue(itemsWithLocation);
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for getPantryItems)
-      mockExists.mockResolvedValueOnce(true); // Pantry file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(duplicateItems));
-      mockExists.mockResolvedValueOnce(true); // Directory exists (for savePantryItems)
-      mockWriteTextFile.mockResolvedValue();
+      const results = await searchPantryItems('pantry');
 
-      await deletePantryItem(mockPantryItems[0].id);
+      expect(results).toHaveLength(1);
+      expect(results[0].location).toBe('pantry');
+    });
 
-      const expectedItems = [mockPantryItems[1]]; // Only second item remains (both items with same ID are removed)
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'pantry/items.json',
-        JSON.stringify(expectedItems, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const results = await searchPantryItems('test');
+
+      expect(results).toEqual([]);
     });
   });
 });

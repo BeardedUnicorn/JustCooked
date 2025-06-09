@@ -1,7 +1,6 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import {
   loadIngredients,
-  saveIngredients,
   addIngredient,
   updateIngredient,
   deleteIngredient,
@@ -11,17 +10,11 @@ import {
 } from '../ingredientStorage';
 import { mockIngredientDatabase } from '../../__tests__/fixtures/recipes';
 
-// Mock localStorage
-const mockLocalStorage = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
-
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-});
+// Mock Tauri invoke
+const mockInvoke = jest.fn() as jest.MockedFunction<any>;
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: any[]) => mockInvoke(...args),
+}));
 
 describe('ingredientStorage', () => {
   beforeEach(() => {
@@ -31,57 +24,27 @@ describe('ingredientStorage', () => {
   });
 
   describe('loadIngredients', () => {
-    test('should load ingredients from localStorage', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
+    test('should load ingredients from database', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
 
-      const ingredients = loadIngredients();
+      const ingredients = await loadIngredients();
 
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('justcooked_ingredients');
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
       expect(ingredients).toEqual(mockIngredientDatabase);
     });
 
-    test('should return default ingredients when localStorage is empty', () => {
-      mockLocalStorage.getItem.mockReturnValue(null);
+    test('should return empty array when database call fails', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      const ingredients = loadIngredients();
+      const ingredients = await loadIngredients();
 
-      expect(ingredients).toHaveLength(10); // Default ingredients count
-      expect(ingredients[0].name).toBe('Salt');
-      expect(ingredients[1].name).toBe('Black Pepper');
-    });
-
-    test('should handle corrupted localStorage data', () => {
-      mockLocalStorage.getItem.mockReturnValue('invalid json');
-
-      const ingredients = loadIngredients();
-
-      expect(ingredients).toHaveLength(10); // Should fall back to defaults
-    });
-  });
-
-  describe('saveIngredients', () => {
-    test('should save ingredients to localStorage', () => {
-      saveIngredients(mockIngredientDatabase);
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith(
-        'justcooked_ingredients',
-        JSON.stringify(mockIngredientDatabase)
-      );
-    });
-
-    test('should handle localStorage errors gracefully', () => {
-      mockLocalStorage.setItem.mockImplementation(() => {
-        throw new Error('Storage quota exceeded');
-      });
-
-      expect(() => saveIngredients(mockIngredientDatabase)).not.toThrow();
+      expect(ingredients).toEqual([]);
     });
   });
 
   describe('addIngredient', () => {
-    test('should add a new ingredient with generated ID and timestamps', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify([]));
-      mockLocalStorage.setItem.mockImplementation(() => {});
+    test('should add a new ingredient with generated ID and timestamps', async () => {
+      mockInvoke.mockResolvedValue(undefined);
 
       const newIngredient = {
         name: 'Tomato',
@@ -89,7 +52,7 @@ describe('ingredientStorage', () => {
         aliases: ['tomatoes', 'fresh tomato'],
       };
 
-      const result = addIngredient(newIngredient);
+      const result = await addIngredient(newIngredient);
 
       expect(result.id).toBe('test-uuid-123');
       expect(result.name).toBe('Tomato');
@@ -97,15 +60,11 @@ describe('ingredientStorage', () => {
       expect(result.aliases).toEqual(['tomatoes', 'fresh tomato']);
       expect(result.dateAdded).toBeDefined();
       expect(result.dateModified).toBeDefined();
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', { ingredient: result });
     });
 
-    test('should add ingredient to existing list', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-      
-      const capturedData: any[] = [];
-      mockLocalStorage.setItem.mockImplementation((_key, value) => {
-        capturedData.push(JSON.parse(value as string));
-      });
+    test('should handle database save errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
       const newIngredient = {
         name: 'Tomato',
@@ -113,123 +72,119 @@ describe('ingredientStorage', () => {
         aliases: [],
       };
 
-      addIngredient(newIngredient);
-
-      expect(capturedData[0]).toHaveLength(mockIngredientDatabase.length + 1);
-      expect(capturedData[0][mockIngredientDatabase.length].name).toBe('Tomato');
+      await expect(addIngredient(newIngredient)).rejects.toThrow('Database error');
     });
   });
 
   describe('updateIngredient', () => {
-    test('should update existing ingredient', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-
-      let capturedData: any;
-      mockLocalStorage.setItem.mockImplementation((key, value) => {
-        if (key === 'justcooked_ingredients') {
-          capturedData = JSON.parse(value as string);
-        }
-      });
+    test('should update existing ingredient', async () => {
+      mockInvoke
+        .mockResolvedValueOnce(mockIngredientDatabase) // loadIngredients call
+        .mockResolvedValueOnce(undefined); // saveIngredient call
 
       const updates = {
         name: 'Updated Flour',
         aliases: ['updated flour', 'new alias'],
       };
 
-      const result = updateIngredient(mockIngredientDatabase[0].id, updates);
+      const result = await updateIngredient(mockIngredientDatabase[0].id, updates);
 
       expect(result).toBeDefined();
-      expect(capturedData).toHaveLength(mockIngredientDatabase.length);
-      expect(capturedData[0].name).toBe('Updated Flour');
-      expect(capturedData[0].aliases).toEqual(['updated flour', 'new alias']);
-      expect(capturedData[0].dateModified).toBeDefined();
+      expect(result!.name).toBe('Updated Flour');
+      expect(result!.aliases).toEqual(['updated flour', 'new alias']);
+      expect(result!.dateModified).toBeDefined();
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', { ingredient: result });
     });
 
-    test('should handle non-existent ingredient', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-      mockLocalStorage.setItem.mockImplementation(() => {});
+    test('should handle non-existent ingredient', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
 
-      const result = updateIngredient('non-existent-id', { name: 'Updated Name' });
+      const result = await updateIngredient('non-existent-id', { name: 'Updated Name' });
 
       expect(result).toBeNull();
-      expect(mockLocalStorage.setItem).not.toHaveBeenCalled();
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
+      expect(mockInvoke).toHaveBeenCalledTimes(1); // Only the load call, no save call
     });
   });
 
   describe('deleteIngredient', () => {
-    test('should delete existing ingredient', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
+    test('should delete existing ingredient', async () => {
+      mockInvoke.mockResolvedValue(true);
 
-      let capturedData: any;
-      mockLocalStorage.setItem.mockImplementation((key, value) => {
-        if (key === 'justcooked_ingredients') {
-          capturedData = JSON.parse(value as string);
-        }
-      });
-
-      const result = deleteIngredient(mockIngredientDatabase[0].id);
+      const result = await deleteIngredient(mockIngredientDatabase[0].id);
 
       expect(result).toBe(true);
-      expect(capturedData).toHaveLength(mockIngredientDatabase.length - 1);
-      expect(capturedData.find((ing: any) => ing.id === mockIngredientDatabase[0].id)).toBeUndefined();
+      expect(mockInvoke).toHaveBeenCalledWith('db_delete_ingredient', { id: mockIngredientDatabase[0].id });
     });
 
-    test('should handle non-existent ingredient', () => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-      mockLocalStorage.setItem.mockImplementation(() => {});
+    test('should handle non-existent ingredient', async () => {
+      mockInvoke.mockResolvedValue(false);
 
-      const result = deleteIngredient('non-existent');
+      const result = await deleteIngredient('non-existent');
 
       expect(result).toBe(false);
-      expect(mockLocalStorage.setItem).not.toHaveBeenCalled();
+      expect(mockInvoke).toHaveBeenCalledWith('db_delete_ingredient', { id: 'non-existent' });
+    });
+
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const result = await deleteIngredient('test-id');
+
+      expect(result).toBe(false);
     });
   });
 
   describe('searchIngredients', () => {
-    beforeEach(() => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-    });
+    test('should search ingredients in database', async () => {
+      const searchResults = [mockIngredientDatabase[1]]; // Sugar
+      mockInvoke.mockResolvedValue(searchResults);
 
-    test('should find exact matches', () => {
-      const results = searchIngredients('Sugar');
+      const results = await searchIngredients('Sugar');
 
+      expect(mockInvoke).toHaveBeenCalledWith('db_search_ingredients', { query: 'Sugar' });
       expect(results).toHaveLength(1);
       expect(results[0].ingredient.name).toBe('Sugar');
       expect(results[0].matchType).toBe('exact');
       expect(results[0].score).toBe(1);
     });
 
-    test('should find alias matches', () => {
-      const results = searchIngredients('white sugar');
+    test('should handle fuzzy matches', async () => {
+      const searchResults = [mockIngredientDatabase[0]]; // All-Purpose Flour
+      mockInvoke.mockResolvedValue(searchResults);
 
-      expect(results).toHaveLength(1);
-      expect(results[0].ingredient.name).toBe('Sugar');
-      expect(results[0].matchType).toBe('alias');
-    });
-
-    test('should find fuzzy matches', () => {
-      const results = searchIngredients('flou');
+      const results = await searchIngredients('flou');
 
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].ingredient.name).toBe('All-Purpose Flour');
       expect(results[0].matchType).toBe('fuzzy');
     });
 
-    test('should return empty array for no matches', () => {
-      const results = searchIngredients('nonexistent ingredient');
+    test('should return empty array for no matches', async () => {
+      mockInvoke.mockResolvedValue([]);
+
+      const results = await searchIngredients('nonexistent ingredient');
 
       expect(results).toEqual([]);
     });
 
-    test('should handle case insensitive search', () => {
-      const results = searchIngredients('SUGAR');
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      expect(results).toHaveLength(1);
-      expect(results[0].ingredient.name).toBe('Sugar');
+      const results = await searchIngredients('test');
+
+      expect(results).toEqual([]);
     });
 
-    test('should sort results by score', () => {
-      const results = searchIngredients('egg');
+    test('should sort results by score', async () => {
+      const searchResults = [
+        mockIngredientDatabase.find(ing => ing.name === 'Eggs')!,
+        mockIngredientDatabase.find(ing => ing.name === 'All-Purpose Flour')!,
+      ];
+      mockInvoke.mockResolvedValue(searchResults);
+
+      const results = await searchIngredients('egg');
 
       expect(results.length).toBeGreaterThan(0);
       // Results should be sorted by score (highest first)
@@ -240,54 +195,63 @@ describe('ingredientStorage', () => {
   });
 
   describe('findIngredientByName', () => {
-    beforeEach(() => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
+    test('should find ingredient by exact name', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+
+      const ingredient = await findIngredientByName('Sugar');
+
+      expect(ingredient).toBeDefined();
+      expect(ingredient!.name).toBe('Sugar');
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
     });
 
-    test('should find ingredient by exact name', () => {
-      const ingredient = findIngredientByName('Sugar');
+    test('should find ingredient by alias', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+
+      const ingredient = await findIngredientByName('white sugar');
 
       expect(ingredient).toBeDefined();
       expect(ingredient!.name).toBe('Sugar');
     });
 
-    test('should find ingredient by alias', () => {
-      const ingredient = findIngredientByName('white sugar');
+    test('should return null for non-existent ingredient', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
 
-      expect(ingredient).toBeDefined();
-      expect(ingredient!.name).toBe('Sugar');
-    });
-
-    test('should return null for non-existent ingredient', () => {
-      const ingredient = findIngredientByName('nonexistent');
+      const ingredient = await findIngredientByName('nonexistent');
 
       expect(ingredient).toBeNull();
     });
 
-    test('should handle case insensitive search', () => {
-      const ingredient = findIngredientByName('SUGAR');
+    test('should handle case insensitive search', async () => {
+      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+
+      const ingredient = await findIngredientByName('SUGAR');
 
       expect(ingredient).toBeDefined();
       expect(ingredient!.name).toBe('Sugar');
     });
+
+    test('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const ingredient = await findIngredientByName('Sugar');
+
+      expect(ingredient).toBeNull();
+    });
   });
 
-
-
   describe('autoDetectIngredients', () => {
-    beforeEach(() => {
-      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockIngredientDatabase));
-    });
-
-    test('should add new ingredients and skip existing ones', () => {
-      const capturedData: any[] = [];
-      mockLocalStorage.setItem.mockImplementation((_key, value) => {
-        capturedData.push(JSON.parse(value as string));
-      });
+    test('should add new ingredients and skip existing ones', async () => {
+      mockInvoke
+        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'Sugar'
+        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'New Ingredient'
+        .mockResolvedValueOnce(undefined) // saveIngredient for 'New Ingredient'
+        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'Another New One'
+        .mockResolvedValueOnce(undefined); // saveIngredient for 'Another New One'
 
       const ingredientNames = ['Sugar', 'New Ingredient', 'Another New One'];
 
-      const newIngredients = autoDetectIngredients(ingredientNames);
+      const newIngredients = await autoDetectIngredients(ingredientNames);
 
       // Should only add the new ingredients (Sugar already exists)
       expect(newIngredients).toHaveLength(2);
@@ -295,14 +259,14 @@ describe('ingredientStorage', () => {
       expect(newIngredients[1].name).toBe('Another New One');
     });
 
-    test('should clean ingredient names before processing', () => {
-      mockLocalStorage.setItem.mockImplementation(() => {
-        // Mock implementation for storage
-      });
+    test('should clean ingredient names before processing', async () => {
+      mockInvoke
+        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName
+        .mockResolvedValueOnce(undefined); // saveIngredient
 
       const ingredientNames = ['2 cups fresh tomatoes, diced'];
 
-      const newIngredients = autoDetectIngredients(ingredientNames);
+      const newIngredients = await autoDetectIngredients(ingredientNames);
 
       expect(newIngredients).toHaveLength(1);
       expect(newIngredients[0].name).toBe('2 cups fresh tomatoes'); // cleanIngredientName removes ", diced"

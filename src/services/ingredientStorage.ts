@@ -3,16 +3,13 @@ import { IngredientDatabase, IngredientSearchResult } from '@app-types';
 import { cleanIngredientName, detectIngredientCategory } from '@utils/ingredientUtils';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-// Database-backed ingredient storage service
-// This service now uses SQLite database instead of localStorage
-
 // Load ingredients from database
 export async function loadIngredients(): Promise<IngredientDatabase[]> {
   try {
     return await invoke<IngredientDatabase[]>('db_get_all_ingredients');
   } catch (error) {
     console.error('Failed to load ingredients:', error);
-    return getDefaultIngredients();
+    return [];
   }
 }
 
@@ -22,7 +19,7 @@ export async function saveIngredient(ingredient: IngredientDatabase): Promise<vo
     await invoke('db_save_ingredient', { ingredient });
   } catch (error) {
     console.error('Failed to save ingredient:', error);
-    throw new Error('Failed to save ingredient');
+    throw error;
   }
 }
 
@@ -76,72 +73,48 @@ export async function deleteIngredient(id: string): Promise<boolean> {
 // Search ingredients by name (fuzzy search)
 export async function searchIngredients(query: string): Promise<IngredientSearchResult[]> {
   try {
-    const ingredients = query.trim() 
-      ? await invoke<IngredientDatabase[]>('db_search_ingredients', { query })
-      : await loadIngredients();
+    const ingredients = await invoke<IngredientDatabase[]>('db_search_ingredients', { query });
     
-    const normalizedQuery = query.toLowerCase().trim();
-    
-    if (!normalizedQuery) {
-      return ingredients.map(ingredient => ({
-        ingredient,
-        score: 1,
-        matchType: 'exact' as const,
-      }));
-    }
-    
-    const results: IngredientSearchResult[] = [];
-    
-    for (const ingredient of ingredients) {
+    // Convert to search results with scoring
+    const results: IngredientSearchResult[] = ingredients.map(ingredient => {
+      const normalizedQuery = query.toLowerCase().trim();
       const normalizedName = ingredient.name.toLowerCase();
+      
+      let score = 1;
+      let matchType: 'exact' | 'alias' | 'fuzzy' = 'fuzzy';
       
       // Exact match
       if (normalizedName === normalizedQuery) {
-        results.push({
-          ingredient,
-          score: 1,
-          matchType: 'exact',
-        });
-        continue;
+        score = 1;
+        matchType = 'exact';
       }
-      
       // Alias match
-      const aliasMatch = ingredient.aliases.some(alias => 
-        alias.toLowerCase() === normalizedQuery
-      );
-      if (aliasMatch) {
-        results.push({
-          ingredient,
-          score: 0.9,
-          matchType: 'alias',
-        });
-        continue;
+      else if (ingredient.aliases.some(alias => alias.toLowerCase() === normalizedQuery)) {
+        score = 0.9;
+        matchType = 'alias';
       }
-      
       // Fuzzy match (contains)
-      if (normalizedName.includes(normalizedQuery)) {
-        const score = normalizedQuery.length / normalizedName.length;
-        results.push({
-          ingredient,
-          score,
-          matchType: 'fuzzy',
-        });
-        continue;
+      else if (normalizedName.includes(normalizedQuery)) {
+        score = normalizedQuery.length / normalizedName.length;
+        matchType = 'fuzzy';
       }
-      
       // Fuzzy match in aliases
-      for (const alias of ingredient.aliases) {
-        if (alias.toLowerCase().includes(normalizedQuery)) {
-          const score = (normalizedQuery.length / alias.length) * 0.8;
-          results.push({
-            ingredient,
-            score,
-            matchType: 'fuzzy',
-          });
-          break;
+      else {
+        for (const alias of ingredient.aliases) {
+          if (alias.toLowerCase().includes(normalizedQuery)) {
+            score = (normalizedQuery.length / alias.length) * 0.8;
+            matchType = 'fuzzy';
+            break;
+          }
         }
       }
-    }
+      
+      return {
+        ingredient,
+        score,
+        matchType,
+      };
+    });
     
     // Sort by score (highest first)
     return results.sort((a, b) => b.score - a.score);
@@ -189,37 +162,26 @@ export async function autoDetectIngredients(ingredientNames: string[]): Promise<
   return newIngredients;
 }
 
-// Get default ingredients (common ingredients to start with)
-function getDefaultIngredients(): IngredientDatabase[] {
-  const defaultIngredients = [
-    { name: 'Salt', category: 'herbs', aliases: ['table salt', 'sea salt', 'kosher salt'] },
-    { name: 'Black Pepper', category: 'herbs', aliases: ['pepper', 'ground black pepper'] },
-    { name: 'Olive Oil', category: 'oils', aliases: ['extra virgin olive oil', 'EVOO'] },
-    { name: 'Garlic', category: 'vegetables', aliases: ['garlic cloves', 'fresh garlic'] },
-    { name: 'Onion', category: 'vegetables', aliases: ['yellow onion', 'white onion', 'sweet onion'] },
-    { name: 'Butter', category: 'dairy', aliases: ['unsalted butter', 'salted butter'] },
-    { name: 'All-Purpose Flour', category: 'baking', aliases: ['flour', 'AP flour', 'plain flour'] },
-    { name: 'Sugar', category: 'baking', aliases: ['white sugar', 'granulated sugar', 'caster sugar'] },
-    { name: 'Eggs', category: 'dairy', aliases: ['egg', 'large eggs', 'chicken eggs'] },
-    { name: 'Milk', category: 'dairy', aliases: ['whole milk', '2% milk', 'skim milk'] },
-  ];
-  
-  return defaultIngredients.map(ingredient => ({
-    ...ingredient,
-    id: crypto.randomUUID(),
-    dateAdded: getCurrentTimestamp(),
-    dateModified: getCurrentTimestamp(),
-  }));
-}
-
 // Initialize default ingredients if database is empty
 export async function initializeDefaultIngredients(): Promise<void> {
   try {
     const existing = await loadIngredients();
     if (existing.length === 0) {
-      const defaultIngredients = getDefaultIngredients();
+      const defaultIngredients = [
+        { name: 'Salt', category: 'herbs', aliases: ['table salt', 'sea salt', 'kosher salt'] },
+        { name: 'Black Pepper', category: 'herbs', aliases: ['pepper', 'ground black pepper'] },
+        { name: 'Olive Oil', category: 'oils', aliases: ['extra virgin olive oil', 'EVOO'] },
+        { name: 'Garlic', category: 'vegetables', aliases: ['garlic cloves', 'fresh garlic'] },
+        { name: 'Onion', category: 'vegetables', aliases: ['yellow onion', 'white onion', 'sweet onion'] },
+        { name: 'Butter', category: 'dairy', aliases: ['unsalted butter', 'salted butter'] },
+        { name: 'All-Purpose Flour', category: 'baking', aliases: ['flour', 'AP flour', 'plain flour'] },
+        { name: 'Sugar', category: 'baking', aliases: ['white sugar', 'granulated sugar', 'caster sugar'] },
+        { name: 'Eggs', category: 'dairy', aliases: ['egg', 'large eggs', 'chicken eggs'] },
+        { name: 'Milk', category: 'dairy', aliases: ['whole milk', '2% milk', 'skim milk'] },
+      ];
+      
       for (const ingredient of defaultIngredients) {
-        await saveIngredient(ingredient);
+        await addIngredient(ingredient);
       }
     }
   } catch (error) {
