@@ -165,8 +165,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           </Box>
         )}
 
-        <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }}>
-          <Box sx={{ position: 'relative' }}>
+        <Box sx={{ position: 'relative' }}>
+          <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }}>
             <CardMedia
               component="img"
               sx={{
@@ -178,44 +178,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
               alt={recipe.title}
             />
 
-            {/* Quick Action Overlay */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: 0,
-                transition: 'opacity 0.2s ease-in-out',
-                '&:hover': {
-                  opacity: 1,
-                },
-              }}
-            >
-              <Tooltip title="Start Cooking">
-                <IconButton
-                  onClick={handleCookNowClick}
-                  sx={{
-                    backgroundColor: 'primary.main',
-                    color: 'white',
-                    '&:hover': {
-                      backgroundColor: 'primary.dark',
-                    },
-                  }}
-                  aria-label="cook now"
-                >
-                  <PlayArrowIcon />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Box>
-
-          <CardContent sx={{ flexGrow: 1, pb: 1 }}>
+            <CardContent sx={{ flexGrow: 1, pb: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
               <Typography gutterBottom variant="h6" component="div" sx={{
                 overflow: 'hidden',
@@ -288,7 +251,46 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
               </Typography>
             </Box>
           </CardContent>
-        </CardActionArea>
+          </CardActionArea>
+
+          {/* Quick Action Overlay - moved outside CardActionArea */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 180, // Match CardMedia height
+              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0,
+              transition: 'opacity 0.2s ease-in-out',
+              pointerEvents: 'none', // Allow clicks to pass through when not hovered
+              '&:hover': {
+                opacity: 1,
+                pointerEvents: 'auto', // Enable clicks when hovered
+              },
+            }}
+          >
+            <Tooltip title="Start Cooking">
+              <IconButton
+                onClick={handleCookNowClick}
+                sx={{
+                  backgroundColor: 'primary.main',
+                  color: 'white',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                  },
+                }}
+                aria-label="cook now"
+              >
+                <PlayArrowIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
 
         <CardActions sx={{ p: 1, pt: 0, justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flexGrow: 1, minWidth: 0 }}>

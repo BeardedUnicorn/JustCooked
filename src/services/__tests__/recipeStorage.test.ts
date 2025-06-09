@@ -1,321 +1,337 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
-import {
-  readTextFile,
-  writeTextFile,
-  mkdir,
-  remove,
-  exists,
-  BaseDirectory,
-} from '@tauri-apps/plugin-fs';
-import {
-  saveRecipe,
-  getAllRecipes,
-  getRecipeById,
-  deleteRecipe,
-} from '../recipeStorage';
-import { deleteRecipeImage } from '../imageService';
-import { mockRecipe } from '../../__tests__/fixtures/recipes';
+import { Recipe } from '../../types';
+import * as recipeStorage from '../recipeStorage';
 
-// Mock the dependencies
-jest.mock('@tauri-apps/plugin-fs');
-jest.mock('../imageService');
+// Mock the Tauri invoke function
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: jest.fn(),
+}));
 
-const mockReadTextFile = readTextFile as jest.MockedFunction<typeof readTextFile>;
-const mockWriteTextFile = writeTextFile as jest.MockedFunction<typeof writeTextFile>;
-const mockMkdir = mkdir as jest.MockedFunction<typeof mkdir>;
-const mockRemove = remove as jest.MockedFunction<typeof remove>;
-const mockExists = exists as jest.MockedFunction<typeof exists>;
-const mockDeleteRecipeImage = deleteRecipeImage as jest.MockedFunction<typeof deleteRecipeImage>;
+const mockInvoke = require('@tauri-apps/api/core').invoke as jest.MockedFunction<typeof import('@tauri-apps/api/core').invoke>;
+
+// Mock the image service
+jest.mock('@services/imageService', () => ({
+  deleteRecipeImage: jest.fn(),
+}));
+
+// Mock the time utils
+jest.mock('@utils/timeUtils', () => ({
+  getCurrentTimestamp: jest.fn(() => '2024-01-15T10:30:00.000Z'),
+}));
 
 describe('recipeStorage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
+  const mockRecipe: Recipe = {
+    id: 'test-recipe-123',
+    title: 'Chocolate Chip Cookies',
+    description: 'Delicious homemade chocolate chip cookies',
+    image: 'https://example.com/cookies.jpg',
+    sourceUrl: 'https://allrecipes.com/recipe/123/cookies',
+    prepTime: 'PT15M',
+    cookTime: 'PT12M',
+    totalTime: 'PT27M',
+    servings: 24,
+    ingredients: [
+      { name: 'flour', amount: 2, unit: 'cups' },
+      { name: 'sugar', amount: 1, unit: 'cup' },
+      { name: 'eggs', amount: 3, unit: '' },
+      { name: 'milk', amount: 0.5, unit: 'cup' },
+      { name: 'butter', amount: 0.25, unit: 'cup' },
+    ],
+    instructions: [
+      'Preheat oven to 375°F',
+      'Mix dry ingredients in a bowl',
+      'Add wet ingredients and mix until combined',
+      'Drop spoonfuls onto baking sheet',
+      'Bake for 10-12 minutes until golden brown',
+    ],
+    tags: ['dessert', 'cookies', 'baking'],
+    dateAdded: '2024-01-15T10:30:00.000Z',
+    dateModified: '2024-01-15T10:30:00.000Z',
+    rating: undefined,
+    difficulty: undefined,
+    isFavorite: undefined,
+    personalNotes: undefined,
+    collections: [],
+    nutritionalInfo: undefined,
+  };
+
+  const mockTauriRecipe = {
+    id: 'test-recipe-123',
+    title: 'Chocolate Chip Cookies',
+    description: 'Delicious homemade chocolate chip cookies',
+    image: 'https://example.com/cookies.jpg',
+    source_url: 'https://allrecipes.com/recipe/123/cookies',
+    prep_time: 'PT15M',
+    cook_time: 'PT12M',
+    total_time: 'PT27M',
+    servings: 24,
+    ingredients: [
+      { name: 'flour', amount: 2, unit: 'cups' },
+      { name: 'sugar', amount: 1, unit: 'cup' },
+      { name: 'eggs', amount: 3, unit: '' },
+      { name: 'milk', amount: 0.5, unit: 'cup' },
+      { name: 'butter', amount: 0.25, unit: 'cup' },
+    ],
+    instructions: [
+      'Preheat oven to 375°F',
+      'Mix dry ingredients in a bowl',
+      'Add wet ingredients and mix until combined',
+      'Drop spoonfuls onto baking sheet',
+      'Bake for 10-12 minutes until golden brown',
+    ],
+    tags: ['dessert', 'cookies', 'baking'],
+    date_added: '2024-01-15T10:30:00.000Z',
+    date_modified: '2024-01-15T10:30:00.000Z',
+    rating: undefined,
+    difficulty: undefined,
+    is_favorite: undefined,
+    personal_notes: undefined,
+    collections: [],
+    nutritional_info: undefined,
+  };
+
   describe('saveRecipe', () => {
-    test('should save a new recipe successfully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(false); // Index doesn't exist
-      mockWriteTextFile.mockResolvedValue();
+    it('should save a new recipe successfully', async () => {
+      mockInvoke.mockResolvedValue(undefined);
 
-      await saveRecipe(mockRecipe);
+      await recipeStorage.saveRecipe(mockRecipe);
 
-      // Should write the recipe file
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        `recipes/${mockRecipe.id}.json`,
-        JSON.stringify(mockRecipe, null, 2),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
-
-      // Should create/update the index
-      expect(mockWriteTextFile).toHaveBeenCalledWith(
-        'recipes/index.json',
-        expect.stringContaining(mockRecipe.id),
-        { baseDir: BaseDirectory.AppLocalData }
-      );
-    });
-
-    test('should create directory if it does not exist', async () => {
-      mockExists.mockResolvedValueOnce(false); // Directory doesn't exist
-      mockMkdir.mockResolvedValue();
-      mockExists.mockResolvedValueOnce(false); // Index doesn't exist
-      mockWriteTextFile.mockResolvedValue();
-
-      await saveRecipe(mockRecipe);
-
-      expect(mockMkdir).toHaveBeenCalledWith('recipes', {
-        baseDir: BaseDirectory.AppLocalData,
-        recursive: true,
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_recipe', {
+        recipe: {
+          id: mockRecipe.id,
+          title: mockRecipe.title,
+          description: mockRecipe.description,
+          image: mockRecipe.image,
+          source_url: mockRecipe.sourceUrl,
+          prep_time: mockRecipe.prepTime,
+          cook_time: mockRecipe.cookTime,
+          total_time: mockRecipe.totalTime,
+          servings: mockRecipe.servings,
+          ingredients: mockRecipe.ingredients,
+          instructions: mockRecipe.instructions,
+          tags: mockRecipe.tags,
+          date_added: mockRecipe.dateAdded,
+          date_modified: mockRecipe.dateModified,
+          rating: mockRecipe.rating,
+          difficulty: mockRecipe.difficulty,
+          is_favorite: mockRecipe.isFavorite,
+          personal_notes: mockRecipe.personalNotes,
+          collections: mockRecipe.collections,
+        },
       });
     });
 
-    test('should update existing recipe in index', async () => {
-      const existingIndex = [
-        {
-          id: mockRecipe.id,
-          title: 'Old Title',
-          image: 'old-image.jpg',
-          tags: ['old-tag'],
-          dateAdded: mockRecipe.dateAdded,
-          dateModified: '2024-01-01T00:00:00.000Z',
-        },
-      ];
+    it('should handle database errors', async () => {
+      const error = new Error('Database error');
+      mockInvoke.mockRejectedValue(error);
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(existingIndex));
-      mockWriteTextFile.mockResolvedValue();
-
-      await saveRecipe(mockRecipe);
-
-      // Should update the existing recipe in index
-      const indexCall = mockWriteTextFile.mock.calls.find(call => 
-        call[0] === 'recipes/index.json'
+      await expect(recipeStorage.saveRecipe(mockRecipe)).rejects.toThrow(
+        'Failed to save recipe: Error: Database error'
       );
-      expect(indexCall).toBeDefined();
-      
-      const savedIndex = JSON.parse(indexCall![1] as string);
-      expect(savedIndex).toHaveLength(1);
-      expect(savedIndex[0].title).toBe(mockRecipe.title);
-      expect(savedIndex[0].id).toBe(mockRecipe.id);
-    });
-
-    test('should handle file system errors', async () => {
-      mockExists.mockResolvedValueOnce(true);
-      mockWriteTextFile.mockRejectedValue(new Error('File system error'));
-
-      await expect(saveRecipe(mockRecipe)).rejects.toThrow('Failed to save recipe: Error: File system error');
     });
   });
 
   describe('getAllRecipes', () => {
-    test('should return all recipes when index exists', async () => {
-      const indexData = [
-        {
-          id: 'recipe-1',
-          title: 'Recipe 1',
-          image: 'image1.jpg',
-          tags: ['tag1'],
-          dateAdded: '2024-01-01T00:00:00.000Z',
-          dateModified: '2024-01-01T00:00:00.000Z',
-        },
-      ];
+    it('should return all recipes from database', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(indexData));
-      
-      // Mock recipe file exists and content
-      mockExists.mockResolvedValueOnce(true);
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
+      const recipes = await recipeStorage.getAllRecipes();
 
-      const recipes = await getAllRecipes();
-
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_recipes');
       expect(recipes).toHaveLength(1);
       expect(recipes[0]).toEqual(mockRecipe);
     });
 
-    test('should return empty array when index does not exist', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(false); // Index doesn't exist
+    it('should return empty array when database is empty', async () => {
+      mockInvoke.mockResolvedValue([]);
 
-      const recipes = await getAllRecipes();
+      const recipes = await recipeStorage.getAllRecipes();
 
-      expect(recipes).toEqual([]);
+      expect(recipes).toHaveLength(0);
     });
 
-    test('should filter out recipes with missing files', async () => {
-      const indexData = [
-        { id: 'recipe-1', title: 'Recipe 1', image: '', tags: [], dateAdded: '', dateModified: '' },
-        { id: 'recipe-2', title: 'Recipe 2', image: '', tags: [], dateAdded: '', dateModified: '' },
-      ];
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(indexData));
+      const recipes = await recipeStorage.getAllRecipes();
 
-      // First recipe file exists, second doesn't
-      mockExists.mockResolvedValueOnce(true);
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
-      mockExists.mockResolvedValueOnce(false);
-
-      // Mock the index update write
-      mockWriteTextFile.mockResolvedValueOnce();
-
-      const recipes = await getAllRecipes();
-
-      expect(recipes).toHaveLength(1);
-      expect(recipes[0]).toEqual(mockRecipe);
-    });
-
-    test('should handle corrupted index gracefully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValueOnce('invalid json');
-
-      const recipes = await getAllRecipes();
-
-      expect(recipes).toEqual([]);
+      expect(recipes).toHaveLength(0);
     });
   });
 
   describe('getRecipeById', () => {
-    test('should return recipe when it exists', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockResolvedValue(JSON.stringify(mockRecipe));
+    it('should return recipe when it exists', async () => {
+      mockInvoke.mockResolvedValue(mockTauriRecipe);
 
-      const recipe = await getRecipeById(mockRecipe.id);
+      const recipe = await recipeStorage.getRecipeById('test-recipe-123');
 
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_recipe_by_id', { id: 'test-recipe-123' });
       expect(recipe).toEqual(mockRecipe);
-      expect(mockReadTextFile).toHaveBeenCalledWith(
-        `recipes/${mockRecipe.id}.json`,
-        { baseDir: BaseDirectory.AppLocalData }
-      );
     });
 
-    test('should return null when recipe does not exist', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(false); // Recipe file doesn't exist
+    it('should return null when recipe does not exist', async () => {
+      mockInvoke.mockResolvedValue(null);
 
-      const recipe = await getRecipeById('non-existent-id');
+      const recipe = await recipeStorage.getRecipeById('non-existent');
 
       expect(recipe).toBeNull();
     });
 
-    test('should handle file read errors', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockRejectedValue(new Error('Read error'));
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      const recipe = await getRecipeById(mockRecipe.id);
-
-      expect(recipe).toBeNull();
-    });
-
-    test('should handle corrupted recipe file', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockResolvedValue('invalid json');
-
-      const recipe = await getRecipeById(mockRecipe.id);
+      const recipe = await recipeStorage.getRecipeById('test-recipe-123');
 
       expect(recipe).toBeNull();
     });
   });
 
+  describe('updateRecipe', () => {
+    it('should update recipe with new dateModified', async () => {
+      mockInvoke.mockResolvedValue(undefined);
+
+      await recipeStorage.updateRecipe(mockRecipe);
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_recipe', {
+        recipe: expect.objectContaining({
+          id: mockRecipe.id,
+          date_modified: '2024-01-15T10:30:00.000Z',
+        }),
+      });
+    });
+  });
+
   describe('deleteRecipe', () => {
-    test('should delete recipe and update index', async () => {
-      const otherRecipe = {
-        id: 'other-recipe',
-        title: 'Other Recipe',
-        image: 'other.jpg',
-        tags: [],
-        dateAdded: '2024-01-01T00:00:00.000Z',
-        dateModified: '2024-01-01T00:00:00.000Z',
-        description: '',
-        sourceUrl: '',
-        prepTime: '',
-        cookTime: '',
-        totalTime: '',
-        servings: 4,
-        ingredients: [],
-        instructions: [],
-      };
+    it('should delete recipe successfully', async () => {
+      mockInvoke
+        .mockResolvedValueOnce(mockTauriRecipe) // getRecipeById
+        .mockResolvedValueOnce(true); // db_delete_recipe
 
-      // Mock getRecipeById call
-      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
+      await recipeStorage.deleteRecipe('test-recipe-123');
 
-      // Mock deleteRecipeImage
-      mockDeleteRecipeImage.mockResolvedValue();
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_recipe_by_id', { id: 'test-recipe-123' });
+      expect(mockInvoke).toHaveBeenCalledWith('db_delete_recipe', { id: 'test-recipe-123' });
+    });
 
-      // Mock file deletion
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists for deletion
-      mockRemove.mockResolvedValue();
+    it('should handle non-existent recipe', async () => {
+      mockInvoke
+        .mockResolvedValueOnce(null) // getRecipeById
+        .mockResolvedValueOnce(false); // db_delete_recipe
 
-      // Mock getAllRecipes call (for index update)
-      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify([
-        { id: mockRecipe.id, title: mockRecipe.title, image: mockRecipe.image, tags: mockRecipe.tags, dateAdded: mockRecipe.dateAdded, dateModified: mockRecipe.dateModified },
-        { id: 'other-recipe', title: 'Other Recipe', image: 'other.jpg', tags: [], dateAdded: '2024-01-01T00:00:00.000Z', dateModified: '2024-01-01T00:00:00.000Z' }
-      ]));
-
-      // Mock recipe file reads for getAllRecipes
-      mockExists.mockResolvedValueOnce(true); // First recipe file exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
-      mockExists.mockResolvedValueOnce(true); // Second recipe file exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(otherRecipe));
-
-      // Mock final index write
-      mockWriteTextFile.mockResolvedValue();
-
-      await deleteRecipe(mockRecipe.id);
-
-      // Should delete the recipe file
-      expect(mockRemove).toHaveBeenCalledWith(
-        `recipes/${mockRecipe.id}.json`,
-        { baseDir: BaseDirectory.AppLocalData }
+      await expect(recipeStorage.deleteRecipe('non-existent')).rejects.toThrow(
+        'Failed to delete recipe'
       );
-
-      // Should delete the recipe image
-      expect(mockDeleteRecipeImage).toHaveBeenCalledWith(mockRecipe.image);
     });
 
-    test('should handle non-existent recipe gracefully', async () => {
-      mockExists.mockResolvedValueOnce(true); // Directory exists
-      mockExists.mockResolvedValueOnce(false); // Recipe file doesn't exist
+    it('should handle database errors', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      await expect(deleteRecipe('non-existent-id')).resolves.not.toThrow();
+      await expect(recipeStorage.deleteRecipe('test-recipe-123')).rejects.toThrow(
+        'Failed to delete recipe'
+      );
+    });
+  });
+
+  describe('getExistingRecipeUrls', () => {
+    it('should return existing recipe URLs', async () => {
+      const urls = ['https://example.com/recipe1', 'https://example.com/recipe2'];
+      mockInvoke.mockResolvedValue(urls);
+
+      const result = await recipeStorage.getExistingRecipeUrls();
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_existing_recipe_urls');
+      expect(result).toEqual(urls);
     });
 
-    test('should handle index update errors', async () => {
-      // Mock getRecipeById call
-      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
 
-      // Mock deleteRecipeImage success
-      mockDeleteRecipeImage.mockResolvedValue();
+      const result = await recipeStorage.getExistingRecipeUrls();
 
-      // Mock file deletion success
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists for deletion
-      mockRemove.mockResolvedValue();
+      expect(result).toEqual([]);
+    });
+  });
 
-      // Mock getAllRecipes call (for index update)
-      mockExists.mockResolvedValueOnce(true); // Directory exists (ensureDirectory)
-      mockExists.mockResolvedValueOnce(true); // Index exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify([mockRecipe]));
-      mockExists.mockResolvedValueOnce(true); // Recipe file exists
-      mockReadTextFile.mockResolvedValueOnce(JSON.stringify(mockRecipe));
+  describe('searchRecipes', () => {
+    it('should search recipes by query', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
 
-      // Mock final index write failure
-      mockWriteTextFile.mockRejectedValue(new Error('Index write failed'));
+      const recipes = await recipeStorage.searchRecipes('chocolate');
 
-      // Should throw error when index update fails
-      await expect(deleteRecipe(mockRecipe.id)).rejects.toThrow('Failed to delete recipe');
+      expect(mockInvoke).toHaveBeenCalledWith('db_search_recipes', { query: 'chocolate' });
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0]).toEqual(mockRecipe);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const recipes = await recipeStorage.searchRecipes('chocolate');
+
+      expect(recipes).toEqual([]);
+    });
+  });
+
+  describe('getRecipesByTag', () => {
+    it('should get recipes by tag', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
+
+      const recipes = await recipeStorage.getRecipesByTag('dessert');
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_recipes_by_tag', { tag: 'dessert' });
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0]).toEqual(mockRecipe);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const recipes = await recipeStorage.getRecipesByTag('dessert');
+
+      expect(recipes).toEqual([]);
+    });
+  });
+
+  describe('getFavoriteRecipes', () => {
+    it('should get favorite recipes', async () => {
+      const favoriteRecipe = { ...mockTauriRecipe, is_favorite: true };
+      mockInvoke.mockResolvedValue([favoriteRecipe]);
+
+      const recipes = await recipeStorage.getFavoriteRecipes();
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_favorite_recipes');
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0].isFavorite).toBe(true);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Database error'));
+
+      const recipes = await recipeStorage.getFavoriteRecipes();
+
+      expect(recipes).toEqual([]);
+    });
+  });
+
+  describe('migrateJsonRecipes', () => {
+    it('should migrate JSON recipes to database', async () => {
+      mockInvoke.mockResolvedValue(5);
+
+      const count = await recipeStorage.migrateJsonRecipes();
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_migrate_json_recipes');
+      expect(count).toBe(5);
+    });
+
+    it('should handle migration errors gracefully', async () => {
+      mockInvoke.mockRejectedValue(new Error('Migration error'));
+
+      const count = await recipeStorage.migrateJsonRecipes();
+
+      expect(count).toBe(0);
     });
   });
 });

@@ -11,7 +11,7 @@ mod database;
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, NutritionalInfo};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -309,6 +309,15 @@ async fn db_get_existing_recipe_urls(app: tauri::AppHandle) -> Result<Vec<String
     Ok(urls)
 }
 
+#[tauri::command]
+async fn db_migrate_json_recipes(app: tauri::AppHandle) -> Result<usize, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    
+    let migrated_count = db.migrate_json_recipes(&app).await.map_err(|e| e.to_string())?;
+    
+    Ok(migrated_count)
+}
+
 // Conversion functions
 fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
     use chrono::{DateTime, Utc};
@@ -469,7 +478,8 @@ pub fn run() {
             db_search_recipes,
             db_get_recipes_by_tag,
             db_get_favorite_recipes,
-            db_get_existing_recipe_urls
+            db_get_existing_recipe_urls,
+            db_migrate_json_recipes
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

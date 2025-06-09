@@ -8,10 +8,14 @@ mod tests {
     async fn create_test_database() -> (Database, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test_recipes.db");
+        
+        // Create the database file before connecting
+        std::fs::File::create(&db_path).unwrap();
+        
         let db_url = format!("sqlite:{}", db_path.display());
 
         let pool = SqlitePool::connect(&db_url).await.unwrap();
-        let db = Database { pool };
+        let db = Database::from_pool(pool);
         db.migrate().await.unwrap();
 
         (db, temp_dir)

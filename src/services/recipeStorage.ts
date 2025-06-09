@@ -1,96 +1,43 @@
-import {
-  readTextFile,
-  writeTextFile,
-  mkdir,
-  remove,
-  BaseDirectory,
-  exists
-} from '@tauri-apps/plugin-fs';
-import { Recipe } from '@app-types';
+import { invoke } from '@tauri-apps/api/core';
+import { Recipe } from '../types';
 import { deleteRecipeImage } from '@services/imageService';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
-// Use simpler paths without app name (Tauri handles that)
-const RECIPES_DIR = 'recipes';
-const RECIPES_INDEX = 'recipes/index.json';
-
-// Ensure the recipes directory exists
-async function ensureDirectory() {
-  try {
-    const dirExists = await exists(RECIPES_DIR, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (!dirExists) {
-      await mkdir(RECIPES_DIR, {
-        baseDir: BaseDirectory.AppLocalData,
-        recursive: true
-      });
-      console.log('Directory created successfully');
-    } else {
-      console.log('Directory already exists');
-    }
-  } catch (error) {
-    console.error('Error checking/creating directory:', error);
-  }
-}
+// Database-backed recipe storage service
+// This service now uses SQLite database instead of JSON files
 
 // Save a recipe
 export async function saveRecipe(recipe: Recipe): Promise<void> {
-  await ensureDirectory();
-
   try {
-    // Save the recipe file
-    const filename = `${RECIPES_DIR}/${recipe.id}.json`;
-    console.log(`Saving recipe to: ${filename} in AppLocalData`);
+    // Convert frontend Recipe to the format expected by Tauri command
+    const frontendRecipe = {
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description,
+      image: recipe.image,
+      source_url: recipe.sourceUrl,
+      prep_time: recipe.prepTime,
+      cook_time: recipe.cookTime,
+      total_time: recipe.totalTime,
+      servings: recipe.servings,
+      ingredients: recipe.ingredients.map(ing => ({
+        name: ing.name,
+        amount: ing.amount,
+        unit: ing.unit,
+      })),
+      instructions: recipe.instructions,
+      tags: recipe.tags,
+      date_added: recipe.dateAdded,
+      date_modified: recipe.dateModified,
+      rating: recipe.rating,
+      difficulty: recipe.difficulty,
+      is_favorite: recipe.isFavorite,
+      personal_notes: recipe.personalNotes,
+      collections: recipe.collections,
+    };
 
-    await writeTextFile(filename, JSON.stringify(recipe, null, 2), {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    // Update the index without calling getAllRecipes to avoid circular dependency
-    let recipes: Recipe[] = [];
-
-    try {
-      const indexExists = await exists(RECIPES_INDEX, {
-        baseDir: BaseDirectory.AppLocalData
-      });
-
-      if (indexExists) {
-        const indexContent = await readTextFile(RECIPES_INDEX, {
-          baseDir: BaseDirectory.AppLocalData
-        });
-        recipes = JSON.parse(indexContent);
-      }
-    } catch (error) {
-      console.log('No existing index, creating new one');
-      recipes = [];
-    }
-
-    // Find existing recipe or add new one
-    const existingIndex = recipes.findIndex(r => r.id === recipe.id);
-
-    if (existingIndex >= 0) {
-      recipes[existingIndex] = recipe;
-    } else {
-      recipes.push(recipe);
-    }
-
-    // Save updated index
-    const indexData = recipes.map(r => ({
-      id: r.id,
-      title: r.title,
-      image: r.image,
-      tags: r.tags,
-      dateAdded: r.dateAdded,
-      dateModified: r.dateModified,
-    }));
-
-    await writeTextFile(RECIPES_INDEX, JSON.stringify(indexData, null, 2), {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    console.log('Recipe saved successfully');
+    await invoke('db_save_recipe', { recipe: frontendRecipe });
+    console.log('Recipe saved successfully to database');
   } catch (error) {
     console.error('Failed to save recipe:', error);
     throw new Error(`Failed to save recipe: ${error}`);
@@ -99,82 +46,27 @@ export async function saveRecipe(recipe: Recipe): Promise<void> {
 
 // Get all recipes
 export async function getAllRecipes(): Promise<Recipe[]> {
-  await ensureDirectory();
-
   try {
-    const indexExists = await exists(RECIPES_INDEX, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (!indexExists) {
-      console.log('Recipe index not found, returning empty array');
-      return [];
-    }
-
-    const indexContent = await readTextFile(RECIPES_INDEX, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-    const indexData = JSON.parse(indexContent);
-
-    // Filter out recipes that don't have a corresponding file
-    const validRecipes = [];
-    const updatedIndex = [];
-
-    for (const item of indexData) {
-      try {
-        const filePath = `${RECIPES_DIR}/${item.id}.json`;
-        const fileExists = await exists(filePath, {
-          baseDir: BaseDirectory.AppLocalData
-        });
-
-        if (fileExists) {
-          const content = await readTextFile(filePath, {
-            baseDir: BaseDirectory.AppLocalData
-          });
-          const recipe = JSON.parse(content);
-          validRecipes.push(recipe);
-          updatedIndex.push(item);
-        } else {
-          console.warn(`Recipe file missing for ${item.id} - removing from index`);
-        }
-      } catch (error) {
-        console.warn(`Error reading recipe file for ${item.id}:`, error);
-      }
-    }
-
-    // Update the index if any recipes were missing
-    if (updatedIndex.length !== indexData.length) {
-      console.log(`Updating recipe index: ${indexData.length} -> ${updatedIndex.length}`);
-      await writeTextFile(RECIPES_INDEX, JSON.stringify(updatedIndex, null, 2), {
-        baseDir: BaseDirectory.AppLocalData
-      });
-    }
-
-    return validRecipes;
+    const frontendRecipes = await invoke<any[]>('db_get_all_recipes');
+    
+    // Convert from Tauri format to frontend Recipe format
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
   } catch (error) {
-    console.debug('Recipe index not found or error reading it:', error);
+    console.error('Failed to get all recipes:', error);
     return [];
   }
 }
 
 // Get a specific recipe by ID
 export async function getRecipeById(id: string): Promise<Recipe | null> {
-  await ensureDirectory();
-
   try {
-    const filePath = `${RECIPES_DIR}/${id}.json`;
-    const fileExists = await exists(filePath, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (!fileExists) {
+    const frontendRecipe = await invoke<any | null>('db_get_recipe_by_id', { id });
+    
+    if (!frontendRecipe) {
       return null;
     }
-
-    const content = await readTextFile(filePath, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-    return JSON.parse(content);
+    
+    return convertTauriToFrontendRecipe(frontendRecipe);
   } catch (error) {
     console.warn(`Recipe not found: ${id}`, error);
     return null;
@@ -195,8 +87,6 @@ export async function updateRecipe(recipe: Recipe): Promise<void> {
 
 // Delete a recipe
 export async function deleteRecipe(id: string): Promise<void> {
-  await ensureDirectory();
-
   try {
     // First, get the recipe to check if it has a local image to delete
     const recipe = await getRecipeById(id);
@@ -206,30 +96,11 @@ export async function deleteRecipe(id: string): Promise<void> {
       await deleteRecipeImage(recipe.image);
     }
 
-    const filePath = `${RECIPES_DIR}/${id}.json`;
-    const fileExists = await exists(filePath, {
-      baseDir: BaseDirectory.AppLocalData
-    });
-
-    if (fileExists) {
-      await remove(filePath, {
-        baseDir: BaseDirectory.AppLocalData
-      });
+    const deleted = await invoke<boolean>('db_delete_recipe', { id });
+    
+    if (!deleted) {
+      throw new Error('Recipe not found or could not be deleted');
     }
-
-    const recipes = await getAllRecipes();
-    const filtered = recipes.filter(r => r.id !== id);
-
-    await writeTextFile(RECIPES_INDEX, JSON.stringify(filtered.map(r => ({
-      id: r.id,
-      title: r.title,
-      image: r.image,
-      tags: r.tags,
-      dateAdded: r.dateAdded,
-      dateModified: r.dateModified,
-    })), null, 2), {
-      baseDir: BaseDirectory.AppLocalData
-    });
   } catch (error) {
     console.error('Failed to delete recipe:', error);
     throw new Error('Failed to delete recipe');
@@ -239,12 +110,87 @@ export async function deleteRecipe(id: string): Promise<void> {
 // Get all existing recipe source URLs
 export async function getExistingRecipeUrls(): Promise<string[]> {
   try {
-    const recipes = await getAllRecipes();
-    return recipes
-      .map(recipe => recipe.sourceUrl)
-      .filter(url => url && url.trim() !== ''); // Filter out empty or null URLs
+    return await invoke<string[]>('db_get_existing_recipe_urls');
   } catch (error) {
     console.error('Failed to get existing recipe URLs:', error);
     return [];
   }
+}
+
+// Search recipes
+export async function searchRecipes(query: string): Promise<Recipe[]> {
+  try {
+    const frontendRecipes = await invoke<any[]>('db_search_recipes', { query });
+    
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
+  } catch (error) {
+    console.error('Failed to search recipes:', error);
+    return [];
+  }
+}
+
+// Get recipes by tag
+export async function getRecipesByTag(tag: string): Promise<Recipe[]> {
+  try {
+    const frontendRecipes = await invoke<any[]>('db_get_recipes_by_tag', { tag });
+    
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
+  } catch (error) {
+    console.error('Failed to get recipes by tag:', error);
+    return [];
+  }
+}
+
+// Get favorite recipes
+export async function getFavoriteRecipes(): Promise<Recipe[]> {
+  try {
+    const frontendRecipes = await invoke<any[]>('db_get_favorite_recipes');
+    
+    return frontendRecipes.map(convertTauriToFrontendRecipe);
+  } catch (error) {
+    console.error('Failed to get favorite recipes:', error);
+    return [];
+  }
+}
+
+// Migrate JSON recipes to database
+export async function migrateJsonRecipes(): Promise<number> {
+  try {
+    const migratedCount = await invoke<number>('db_migrate_json_recipes');
+    console.log(`Migrated ${migratedCount} recipes from JSON to database`);
+    return migratedCount;
+  } catch (error) {
+    console.error('Failed to migrate JSON recipes:', error);
+    return 0;
+  }
+}
+
+// Helper function to convert Tauri format to frontend Recipe format
+function convertTauriToFrontendRecipe(tauriRecipe: any): Recipe {
+  return {
+    id: tauriRecipe.id,
+    title: tauriRecipe.title,
+    description: tauriRecipe.description,
+    image: tauriRecipe.image,
+    sourceUrl: tauriRecipe.source_url,
+    prepTime: tauriRecipe.prep_time,
+    cookTime: tauriRecipe.cook_time,
+    totalTime: tauriRecipe.total_time,
+    servings: tauriRecipe.servings,
+    ingredients: tauriRecipe.ingredients.map((ing: any) => ({
+      name: ing.name,
+      amount: ing.amount,
+      unit: ing.unit,
+    })),
+    instructions: tauriRecipe.instructions,
+    tags: tauriRecipe.tags,
+    dateAdded: tauriRecipe.date_added,
+    dateModified: tauriRecipe.date_modified,
+    rating: tauriRecipe.rating,
+    difficulty: tauriRecipe.difficulty,
+    isFavorite: tauriRecipe.is_favorite,
+    personalNotes: tauriRecipe.personal_notes,
+    collections: tauriRecipe.collections || [],
+    nutritionalInfo: tauriRecipe.nutritional_info,
+  };
 }

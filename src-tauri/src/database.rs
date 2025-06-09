@@ -52,6 +52,11 @@ pub struct Database {
 }
 
 impl Database {
+    #[cfg(test)]
+    pub fn from_pool(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
     pub async fn new(app_handle: &AppHandle) -> Result<Self> {
         let app_data_dir = app_handle
             .path()
@@ -63,7 +68,13 @@ impl Database {
             .context("Failed to create app data directory")?;
 
         let db_path = app_data_dir.join("recipes.db");
-        let db_url = format!("sqlite:{}", db_path.display());
+        let db_url = format!("sqlite:{}", db_path.to_string_lossy());
+
+        // Ensure the database file exists before connecting
+        if !db_path.exists() {
+            std::fs::File::create(&db_path)
+                .context("Failed to create database file")?;
+        }
 
         let pool = SqlitePool::connect(&db_url)
             .await
@@ -74,7 +85,7 @@ impl Database {
         Ok(db)
     }
 
-    async fn migrate(&self) -> Result<()> {
+    pub async fn migrate(&self) -> Result<()> {
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS recipes (
@@ -224,6 +235,311 @@ impl Database {
             .collect();
 
         Ok(urls)
+    }
+
+
+    pub async fn recipe_exists_in_transaction(&self, tx: &mut Transaction<'_, Sqlite>, id: &str) -> Result<bool> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recipes WHERE id = ?")
+            .bind(id)
+            .fetch_one(&mut **tx)
+            .await
+            .context("Failed to check if recipe exists")?;
+
+        Ok(count > 0)
+    }
+
+    pub async fn migrate_json_recipes(&self, app_handle: &tauri::AppHandle) -> Result<usize> {
+        use tokio::fs;
+
+        let app_data_dir = app_handle
+            .path()
+            .app_local_data_dir()
+            .context("Failed to get app data directory")?;
+
+        let recipes_dir = app_data_dir.join("recipes");
+        let index_file = recipes_dir.join("index.json");
+
+        // Check if the recipes directory and index file exist
+        if !index_file.exists() {
+            return Ok(0); // No recipes to migrate
+        }
+
+        // Read the index file
+        let index_content = fs::read_to_string(&index_file)
+            .await
+            .context("Failed to read recipes index")?;
+
+        let index_data: Vec<serde_json::Value> = serde_json::from_str(&index_content)
+            .context("Failed to parse recipes index")?;
+
+        let mut migrated_count = 0;
+        let mut skipped_count = 0;
+        let mut error_count = 0;
+
+        // Process recipes in smaller batches to avoid large transactions
+        const BATCH_SIZE: usize = 100;
+        
+        for chunk in index_data.chunks(BATCH_SIZE) {
+            let mut tx = self.begin_transaction().await?;
+            let mut batch_migrated = 0;
+
+            for item in chunk {
+                if let Some(recipe_id) = item.get("id").and_then(|v| v.as_str()) {
+                    // Check if recipe already exists in database using transaction
+                    match self.recipe_exists_in_transaction(&mut tx, recipe_id).await {
+                        Ok(exists) if exists => {
+                            skipped_count += 1;
+                            continue; // Skip existing recipes
+                        }
+                        Ok(_) => {}, // Recipe doesn't exist, continue processing
+                        Err(e) => {
+                            eprintln!("Error checking if recipe {} exists: {}", recipe_id, e);
+                            error_count += 1;
+                            continue;
+                        }
+                    }
+
+                    // Read the individual recipe file
+                    let recipe_file = recipes_dir.join(format!("{}.json", recipe_id));
+                    if !recipe_file.exists() {
+                        eprintln!("Recipe file not found: {}", recipe_file.display());
+                        error_count += 1;
+                        continue;
+                    }
+
+                    let recipe_content = match fs::read_to_string(&recipe_file).await {
+                        Ok(content) => content,
+                        Err(e) => {
+                            eprintln!("Failed to read recipe file {}: {}", recipe_file.display(), e);
+                            error_count += 1;
+                            continue;
+                        }
+                    };
+
+                    let json_recipe: serde_json::Value = match serde_json::from_str(&recipe_content) {
+                        Ok(json) => json,
+                        Err(e) => {
+                            eprintln!("Failed to parse recipe JSON for {}: {}", recipe_id, e);
+                            error_count += 1;
+                            continue;
+                        }
+                    };
+
+                    // Convert JSON recipe to database recipe
+                    let db_recipe = match self.convert_json_to_db_recipe(json_recipe) {
+                        Ok(recipe) => recipe,
+                        Err(e) => {
+                            eprintln!("Failed to convert recipe {}: {}", recipe_id, e);
+                            error_count += 1;
+                            continue;
+                        }
+                    };
+
+                    // Save recipe in transaction
+                    match self.save_recipe_in_transaction(&mut tx, &db_recipe).await {
+                        Ok(_) => {
+                            batch_migrated += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to save recipe {} in transaction: {}", recipe_id, e);
+                            error_count += 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            // Commit the batch
+            match tx.commit().await {
+                Ok(_) => {
+                    migrated_count += batch_migrated;
+                }
+                Err(e) => {
+                    eprintln!("Failed to commit batch transaction: {}", e);
+                    return Err(e.into());
+                }
+            }
+        }
+
+        if error_count > 0 {
+            eprintln!("Migration completed with {} errors and {} skipped recipes", error_count, skipped_count);
+        }
+
+        Ok(migrated_count)
+    }
+
+    fn convert_json_to_db_recipe(&self, json: serde_json::Value) -> Result<Recipe> {
+        use chrono::{DateTime, Utc};
+
+        let id = json.get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing recipe id"))?
+            .to_string();
+
+        let title = json.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let description = json.get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let image = json.get("image")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let source_url = json.get("sourceUrl")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let prep_time = json.get("prepTime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let cook_time = json.get("cookTime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let total_time = json.get("totalTime")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let servings = json.get("servings")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(1) as i32;
+
+        // Parse ingredients
+        let ingredients = json.get("ingredients")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|ing| {
+                        let name = ing.get("name")?.as_str()?.to_string();
+                        // Handle amount as either string or number
+                        let amount = if let Some(amount_str) = ing.get("amount")?.as_str() {
+                            amount_str.to_string()
+                        } else if let Some(amount_num) = ing.get("amount")?.as_f64() {
+                            amount_num.to_string()
+                        } else {
+                            return None;
+                        };
+                        let unit = ing.get("unit")?.as_str()?.to_string();
+                        Some(Ingredient {
+                            name,
+                            amount,
+                            unit,
+                            category: None,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Parse instructions
+        let instructions = json.get("instructions")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Parse tags
+        let tags = json.get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Parse dates
+        let default_date = Utc::now().to_rfc3339();
+        let date_added_str = json.get("dateAdded")
+            .and_then(|v| v.as_str())
+            .unwrap_or(default_date.as_str());
+
+        let date_modified_str = json.get("dateModified")
+            .and_then(|v| v.as_str())
+            .unwrap_or(default_date.as_str());
+
+        let date_added = DateTime::parse_from_rfc3339(date_added_str)
+            .unwrap_or_else(|_| Utc::now().into())
+            .with_timezone(&Utc);
+
+        let date_modified = DateTime::parse_from_rfc3339(date_modified_str)
+            .unwrap_or_else(|_| Utc::now().into())
+            .with_timezone(&Utc);
+
+        // Parse optional fields
+        let rating = json.get("rating").and_then(|v| v.as_i64()).map(|r| r as i32);
+        let difficulty = json.get("difficulty").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let is_favorite = json.get("isFavorite").and_then(|v| v.as_bool());
+        let personal_notes = json.get("personalNotes").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        // Parse collections
+        let collections = json.get("collections")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Parse nutritional info
+        let nutritional_info = json.get("nutritionalInfo")
+            .and_then(|v| {
+                let calories = v.get("calories")?.as_f64();
+                let protein = v.get("protein")?.as_f64();
+                let carbs = v.get("carbs")?.as_f64();
+                let fat = v.get("fat")?.as_f64();
+                let fiber = v.get("fiber")?.as_f64();
+                let sugar = v.get("sugar")?.as_f64();
+                let sodium = v.get("sodium")?.as_f64();
+
+                Some(NutritionalInfo {
+                    calories,
+                    protein,
+                    carbs,
+                    fat,
+                    fiber,
+                    sugar,
+                    sodium,
+                })
+            });
+
+        Ok(Recipe {
+            id,
+            title,
+            description,
+            image,
+            source_url,
+            prep_time,
+            cook_time,
+            total_time,
+            servings,
+            ingredients,
+            instructions,
+            tags,
+            date_added,
+            date_modified,
+            rating,
+            difficulty,
+            is_favorite,
+            personal_notes,
+            collections,
+            nutritional_info,
+        })
     }
 
     pub async fn search_recipes(&self, query: &str) -> Result<Vec<Recipe>> {

@@ -118,12 +118,11 @@ const Import: React.FC = () => {
       </Grid>
 
       <Paper sx={{ p: 4, mt: 4 }}>
-        <Typography variant="body1" sx={{ mb: 3 }}>
+        <Typography variant="body1" sx={{ mb: 1 }}>
           Enter the URL of a recipe from any supported site to import it into your cookbook.
-          <br />
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes
-          </Typography>
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes
         </Typography>
 
         <TextField

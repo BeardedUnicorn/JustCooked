@@ -34,12 +34,11 @@ async function ensureDirectory() {
         baseDir: BaseDirectory.AppLocalData,
         recursive: true
       });
-      console.log('Directory created successfully');
-    } else {
-      console.log('Directory already exists');
+      console.log('Recipes directory created successfully');
     }
+    // Remove the "Directory already exists" log to reduce noise
   } catch (error) {
-    console.error('Error checking/creating directory:', error);
+    console.error('Error checking/creating recipes directory:', error);
   }
 }
 

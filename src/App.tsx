@@ -3,6 +3,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Provider } from 'react-redux';
+import { useEffect } from 'react';
 import { store } from '@store';
 import darkTheme from '@styles/theme';
 import AppLayout from '@components/AppLayout';
@@ -16,8 +17,24 @@ import Pantry from '@pages/Pantry';
 import Ingredients from '@pages/Ingredients';
 import RecipeView from '@pages/RecipeView';
 import CookingMode from '@pages/CookingMode';
+import { migrateJsonRecipes } from '@services/recipeStorage';
 
 function App() {
+  // Run migration on app startup
+  useEffect(() => {
+    const runMigration = async () => {
+      try {
+        const migratedCount = await migrateJsonRecipes();
+        if (migratedCount > 0) {
+          console.log(`Successfully migrated ${migratedCount} recipes from JSON to database`);
+        }
+      } catch (error) {
+        console.error('Failed to run recipe migration:', error);
+      }
+    };
+
+    runMigration();
+  }, []);
   return (
     <Provider store={store}>
       <ThemeProvider theme={darkTheme}>
