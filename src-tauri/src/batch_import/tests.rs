@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
+    use tokio::time::{timeout, Duration};
 
     use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path};
@@ -102,6 +103,45 @@ mod tests {
 
         // Invalid URLs - not recipe path
         assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipes/79/desserts"));
+    }
+
+    #[tokio::test]
+    async fn test_is_valid_recipe_url_main_filtering() {
+        let importer = BatchImporter::new();
+
+        // URLs with "main" should be filtered out to prevent hanging
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/main-dish-casserole"));
+        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/chicken-main-course"));
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/main/recipe/789/pasta"));
+        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/999/beef-main-entree"));
+
+        // Case insensitive filtering
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/MAIN-dish"));
+        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/Main-Course"));
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/MAIN/recipe/789/pasta"));
+
+        // URLs without "main" should be valid
+        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
+        assert!(importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/beef-stew"));
+        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/789/pasta-salad"));
+    }
+
+    #[tokio::test]
+    async fn test_is_valid_recipe_url_numeric_id_validation() {
+        let importer = BatchImporter::new();
+
+        // Valid - numeric recipe ID
+        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
+        assert!(importer.is_valid_recipe_url("https://allrecipes.com/recipe/456789/beef-stew"));
+
+        // Invalid - non-numeric recipe ID (potentially problematic)
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/abc/cookies"));
+        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/mixed123/stew"));
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123abc/pasta"));
+
+        // Invalid - missing recipe name after ID
+        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123"));
+        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/123/"));
     }
 
     #[tokio::test]
@@ -476,4 +516,425 @@ mod tests {
     //     assert!(final_progress.current_url.is_none());
     //     assert_eq!(final_progress.estimated_time_remaining, Some(0));
     // }
+
+    #[tokio::test]
+    async fn test_request_timeout_handling() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock a slow response that should timeout
+        Mock::given(method("GET"))
+            .and(path("/slow-page"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_string("<html><body>Slow response</body></html>")
+                    .set_delay(std::time::Duration::from_secs(35)) // Longer than 30s timeout
+            )
+            .mount(&mock_server)
+            .await;
+
+        let slow_url = format!("{}/slow-page", mock_server.uri());
+
+        // This should timeout and return an error
+        let result = timeout(
+            Duration::from_secs(40), // Give extra time for the test itself
+            importer.extract_recipe_urls_from_page(&slow_url)
+        ).await;
+
+        // The request should either timeout or return an error
+        match result {
+            Ok(inner_result) => {
+                // If the request completed, it should be an error due to timeout
+                assert!(inner_result.is_err(), "Expected timeout error, but got success");
+            }
+            Err(_) => {
+                // Test timeout - this is also acceptable for this test
+                // The important thing is that the request doesn't hang indefinitely
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_main_dishes_category_specific_handling() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock main dishes category page with complex structure
+        let main_dishes_html = r#"
+            <html>
+                <head><title>Main Dishes - AllRecipes</title></head>
+                <body>
+                    <div class="recipe-grid">
+                        <div class="recipe-card">
+                            <a href="https://www.allrecipes.com/recipe/123/beef-stew" class="recipe-link">Beef Stew</a>
+                        </div>
+                        <div class="recipe-card">
+                            <a href="https://www.allrecipes.com/recipe/456/chicken-parmesan" class="recipe-link">Chicken Parmesan</a>
+                        </div>
+                        <div class="recipe-card">
+                            <a href="https://www.allrecipes.com/recipe/789/pasta-primavera" class="recipe-link">Pasta Primavera</a>
+                        </div>
+                    </div>
+                    <!-- Pagination or load more button -->
+                    <div class="pagination">
+                        <a href="/recipes/main-dishes?page=2">Next Page</a>
+                    </div>
+                    <!-- Infinite scroll trigger -->
+                    <div id="load-more-trigger" data-page="2"></div>
+                </body>
+            </html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/main-dishes"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(main_dishes_html))
+            .mount(&mock_server)
+            .await;
+
+        let main_dishes_url = format!("{}/recipes/main-dishes", mock_server.uri());
+
+        // This should complete without hanging
+        let result = timeout(
+            Duration::from_secs(10),
+            importer.extract_recipe_urls_from_page(&main_dishes_url)
+        ).await;
+
+        assert!(result.is_ok(), "Main dishes page extraction should not timeout");
+
+        let recipe_urls = result.unwrap().unwrap();
+        assert_eq!(recipe_urls.len(), 3, "Should extract 3 recipe URLs from main dishes page");
+
+        // Verify the URLs are properly resolved (they should be absolute URLs)
+        for url in &recipe_urls {
+            assert!(url.starts_with("http"), "URLs should be absolute: {}", url);
+            assert!(url.contains("/recipe/"), "URLs should be recipe URLs: {}", url);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_infinite_scroll_detection() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock page with infinite scroll indicators
+        let infinite_scroll_html = r#"
+            <html>
+                <body>
+                    <div class="recipe-list">
+                        <a href="https://www.allrecipes.com/recipe/123/test-recipe">Test Recipe</a>
+                    </div>
+                    <!-- Common infinite scroll indicators -->
+                    <div class="load-more-button" data-url="/api/recipes/load-more">Load More</div>
+                    <div id="infinite-scroll-trigger"></div>
+                    <script>
+                        // Infinite scroll JavaScript
+                        window.addEventListener('scroll', loadMoreRecipes);
+                    </script>
+                </body>
+            </html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/infinite-scroll-page"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(infinite_scroll_html))
+            .mount(&mock_server)
+            .await;
+
+        let page_url = format!("{}/infinite-scroll-page", mock_server.uri());
+
+        // Should handle infinite scroll pages without hanging
+        let result = timeout(
+            Duration::from_secs(5),
+            importer.extract_recipe_urls_from_page(&page_url)
+        ).await;
+
+        assert!(result.is_ok(), "Infinite scroll page should not cause hanging");
+
+        let recipe_urls = result.unwrap().unwrap();
+        assert_eq!(recipe_urls.len(), 1, "Should extract available recipes without waiting for dynamic content");
+    }
+
+    #[tokio::test]
+    async fn test_category_crawling_with_duplicates() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock category page with duplicate links
+        let category_html = r#"
+            <html>
+                <body>
+                    <nav>
+                        <a href="/recipes/desserts">Desserts</a>
+                        <a href="/recipes/desserts">Desserts (duplicate)</a>
+                        <a href="/recipes/main-dishes">Main Dishes</a>
+                        <a href="/recipes/appetizers">Appetizers</a>
+                        <a href="/recipes/main-dishes">Main Dishes (duplicate)</a>
+                    </nav>
+                    <div class="sidebar">
+                        <a href="/recipes/desserts">Desserts (sidebar)</a>
+                    </div>
+                </body>
+            </html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(category_html))
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/recipes", mock_server.uri());
+        let categories = importer.crawl_categories(&start_url).await.unwrap();
+
+        // Should deduplicate categories
+        let unique_urls: std::collections::HashSet<_> = categories.iter().map(|cat| &cat.url).collect();
+        assert_eq!(categories.len(), unique_urls.len(), "Categories should be deduplicated");
+
+        // Should include the main category
+        assert!(categories.iter().any(|cat| cat.url == start_url), "Should include the main category");
+    }
+
+    #[tokio::test]
+    async fn test_malformed_html_handling() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock page with malformed HTML
+        let malformed_html = r#"
+            <html>
+                <body>
+                    <div class="recipe-list">
+                        <a href="https://www.allrecipes.com/recipe/123/test-recipe">Test Recipe
+                        <a href="https://www.allrecipes.com/recipe/456/another-recipe">Another Recipe</a>
+                        <div>
+                            <a href="https://www.allrecipes.com/recipe/789/third-recipe">Third Recipe</a>
+                        </div>
+                    </div>
+                    <!-- Unclosed tags and malformed structure -->
+                    <div class="broken
+                        <a href="https://www.allrecipes.com/recipe/999/broken-link">Broken Link
+                </body>
+            <!-- Missing closing html tag -->
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/malformed-page"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(malformed_html))
+            .mount(&mock_server)
+            .await;
+
+        let page_url = format!("{}/malformed-page", mock_server.uri());
+
+        // Should handle malformed HTML gracefully
+        let result = importer.extract_recipe_urls_from_page(&page_url).await;
+        assert!(result.is_ok(), "Should handle malformed HTML without crashing");
+
+        let recipe_urls = result.unwrap();
+        // Should still extract valid recipe URLs despite malformed HTML
+        assert!(recipe_urls.len() >= 2, "Should extract at least some valid URLs from malformed HTML");
+    }
+
+    #[tokio::test]
+    async fn test_empty_page_handling() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Mock empty page
+        let empty_html = r#"
+            <html>
+                <head><title>Empty Page</title></head>
+                <body>
+                    <div class="no-recipes">
+                        <p>No recipes found in this category.</p>
+                    </div>
+                </body>
+            </html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/empty-page"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(empty_html))
+            .mount(&mock_server)
+            .await;
+
+        let page_url = format!("{}/empty-page", mock_server.uri());
+
+        // Should handle empty pages gracefully
+        let result = importer.extract_recipe_urls_from_page(&page_url).await;
+        assert!(result.is_ok(), "Should handle empty pages without error");
+
+        let recipe_urls = result.unwrap();
+        assert_eq!(recipe_urls.len(), 0, "Should return empty list for pages with no recipes");
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_import_rate_limiting() {
+        let importer = BatchImporter::new();
+
+        // Test that the rate limiter is properly configured
+        assert_eq!(importer.rate_limiter.available_permits(), 3, "Should have 3 permits available for concurrent imports");
+
+        // Acquire all permits
+        let permit1 = importer.rate_limiter.try_acquire().unwrap();
+        let permit2 = importer.rate_limiter.try_acquire().unwrap();
+        let permit3 = importer.rate_limiter.try_acquire().unwrap();
+
+        // Should not be able to acquire more permits
+        assert!(importer.rate_limiter.try_acquire().is_err(), "Should not be able to acquire more than 3 permits");
+
+        // Release permits
+        drop(permit1);
+        drop(permit2);
+        drop(permit3);
+
+        // Should be able to acquire permits again
+        assert_eq!(importer.rate_limiter.available_permits(), 3, "Should have 3 permits available after releasing");
+    }
+
+    #[tokio::test]
+    async fn test_batch_importer_task_creation() {
+        let importer = BatchImporter::new();
+
+        // Test that we can create a task clone
+        let task = importer.clone_for_task();
+
+        // Test that the task can access progress
+        let progress = task.progress.lock().unwrap();
+        assert!(matches!(progress.status, BatchImportStatus::Idle));
+    }
+
+    #[tokio::test]
+    async fn test_batch_importer_task_error_handling() {
+        let importer = BatchImporter::new();
+        let task = importer.clone_for_task();
+
+        // Test adding an error through the task
+        task.add_error(
+            "https://example.com/recipe/123".to_string(),
+            "Test error message".to_string(),
+            "TestError".to_string(),
+        );
+
+        let progress = importer.get_progress();
+        assert_eq!(progress.errors.len(), 1);
+        assert_eq!(progress.errors[0].url, "https://example.com/recipe/123");
+        assert_eq!(progress.errors[0].message, "Test error message");
+        assert_eq!(progress.errors[0].error_type, "TestError");
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_progress_tracking() {
+        let importer = BatchImporter::new();
+
+        // Set up initial state
+        {
+            let mut progress = importer.progress.lock().unwrap();
+            progress.total_recipes = 10;
+            progress.processed_recipes = 0;
+            progress.successful_imports = 0;
+            progress.failed_imports = 0;
+        }
+
+        // Simulate concurrent updates to progress
+        let mut handles = Vec::new();
+
+        for i in 0..5 {
+            let importer_clone = Arc::new(importer.clone_for_task());
+            let handle = tokio::spawn(async move {
+                // Simulate processing a recipe
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+                // Update progress
+                {
+                    let mut progress = importer_clone.progress.lock().unwrap();
+                    progress.processed_recipes += 1;
+                    progress.successful_imports += 1;
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let final_progress = importer.get_progress();
+        assert_eq!(final_progress.processed_recipes, 5);
+        assert_eq!(final_progress.successful_imports, 5);
+        assert_eq!(final_progress.failed_imports, 0);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_error_tracking() {
+        let importer = BatchImporter::new();
+
+        // Simulate concurrent error reporting
+        let mut handles = Vec::new();
+
+        for i in 0..3 {
+            let importer_clone = Arc::new(importer.clone_for_task());
+            let handle = tokio::spawn(async move {
+                // Simulate an error
+                importer_clone.add_error(
+                    format!("https://example.com/recipe/{}", i),
+                    format!("Error message {}", i),
+                    "ConcurrentTestError".to_string(),
+                );
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let final_progress = importer.get_progress();
+        assert_eq!(final_progress.errors.len(), 3);
+
+        // Verify all errors were recorded
+        let error_urls: Vec<_> = final_progress.errors.iter().map(|e| &e.url).collect();
+        assert!(error_urls.contains(&&"https://example.com/recipe/0".to_string()));
+        assert!(error_urls.contains(&&"https://example.com/recipe/1".to_string()));
+        assert!(error_urls.contains(&&"https://example.com/recipe/2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_semaphore_based_rate_limiting() {
+        let importer = BatchImporter::new();
+        let start_time = std::time::Instant::now();
+
+        // Simulate multiple concurrent tasks that need to acquire permits
+        let mut handles = Vec::new();
+
+        for i in 0..6 { // More tasks than available permits
+            let rate_limiter = Arc::clone(&importer.rate_limiter);
+            let handle = tokio::spawn(async move {
+                let _permit = rate_limiter.acquire().await.unwrap();
+                // Simulate work
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                i // Return the task ID
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        let mut results = Vec::new();
+        for handle in handles {
+            results.push(handle.await.unwrap());
+        }
+
+        let elapsed = start_time.elapsed();
+
+        // Should have completed all tasks
+        assert_eq!(results.len(), 6);
+        results.sort();
+        assert_eq!(results, vec![0, 1, 2, 3, 4, 5]);
+
+        // Should have taken at least 200ms due to rate limiting
+        // (6 tasks, 3 concurrent, 100ms each = at least 2 batches = 200ms)
+        assert!(elapsed >= std::time::Duration::from_millis(180),
+                "Should take at least 180ms due to rate limiting, took {:?}", elapsed);
+    }
 }

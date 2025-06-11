@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::database::{Database, Recipe, Ingredient, NutritionalInfo};
+    use crate::database::{Database, Recipe, Ingredient, NutritionalInfo, IngredientDatabase};
     use chrono::Utc;
     use tempfile::TempDir;
     use sqlx::sqlite::SqlitePool;
@@ -38,12 +38,14 @@ mod tests {
                     amount: "1".to_string(),
                     unit: "cup".to_string(),
                     category: Some("vegetables".to_string()),
+                    section: None,
                 },
                 Ingredient {
                     name: "Test Ingredient 2".to_string(),
                     amount: "2".to_string(),
                     unit: "tbsp".to_string(),
                     category: None,
+                    section: None,
                 },
             ],
             instructions: vec![
@@ -343,5 +345,199 @@ mod tests {
         assert_eq!(nutrition.calories, original_nutrition.calories);
         assert_eq!(nutrition.protein, original_nutrition.protein);
         assert_eq!(nutrition.carbs, original_nutrition.carbs);
+    }
+
+    // Tests for ingredient database operations
+    fn create_test_ingredient_database() -> IngredientDatabase {
+        IngredientDatabase {
+            id: "test-ingredient-1".to_string(),
+            name: "Test Ingredient".to_string(),
+            category: "vegetables".to_string(),
+            aliases: vec!["test-ing".to_string(), "testing-ingredient".to_string()],
+            date_added: "2024-01-01T00:00:00Z".to_string(),
+            date_modified: "2024-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_save_and_get_ingredient() {
+        let (db, _temp_dir) = create_test_database().await;
+        let ingredient = create_test_ingredient_database();
+
+        // Save the ingredient
+        db.save_ingredient(&ingredient).await.unwrap();
+
+        // Retrieve all ingredients
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        assert_eq!(ingredients.len(), 1);
+        assert_eq!(ingredients[0].id, ingredient.id);
+        assert_eq!(ingredients[0].name, ingredient.name);
+        assert_eq!(ingredients[0].category, ingredient.category);
+        assert_eq!(ingredients[0].aliases, ingredient.aliases);
+    }
+
+    #[tokio::test]
+    async fn test_ingredient_duplicate_prevention() {
+        let (db, _temp_dir) = create_test_database().await;
+        let ingredient = create_test_ingredient_database();
+
+        // Save the ingredient twice
+        db.save_ingredient(&ingredient).await.unwrap();
+        db.save_ingredient(&ingredient).await.unwrap();
+
+        // Should still only have one ingredient (INSERT OR REPLACE)
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        assert_eq!(ingredients.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_search_ingredients() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Create test ingredients
+        let mut ingredient1 = create_test_ingredient_database();
+        ingredient1.id = "ingredient-1".to_string();
+        ingredient1.name = "Tomato".to_string();
+        ingredient1.aliases = vec!["tomatoes".to_string()];
+
+        let mut ingredient2 = create_test_ingredient_database();
+        ingredient2.id = "ingredient-2".to_string();
+        ingredient2.name = "Potato".to_string();
+        ingredient2.aliases = vec!["potatoes".to_string()];
+
+        let mut ingredient3 = create_test_ingredient_database();
+        ingredient3.id = "ingredient-3".to_string();
+        ingredient3.name = "Onion".to_string();
+        ingredient3.aliases = vec!["onions".to_string(), "yellow onion".to_string()];
+
+        // Save all ingredients
+        db.save_ingredient(&ingredient1).await.unwrap();
+        db.save_ingredient(&ingredient2).await.unwrap();
+        db.save_ingredient(&ingredient3).await.unwrap();
+
+        // Search by name
+        let results = db.search_ingredients("tomato").await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Tomato");
+
+        // Search by alias
+        let results = db.search_ingredients("potatoes").await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Potato");
+
+        // Partial search
+        let results = db.search_ingredients("on").await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Onion");
+
+        // No results
+        let results = db.search_ingredients("nonexistent").await.unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_ingredient() {
+        let (db, _temp_dir) = create_test_database().await;
+        let ingredient = create_test_ingredient_database();
+
+        // Save the ingredient
+        db.save_ingredient(&ingredient).await.unwrap();
+
+        // Verify it exists
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        assert_eq!(ingredients.len(), 1);
+
+        // Delete the ingredient
+        let deleted = db.delete_ingredient(&ingredient.id).await.unwrap();
+        assert!(deleted);
+
+        // Verify it's gone
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        assert_eq!(ingredients.len(), 0);
+
+        // Try to delete again (should return false)
+        let deleted = db.delete_ingredient(&ingredient.id).await.unwrap();
+        assert!(!deleted);
+    }
+
+    #[tokio::test]
+    async fn test_ingredient_auto_detection_from_recipe() {
+        let (db, _temp_dir) = create_test_database().await;
+        let recipe = create_test_recipe();
+
+        // Save the recipe (this should trigger ingredient auto-detection)
+        db.save_recipe(&recipe).await.unwrap();
+
+        // Check if ingredients were auto-detected and saved
+        let ingredients = db.get_all_ingredients().await.unwrap();
+
+        // We expect ingredients to be auto-detected from the recipe
+        // The test recipe has 2 ingredients: "Test Ingredient 1" and "Test Ingredient 2"
+        assert!(ingredients.len() >= 2, "Expected at least 2 ingredients to be auto-detected, found {}", ingredients.len());
+
+        // Check that ingredient names match what's in the recipe (after cleaning)
+        let ingredient_names: Vec<String> = ingredients.iter().map(|i| i.name.clone()).collect();
+
+        // The names might be cleaned, so check for the cleaned versions
+        assert!(ingredient_names.iter().any(|name| name.to_lowercase().contains("test ingredient 1")));
+        assert!(ingredient_names.iter().any(|name| name.to_lowercase().contains("test ingredient 2")));
+    }
+
+    #[tokio::test]
+    async fn test_ingredient_category_detection() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Create a recipe with ingredients that should have detectable categories
+        let mut recipe = create_test_recipe();
+        recipe.ingredients = vec![
+            Ingredient {
+                name: "Carrots".to_string(),
+                amount: "2".to_string(),
+                unit: "cups".to_string(),
+                category: None,
+                section: None,
+            },
+            Ingredient {
+                name: "Chicken Breast".to_string(),
+                amount: "1".to_string(),
+                unit: "lb".to_string(),
+                category: None,
+                section: None,
+            },
+            Ingredient {
+                name: "Olive Oil".to_string(),
+                amount: "2".to_string(),
+                unit: "tbsp".to_string(),
+                category: None,
+                section: None,
+            },
+        ];
+
+        // Save the recipe
+        db.save_recipe(&recipe).await.unwrap();
+
+        // Check that ingredients were categorized correctly
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        assert!(ingredients.len() >= 3);
+
+        // Find specific ingredients and check their categories (case-insensitive)
+        let carrot_ingredient = ingredients.iter().find(|i| i.name.to_lowercase().contains("carrot"));
+        let chicken_ingredient = ingredients.iter().find(|i| i.name.to_lowercase().contains("chicken"));
+        let oil_ingredient = ingredients.iter().find(|i| i.name.to_lowercase().contains("olive"));
+
+        assert!(carrot_ingredient.is_some(), "Carrots ingredient should be auto-detected");
+        assert!(chicken_ingredient.is_some(), "Chicken Breast ingredient should be auto-detected");
+        assert!(oil_ingredient.is_some(), "Olive Oil ingredient should be auto-detected");
+
+        // Categories should be detected
+        if let Some(carrot) = carrot_ingredient {
+            assert_eq!(carrot.category, "vegetables");
+        }
+        if let Some(chicken) = chicken_ingredient {
+            assert_eq!(chicken.category, "meat");
+        }
+        if let Some(oil) = oil_ingredient {
+            assert_eq!(oil.category, "oils");
+        }
     }
 }

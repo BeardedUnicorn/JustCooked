@@ -110,6 +110,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
           color="primary"
           startIcon={<AddIcon />}
           onClick={() => handleOpen()}
+          data-testid="pantry-add-item-button"
         >
           Add Item
         </Button>
@@ -126,7 +127,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
             <Divider />
             <List disablePadding>
               {categoryItems.map((item) => (
-                <ListItem key={item.id} divider>
+                <ListItem key={item.id} divider data-testid={`pantry-item-${item.id}`}>
                   <ListItemText
                     primary={item.name}
                     secondary={
@@ -148,10 +149,10 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                     }
                   />
                   <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={() => handleOpen(item)} size="small" aria-label="edit item">
+                    <IconButton edge="end" onClick={() => handleOpen(item)} size="small" aria-label="edit item" data-testid={`pantry-item-${item.id}-edit`}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small" aria-label="delete item">
+                    <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small" aria-label="delete item" data-testid={`pantry-item-${item.id}-delete`}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </ListItemSecondaryAction>
@@ -169,7 +170,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
       )}
 
       {/* Add/Edit Item Dialog */}
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth data-testid="pantry-item-dialog">
         <DialogTitle>{editingItem ? 'Edit Pantry Item' : 'Add Pantry Item'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
@@ -181,6 +182,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 onChange={(e) => setName(e.target.value)}
                 fullWidth
                 required
+                data-testid="pantry-item-name-input"
               />
             </Grid>
             <Grid size={6}>
@@ -191,6 +193,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 onChange={(e) => setAmount(Number(e.target.value))}
                 fullWidth
                 inputProps={{ min: 0, step: 0.1 }}
+                data-testid="pantry-item-amount-input"
               />
             </Grid>
             <Grid size={6}>
@@ -201,6 +204,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                   onChange={(e) => setUnit(e.target.value)}
                   label="Unit"
                   aria-label="unit"
+                  data-testid="pantry-item-unit-select"
                 >
                   {units.map((u) => (
                     <MenuItem key={u} value={u}>
@@ -217,6 +221,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   label="Category"
+                  data-testid="pantry-item-category-select"
                 >
                   {categories.map((c) => (
                     <MenuItem key={c} value={c}>
@@ -234,13 +239,14 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 onChange={(e) => setExpiryDate(e.target.value)}
                 fullWidth
                 InputLabelProps={{ shrink: true }}
+                data-testid="pantry-item-expiry-input"
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disableElevation>
+          <Button onClick={handleClose} data-testid="pantry-item-cancel-button">Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained" disableElevation data-testid="pantry-item-submit-button">
             {editingItem ? 'Update' : 'Add'}
           </Button>
         </DialogActions>

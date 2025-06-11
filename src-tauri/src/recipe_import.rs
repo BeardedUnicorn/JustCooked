@@ -246,7 +246,8 @@ pub fn extract_from_html_selectors(document: &Html, source_url: &str) -> Result<
         .to_string();
 
     // Try to extract additional data with site-specific selectors
-    let (ingredients, instructions) = extract_site_specific_data(document, host);
+    let ingredients = extract_sectioned_ingredients_from_html(document, host);
+    let instructions = extract_instructions_from_html(document);
 
     Ok(ImportedRecipe {
         name,
@@ -304,34 +305,8 @@ pub fn get_site_selectors(host: &str) -> (String, String, String) {
     }
 }
 
-pub fn extract_site_specific_data(document: &Html, _host: &str) -> (Vec<String>, Vec<String>) {
-    let mut ingredients = Vec::new();
-    let mut instructions = Vec::new();
-
-    // Try common ingredient selectors
-    let ingredient_selectors = [
-        ".recipe-ingredient, .ingredients li, .ingredient",
-        ".recipe-ingredients li, .ingredients-list li",
-        ".recipe__ingredient, .recipe-card__ingredient",
-        "[data-ingredient], .ingredient-text",
-    ];
-
-    for selector_str in &ingredient_selectors {
-        if let Ok(selector) = Selector::parse(selector_str) {
-            let found_ingredients: Vec<String> = document
-                .select(&selector)
-                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-
-            if !found_ingredients.is_empty() {
-                ingredients = found_ingredients;
-                break;
-            }
-        }
-    }
-
-    // Try common instruction selectors
+// Extract instructions from HTML
+pub fn extract_instructions_from_html(document: &Html) -> Vec<String> {
     let instruction_selectors = [
         ".recipe-instruction, .instructions li, .instruction",
         ".recipe-instructions li, .instructions-list li",
@@ -349,13 +324,12 @@ pub fn extract_site_specific_data(document: &Html, _host: &str) -> (Vec<String>,
                 .collect();
 
             if !found_instructions.is_empty() {
-                instructions = found_instructions;
-                break;
+                return found_instructions;
             }
         }
     }
 
-    (ingredients, instructions)
+    Vec::new()
 }
 
 // Helper functions for JSON extraction (made public for testing)
@@ -413,10 +387,169 @@ pub fn extract_ingredients_from_json(recipe_data: &serde_json::Value) -> Vec<Str
         .map(|arr| {
             arr.iter()
                 .filter_map(|item| item.as_str())
-                .map(|s| s.to_string())
+                .map(|s| clean_raw_ingredient_string(s))
+                .filter(|s| !s.is_empty() && is_valid_ingredient_name(s))
                 .collect()
         })
         .unwrap_or_else(Vec::new)
+}
+
+/// Clean raw ingredient strings from JSON-LD data before parsing
+pub fn clean_raw_ingredient_string(raw: &str) -> String {
+    let mut cleaned = raw.trim().to_string();
+
+    // Remove HTML entities and tags
+    cleaned = cleaned.replace("&amp;", "&")
+                    .replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&quot;", "\"")
+                    .replace("&#39;", "'");
+
+    // Remove HTML tags if any
+    if cleaned.contains('<') && cleaned.contains('>') {
+        cleaned = regex::Regex::new(r"<[^>]*>").unwrap().replace_all(&cleaned, "").to_string();
+    }
+
+    // Fix common malformed patterns from AllRecipes
+    // Pattern: "ounce) package cream cheese" -> "8 ounce package cream cheese"
+    if let Some(captures) = regex::Regex::new(r"^([a-zA-Z]+)\)\s+(.+)$").unwrap().captures(&cleaned) {
+        let unit = &captures[1];
+        let rest = &captures[2];
+        // Try to infer a reasonable amount for common units
+        let amount = match unit.to_lowercase().as_str() {
+            "ounce" | "oz" => "8",
+            "pound" | "lb" => "1",
+            "cup" => "1",
+            "tablespoon" | "tbsp" => "2",
+            "teaspoon" | "tsp" => "1",
+            _ => "1"
+        };
+        cleaned = format!("{} {} {}", amount, unit, rest);
+    }
+
+    // Fix patterns like "pound) whole chicken" -> "1 pound whole chicken"
+    cleaned = regex::Regex::new(r"^([a-zA-Z]+)\)\s+")
+        .unwrap()
+        .replace(&cleaned, "1 $1 ")
+        .to_string();
+
+    // Remove extra whitespace
+    cleaned = regex::Regex::new(r"\s+").unwrap().replace_all(&cleaned, " ").trim().to_string();
+
+    cleaned
+}
+
+/// Validate that an ingredient name is reasonable
+pub fn is_valid_ingredient_name(name: &str) -> bool {
+    let trimmed = name.trim();
+
+    // Must have some content
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Must contain at least one letter
+    if !trimmed.chars().any(|c| c.is_alphabetic()) {
+        return false;
+    }
+
+    // Reject obviously invalid names
+    let invalid_names = [
+        "chopped", "sliced", "diced", "minced", "beaten", "melted", "softened",
+        "divided", "taste", "needed", "desired", "optional", "garnish",
+        "spray", "leaf", "leaves", "caps", "whites", "yolks", "cubed",
+        "halved", "quartered", "peeled", "seeded", "trimmed", "baby doll",
+        "chopsticks for handles", "with flour", "for rolling", "juiced",
+        "mashed", "crushed", "ground", "fresh", "dried", "frozen",
+        "or more to taste", "or as needed", "to taste", "as needed"
+    ];
+
+    let lower_name = trimmed.to_lowercase();
+    if invalid_names.iter().any(|&invalid| lower_name == invalid) {
+        return false;
+    }
+
+    // Reject names that are just preparation instructions
+    if regex::Regex::new(r"^(finely\s+)?(chopped|diced|sliced|minced|grated|shredded|crushed|ground|beaten|melted|softened|peeled|seeded|trimmed|halved|quartered)(\s+.*)?$")
+        .unwrap()
+        .is_match(&lower_name) {
+        return false;
+    }
+
+    // Reject names that start with measurements without ingredient
+    if regex::Regex::new(r"^[\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+\s*(ounce|pound|cup|tablespoon|teaspoon|gram|kilogram|liter|milliliter|inch)\s*$")
+        .unwrap()
+        .is_match(&lower_name) {
+        return false;
+    }
+
+    true
+}
+
+// Extract ingredients with section information from HTML
+pub fn extract_sectioned_ingredients_from_html(document: &Html, host: &str) -> Vec<String> {
+    let mut ingredients = Vec::new();
+
+    // Check if this is AllRecipes and try to extract sectioned ingredients
+    if host.contains("allrecipes.com") {
+        if let Ok(section_selector) = Selector::parse(".mm-recipes-structured-ingredients__list-heading") {
+            if let Ok(list_selector) = Selector::parse(".mm-recipes-structured-ingredients__list") {
+                let sections = document.select(&section_selector).collect::<Vec<_>>();
+                let lists = document.select(&list_selector).collect::<Vec<_>>();
+
+                // Match sections with their corresponding ingredient lists
+                for (i, section) in sections.iter().enumerate() {
+                    let section_name = section.text().collect::<Vec<_>>().join(" ").trim().to_string();
+
+                    // Get the corresponding ingredient list (should be the next list after this section)
+                    if let Some(list) = lists.get(i) {
+                        if let Ok(item_selector) = Selector::parse(".mm-recipes-structured-ingredients__list-item") {
+                            for item in list.select(&item_selector) {
+                                let ingredient_text = item.text().collect::<Vec<_>>().join(" ").trim().to_string();
+                                if !ingredient_text.is_empty() {
+                                    // Prefix ingredient with section name for parsing later
+                                    ingredients.push(format!("[{}] {}", section_name, ingredient_text));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If no sectioned ingredients found, fall back to regular extraction
+    if ingredients.is_empty() {
+        ingredients = extract_regular_ingredients_from_html(document);
+    }
+
+    ingredients
+}
+
+// Regular ingredient extraction (existing logic)
+pub fn extract_regular_ingredients_from_html(document: &Html) -> Vec<String> {
+    let ingredient_selectors = [
+        ".recipe-ingredient, .ingredients li, .ingredient",
+        ".recipe-ingredients li, .ingredients-list li",
+        ".recipe__ingredient, .recipe-card__ingredient",
+        "[data-ingredient], .ingredient-text",
+    ];
+
+    for selector_str in &ingredient_selectors {
+        if let Ok(selector) = Selector::parse(selector_str) {
+            let found_ingredients: Vec<String> = document
+                .select(&selector)
+                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if !found_ingredients.is_empty() {
+                return found_ingredients;
+            }
+        }
+    }
+
+    Vec::new()
 }
 
 pub fn extract_instructions_from_json(recipe_data: &serde_json::Value) -> Vec<String> {

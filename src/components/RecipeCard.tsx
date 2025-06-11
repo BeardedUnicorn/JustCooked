@@ -137,17 +137,19 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
 
   return (
     <>
-      <Card sx={{
-        maxWidth: 345,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-        }
-      }}>
+      <Card
+        data-testid={`recipe-card-${recipe.id}`}
+        sx={{
+          maxWidth: 345,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+          }
+        }}>
         {/* Favorite Badge */}
         {recipe.isFavorite && (
           <Box
@@ -166,7 +168,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         )}
 
         <Box sx={{ position: 'relative' }}>
-          <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }}>
+          <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }} data-testid={`recipe-card-${recipe.id}-main-area`}>
             <CardMedia
               component="img"
               sx={{
@@ -176,6 +178,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
               }}
               image={imageUrl}
               alt={recipe.title}
+              data-testid={`recipe-card-${recipe.id}-image`}
             />
 
             <CardContent sx={{ flexGrow: 1, pb: 1 }}>
@@ -286,6 +289,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                   },
                 }}
                 aria-label="cook now"
+                data-testid={`recipe-card-${recipe.id}-cook-button`}
               >
                 <PlayArrowIcon />
               </IconButton>
@@ -319,6 +323,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                 size="small"
                 onClick={handleFavoriteClick}
                 aria-label={recipe.isFavorite ? "remove from favorites" : "add to favorites"}
+                data-testid={`recipe-card-${recipe.id}-favorite-button`}
                 sx={{
                   color: recipe.isFavorite ? 'error.main' : 'text.secondary',
                   '&:hover': {
@@ -335,6 +340,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                 size="small"
                 onClick={handleShareClick}
                 aria-label="share recipe"
+                data-testid={`recipe-card-${recipe.id}-share-button`}
                 sx={{ color: 'text.secondary' }}
               >
                 <ShareIcon fontSize="small" />
@@ -346,6 +352,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                 size="small"
                 onClick={handleMenuClick}
                 aria-label="more actions"
+                data-testid={`recipe-card-${recipe.id}-more-button`}
                 sx={{ color: 'text.secondary' }}
               >
                 <MoreVertIcon fontSize="small" />
@@ -360,6 +367,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         anchorEl={menuAnchorEl}
         open={Boolean(menuAnchorEl)}
         onClose={handleMenuClose}
+        data-testid={`recipe-card-${recipe.id}-menu`}
         anchorOrigin={{
           vertical: 'top',
           horizontal: 'right',
@@ -369,19 +377,19 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleFavoriteMenuClick}>
+        <MenuItem onClick={handleFavoriteMenuClick} data-testid={`recipe-card-${recipe.id}-menu-favorite`}>
           <ListItemIcon>
             {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
           </ListItemIcon>
           <ListItemText>{recipe.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleShareMenuClick}>
+        <MenuItem onClick={handleShareMenuClick} data-testid={`recipe-card-${recipe.id}-menu-share`}>
           <ListItemIcon>
             <ShareIcon fontSize="small" />
           </ListItemIcon>
           <ListItemText>Share Recipe</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handleDeleteClick}>
+        <MenuItem onClick={handleDeleteClick} data-testid={`recipe-card-${recipe.id}-menu-delete`}>
           <ListItemIcon>
             <DeleteOutlineIcon fontSize="small" />
           </ListItemIcon>
@@ -395,6 +403,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         onClose={() => setDeleteDialogOpen(false)}
         aria-labelledby="delete-dialog-title"
         aria-describedby="delete-dialog-description"
+        data-testid={`recipe-card-${recipe.id}-delete-dialog`}
       >
         <DialogTitle id="delete-dialog-title">Delete Recipe?</DialogTitle>
         <DialogContent>
@@ -403,10 +412,10 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} autoFocus>
+          <Button onClick={() => setDeleteDialogOpen(false)} autoFocus data-testid={`recipe-card-${recipe.id}-delete-cancel`}>
             Cancel
           </Button>
-          <Button onClick={handleConfirmDelete} color="error" variant="contained">
+          <Button onClick={handleConfirmDelete} color="error" variant="contained" data-testid={`recipe-card-${recipe.id}-delete-confirm`}>
             Delete
           </Button>
         </DialogActions>

@@ -117,9 +117,9 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} data-testid="batch-import-progress">
       {/* Status Header */}
-      <Card>
+      <Card data-testid="batch-import-status-card">
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             {statusInfo.icon}
@@ -130,6 +130,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
               label={statusInfo.label}
               color={statusInfo.color}
               variant="outlined"
+              data-testid="batch-import-status-chip"
             />
           </Box>
 
@@ -151,6 +152,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
               variant="determinate"
               value={getOverallProgress()}
               sx={{ height: 8, borderRadius: 4 }}
+              data-testid="batch-import-overall-progress"
             />
           </Box>
 
@@ -168,6 +170,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 value={getCategoryProgress()}
                 sx={{ height: 6, borderRadius: 3 }}
                 color="secondary"
+                data-testid="batch-import-category-progress"
               />
             </Box>
           )}
@@ -175,13 +178,13 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
       </Card>
 
       {/* Statistics */}
-      <Card>
+      <Card data-testid="batch-import-statistics-card">
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Import Statistics
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-successful-count">
               <Typography variant="h4" color="success.main">
                 {progress.successfulImports}
               </Typography>
@@ -189,7 +192,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Successful
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-failed-count">
               <Typography variant="h4" color="error.main">
                 {progress.failedImports}
               </Typography>
@@ -197,7 +200,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Failed
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-skipped-count">
               <Typography variant="h4" color="warning.main">
                 {progress.skippedRecipes}
               </Typography>
@@ -205,7 +208,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Skipped
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }}>
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-elapsed-time">
               <Typography variant="h4" color="primary.main">
                 {formatDuration(progress.startTime)}
               </Typography>
@@ -226,7 +229,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
 
       {/* Errors */}
       {progress.errors.length > 0 && (
-        <Accordion>
+        <Accordion data-testid="batch-import-errors-accordion">
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ErrorIcon color="error" />

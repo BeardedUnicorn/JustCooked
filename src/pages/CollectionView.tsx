@@ -221,12 +221,14 @@ const CollectionView: React.FC = () => {
             variant="outlined"
             startIcon={<AddIcon />}
             onClick={() => setAddRecipeDialogOpen(true)}
+            data-testid="collection-view-add-recipe-button"
           >
             Add Recipe
           </Button>
           <IconButton
             onClick={() => setEditDialogOpen(true)}
             aria-label="Edit collection"
+            data-testid="collection-view-edit-button"
           >
             <EditIcon />
           </IconButton>
@@ -234,6 +236,7 @@ const CollectionView: React.FC = () => {
             onClick={() => setDeleteDialogOpen(true)}
             color="error"
             aria-label="Delete collection"
+            data-testid="collection-view-delete-button"
           >
             <DeleteIcon />
           </IconButton>
@@ -261,6 +264,7 @@ const CollectionView: React.FC = () => {
                   }}
                   size="small"
                   aria-label="Remove from collection"
+                  data-testid={`collection-view-remove-recipe-${recipe.id}`}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -281,6 +285,7 @@ const CollectionView: React.FC = () => {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() => setAddRecipeDialogOpen(true)}
+              data-testid="collection-view-add-first-recipe-button"
             >
               Add Your First Recipe
             </Button>
@@ -289,7 +294,7 @@ const CollectionView: React.FC = () => {
       )}
 
       {/* Delete Collection Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} data-testid="collection-view-delete-dialog">
         <DialogTitle>Delete Collection</DialogTitle>
         <DialogContent>
           <Typography>
@@ -297,15 +302,15 @@ const CollectionView: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDeleteCollection} color="error" variant="contained">
+          <Button onClick={() => setDeleteDialogOpen(false)} data-testid="collection-view-delete-cancel">Cancel</Button>
+          <Button onClick={handleDeleteCollection} color="error" variant="contained" data-testid="collection-view-delete-confirm">
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Edit Collection Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth data-testid="collection-view-edit-dialog">
         <DialogTitle>Edit Collection</DialogTitle>
         <DialogContent>
           <TextField
@@ -317,6 +322,7 @@ const CollectionView: React.FC = () => {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             sx={{ mb: 2 }}
+            data-testid="collection-view-edit-name-input"
           />
           <TextField
             margin="dense"
@@ -327,14 +333,16 @@ const CollectionView: React.FC = () => {
             variant="outlined"
             value={editDescription}
             onChange={(e) => setEditDescription(e.target.value)}
+            data-testid="collection-view-edit-description-input"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handleEditCollection} 
+          <Button onClick={() => setEditDialogOpen(false)} data-testid="collection-view-edit-cancel">Cancel</Button>
+          <Button
+            onClick={handleEditCollection}
             variant="contained"
             disabled={!editName.trim()}
+            data-testid="collection-view-edit-save"
           >
             Save Changes
           </Button>
@@ -342,7 +350,7 @@ const CollectionView: React.FC = () => {
       </Dialog>
 
       {/* Add Recipe Dialog */}
-      <Dialog open={addRecipeDialogOpen} onClose={() => setAddRecipeDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={addRecipeDialogOpen} onClose={() => setAddRecipeDialogOpen(false)} maxWidth="md" fullWidth data-testid="collection-view-add-recipe-dialog">
         <DialogTitle>Add Recipe to Collection</DialogTitle>
         <DialogContent>
           <Autocomplete
@@ -352,12 +360,14 @@ const CollectionView: React.FC = () => {
             onChange={(_, newValue) => setSelectedRecipe(newValue)}
             inputValue={recipeSearchTerm}
             onInputChange={(_, newInputValue) => setRecipeSearchTerm(newInputValue)}
+            data-testid="collection-view-recipe-search"
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Search for recipes"
                 variant="outlined"
                 fullWidth
+                data-testid="collection-view-recipe-search-input"
                 InputProps={{
                   ...params.InputProps,
                   startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
@@ -390,13 +400,14 @@ const CollectionView: React.FC = () => {
             setAddRecipeDialogOpen(false);
             setSelectedRecipe(null);
             setRecipeSearchTerm('');
-          }}>
+          }} data-testid="collection-view-add-recipe-cancel">
             Cancel
           </Button>
-          <Button 
-            onClick={handleAddRecipe} 
+          <Button
+            onClick={handleAddRecipe}
             variant="contained"
             disabled={!selectedRecipe}
+            data-testid="collection-view-add-recipe-confirm"
           >
             Add Recipe
           </Button>

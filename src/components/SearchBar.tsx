@@ -7,12 +7,15 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import HistoryIcon from '@mui/icons-material/History';
 
+
+
 interface SearchBarProps {
   onSearch: (term: string) => void;
   placeholder?: string;
+  'data-testid'?: string;
 }
 
-const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search...' }) => {
+const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search...', 'data-testid': testId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
@@ -69,6 +72,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}
+        data-testid={testId || 'search-bar-input'}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
@@ -77,7 +81,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
           ),
           endAdornment: searchTerm && (
             <InputAdornment position="end">
-              <IconButton size="small" onClick={handleClear} aria-label="clear">
+              <IconButton size="small" onClick={handleClear} aria-label="clear" data-testid="search-bar-clear-button">
                 <ClearIcon fontSize="small" />
               </IconButton>
             </InputAdornment>
@@ -89,6 +93,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
         open={open}
         anchorEl={anchorEl}
         onClose={handleClose}
+        data-testid="search-bar-history-popover"
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'left',
@@ -112,6 +117,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
             <ListItem
               key={index}
               onClick={() => handleHistoryItemClick(term)}
+              data-testid={`search-history-item-${index}`}
               sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
             >
               <ListItemText primary={term} />

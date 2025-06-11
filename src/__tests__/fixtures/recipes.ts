@@ -14,6 +14,20 @@ export const mockIngredients: Ingredient[] = [
   { name: 'butter', amount: 0.25, unit: 'cup' },
 ];
 
+// Mock ingredients with sections for testing sectioned display
+export const mockSectionedIngredients: Ingredient[] = [
+  { name: 'all-purpose flour', amount: 3, unit: 'cups', section: 'White Cake Layer' },
+  { name: 'milk', amount: 1.5, unit: 'cups', section: 'White Cake Layer' },
+  { name: 'white sugar', amount: 1, unit: 'cup', section: 'White Cake Layer' },
+  { name: 'eggs', amount: 2, unit: 'large', section: 'White Cake Layer' },
+  { name: 'butter, softened', amount: 1, unit: 'cup', section: 'Cinnamon Layer' },
+  { name: 'brown sugar', amount: 1, unit: 'cup', section: 'Cinnamon Layer' },
+  { name: 'ground cinnamon', amount: 1, unit: 'tablespoon', section: 'Cinnamon Layer' },
+  { name: 'confectioners\' sugar', amount: 2, unit: 'cups', section: 'Glaze' },
+  { name: 'milk', amount: 5, unit: 'tablespoons', section: 'Glaze' },
+  { name: 'vanilla extract', amount: 1, unit: 'teaspoon', section: 'Glaze' },
+];
+
 export const mockRecipe: Recipe = {
   id: 'test-recipe-123',
   title: 'Chocolate Chip Cookies',

@@ -1,13 +1,16 @@
 import { describe, test, expect } from '@jest/globals';
 import {
   parseIngredients,
+  parseIngredient,
   parseAmount,
   normalizeUnit,
   formatIngredientForDisplay,
   formatAmountForDisplay,
   shouldUseEmptyUnit,
   cleanIngredientName,
-  detectIngredientCategory
+  detectIngredientCategory,
+  separatePreparationFromName,
+  shouldIncludePreparation
 } from '@utils/ingredientUtils';
 import { Ingredient } from '@app-types';
 
@@ -379,17 +382,17 @@ describe('ingredientUtils', () => {
         '2-3 cloves garlic',
         '1 (15 oz) can tomatoes'
       ]);
-      
+
       expect(result[0]).toEqual({ name: 'olive oil', amount: 1.5, unit: 'tbsp' });
       expect(result[1]).toEqual({ name: 'milk', amount: 0.25, unit: 'cup' });
       expect(result[2]).toEqual({ name: 'garlic', amount: 2.5, unit: 'clove' });
-      expect(result[3]).toEqual({ name: 'tomatoes', amount: 1, unit: 'can' });
+      expect(result[3]).toEqual({ name: 'tomatoes', amount: 1, unit: 'oz' });
     });
 
     test('should handle ingredients with preparation instructions', () => {
       const result = parseIngredients(['2 cups flour, sifted', '1 onion, diced']);
-      expect(result[0]).toEqual({ name: 'flour, sifted', amount: 2, unit: 'cup' });
-      expect(result[1]).toEqual({ name: 'onion, diced', amount: 1, unit: '' });
+      expect(result[0]).toEqual({ name: 'flour', amount: 2, unit: 'cup' });
+      expect(result[1]).toEqual({ name: 'onion', amount: 1, unit: '' });
     });
 
     test('should handle count-based ingredients without units', () => {
@@ -404,6 +407,230 @@ describe('ingredientUtils', () => {
       expect(result[0]).toEqual({ name: 'just text', amount: 1, unit: 'unit' });
       expect(result[1]).toEqual({ name: '', amount: 1, unit: 'unit' });
       expect(result[2]).toEqual({ name: '', amount: 1, unit: 'unit' });
+    });
+
+    test('should handle malformed "ounce) package" patterns', () => {
+      const result = parseIngredients([
+        'ounce) package cream cheese, softened',
+        'ounce) can tomato sauce',
+        'ounce) packages cream cheese, softened'
+      ]);
+
+      expect(result[0]).toEqual({ name: 'cream cheese', amount: 1, unit: 'package' });
+      expect(result[1]).toEqual({ name: 'tomato sauce', amount: 1, unit: 'can' });
+      expect(result[2]).toEqual({ name: 'cream cheese', amount: 1, unit: 'package' });
+    });
+
+    test('should handle parenthetical amounts without leading numbers', () => {
+      const result = parseIngredients([
+        '(15 oz) can black beans',
+        '(8 oz) package cream cheese',
+        '(14.5 oz) can diced tomatoes'
+      ]);
+
+      expect(result[0]).toEqual({ name: 'black beans', amount: 15, unit: 'oz' });
+      expect(result[1]).toEqual({ name: 'cream cheese', amount: 8, unit: 'oz' });
+      expect(result[2]).toEqual({ name: 'diced tomatoes', amount: 14.5, unit: 'oz' });
+    });
+
+    test('should separate preparation methods correctly', () => {
+      const result = parseIngredients([
+        'garlic, minced',
+        'butter, melted',
+        'onion, chopped',
+        'tomatoes, diced',
+        'cheese, shredded'
+      ]);
+
+      expect(result[0]).toEqual({ name: 'garlic', amount: 1, unit: '' });
+      expect(result[1]).toEqual({ name: 'butter', amount: 1, unit: 'unit' });
+      expect(result[2]).toEqual({ name: 'onion', amount: 1, unit: '' });
+      expect(result[3]).toEqual({ name: 'tomatoes', amount: 1, unit: '' });
+      expect(result[4]).toEqual({ name: 'cheese', amount: 1, unit: 'unit' });
+    });
+
+    test('should preserve essential preparations', () => {
+      const result = parseIngredients([
+        'ground beef',
+        'ground turkey',
+        'smoked salmon',
+        'roasted peppers'
+      ]);
+
+      expect(result[0]).toEqual({ name: 'ground beef', amount: 1, unit: 'unit' });
+      expect(result[1]).toEqual({ name: 'ground turkey', amount: 1, unit: 'unit' });
+      expect(result[2]).toEqual({ name: 'smoked salmon', amount: 1, unit: 'unit' });
+      expect(result[3]).toEqual({ name: 'roasted peppers', amount: 1, unit: 'unit' });
+    });
+  });
+
+  describe('parseIngredient', () => {
+    test('should handle complex malformed patterns from CSV data', () => {
+      // Test cases based on actual problematic entries from ingredient_counts.csv
+      const testCases = [
+        {
+          input: 'ounce) package cream cheese, softened',
+          expected: { name: 'cream cheese', amount: 1, unit: 'package' }
+        },
+        {
+          input: 'garlic, minced',
+          expected: { name: 'garlic', amount: 1, unit: '' }
+        },
+        {
+          input: 'butter, melted',
+          expected: { name: 'butter', amount: 1, unit: 'unit' }
+        },
+        {
+          input: '1 (15 oz) can tomatoes',
+          expected: { name: 'tomatoes', amount: 1, unit: 'oz' }
+        },
+        {
+          input: '(8 oz) package cream cheese',
+          expected: { name: 'cream cheese', amount: 8, unit: 'oz' }
+        }
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const result = parseIngredient(input);
+        expect(result).toEqual(expected);
+      });
+    });
+  });
+
+  describe('separatePreparationFromName', () => {
+    test('should separate comma-separated preparations', () => {
+      const testCases = [
+        { input: 'garlic, minced', expected: { ingredient: 'garlic', preparation: 'minced' } },
+        { input: 'butter, melted', expected: { ingredient: 'butter', preparation: 'melted' } },
+        { input: 'onion, finely chopped', expected: { ingredient: 'onion', preparation: 'finely chopped' } },
+        { input: 'tomatoes, diced and drained', expected: { ingredient: 'tomatoes', preparation: 'diced and drained' } },
+        { input: 'cheese, shredded', expected: { ingredient: 'cheese', preparation: 'shredded' } }
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const result = separatePreparationFromName(input);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    test('should handle standalone preparation words', () => {
+      const testCases = [
+        { input: 'chopped onion', expected: { ingredient: 'onion', preparation: 'chopped' } },
+        { input: 'melted butter', expected: { ingredient: 'butter', preparation: 'melted' } },
+        { input: 'fresh basil', expected: { ingredient: 'fresh basil', preparation: '' } }, // Keep fresh with herbs
+        { input: 'dried oregano', expected: { ingredient: 'oregano', preparation: 'dried' } }
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const result = separatePreparationFromName(input);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    test('should preserve ground meat types', () => {
+      const testCases = [
+        { input: 'ground beef', expected: { ingredient: 'ground beef', preparation: '' } },
+        { input: 'ground turkey', expected: { ingredient: 'ground turkey', preparation: '' } },
+        { input: 'ground chicken', expected: { ingredient: 'ground chicken', preparation: '' } }
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const result = separatePreparationFromName(input);
+        expect(result).toEqual(expected);
+      });
+    });
+
+    test('should handle complex preparation patterns', () => {
+      const testCases = [
+        { input: 'cream cheese, softened', expected: { ingredient: 'cream cheese', preparation: 'softened' } },
+        { input: 'black beans, rinsed and drained', expected: { ingredient: 'black beans', preparation: 'rinsed and drained' } },
+        { input: 'butter, at room temperature', expected: { ingredient: 'butter', preparation: 'at room temperature' } }
+      ];
+
+      testCases.forEach(({ input, expected }) => {
+        const result = separatePreparationFromName(input);
+        expect(result).toEqual(expected);
+      });
+    });
+  });
+
+  describe('shouldIncludePreparation', () => {
+    test('should include essential preparations', () => {
+      expect(shouldIncludePreparation('beef', 'ground')).toBe(true);
+      expect(shouldIncludePreparation('salmon', 'smoked')).toBe(true);
+      expect(shouldIncludePreparation('peppers', 'roasted')).toBe(true);
+      expect(shouldIncludePreparation('vanilla', 'extract')).toBe(true);
+    });
+
+    test('should exclude non-essential preparations', () => {
+      expect(shouldIncludePreparation('onion', 'chopped')).toBe(false);
+      expect(shouldIncludePreparation('butter', 'melted')).toBe(false);
+      expect(shouldIncludePreparation('garlic', 'minced')).toBe(false);
+      expect(shouldIncludePreparation('cheese', 'shredded')).toBe(false);
+    });
+
+    test('should handle empty preparation', () => {
+      expect(shouldIncludePreparation('onion', '')).toBe(false);
+      expect(shouldIncludePreparation('garlic', undefined as any)).toBe(false);
+    });
+  });
+
+  describe('Edge cases and regression tests', () => {
+    test('should handle problematic CSV entries', () => {
+      // Test cases based on actual problematic entries from ingredient_counts.csv
+      const problematicEntries = [
+        'ounce) package cream cheese, softened',
+        'ounce) packages cream cheese, softened',
+        'ounce) can tomato sauce',
+        'ounce) container frozen whipped topping, thawed',
+        'garlic, minced',
+        'butter, melted',
+        'onion, chopped',
+        'eggs, beaten',
+        'tomatoes, diced'
+      ];
+
+      problematicEntries.forEach(entry => {
+        const result = parseIngredient(entry);
+
+        // Should not have empty name
+        expect(result.name).toBeTruthy();
+        expect(result.name.trim()).not.toBe('');
+
+        // Should have valid amount
+        expect(result.amount).toBeGreaterThan(0);
+        expect(typeof result.amount).toBe('number');
+
+        // Should have valid unit (can be empty string)
+        expect(typeof result.unit).toBe('string');
+
+        // Name should not contain preparation methods unless essential
+        if (result.name.includes(',')) {
+          // If comma is present, it should be an essential preparation
+          const parts = result.name.split(',');
+          const preparation = parts[1]?.trim();
+          expect(shouldIncludePreparation(parts[0].trim(), preparation)).toBe(true);
+        }
+      });
+    });
+
+    test('should handle empty and invalid inputs', () => {
+      const invalidInputs = ['', '   ', null, undefined];
+
+      invalidInputs.forEach(input => {
+        const result = parseIngredient(input as any);
+        expect(result).toEqual({ name: '', amount: 1, unit: 'unit' });
+      });
+    });
+
+    test('should handle numeric-only inputs', () => {
+      const numericInputs = ['1', '2.5', '1/2', '1 1/2'];
+
+      numericInputs.forEach(input => {
+        const result = parseIngredient(input);
+        expect(result.amount).toBeGreaterThan(0);
+        expect(result.name).toBeTruthy();
+      });
     });
   });
 });

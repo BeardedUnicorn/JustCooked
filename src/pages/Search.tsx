@@ -264,6 +264,7 @@ const Search: React.FC = () => {
           onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
           onFocus={() => setShowSearchSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSearchSuggestions(false), 150)} // Delay to allow click on suggestion
+          data-testid="search-page-input"
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -272,7 +273,7 @@ const Search: React.FC = () => {
             ),
             endAdornment: searchTerm && (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={() => setSearchTerm('')} aria-label="clear search">
+                <IconButton size="small" onClick={() => setSearchTerm('')} aria-label="clear search" data-testid="search-page-clear-button">
                   <ClearIcon fontSize="small" />
                 </IconButton>
               </InputAdornment>
@@ -329,6 +330,7 @@ const Search: React.FC = () => {
             value={sortBy}
             label="Sort By"
             onChange={(e) => setSortBy(e.target.value)}
+            data-testid="search-sort-select"
           >
             <MenuItem value="dateAdded">Date Added</MenuItem>
             <MenuItem value="title">Title A-Z</MenuItem>
@@ -342,6 +344,7 @@ const Search: React.FC = () => {
           onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
           variant={getActiveFilterCount() > 0 ? 'contained' : 'outlined'}
           sx={{ minWidth: 'fit-content' }}
+          data-testid="search-filters-button"
         >
           Filters {getActiveFilterCount() > 0 && `(${getActiveFilterCount()})`}
         </Button>
@@ -352,6 +355,7 @@ const Search: React.FC = () => {
             onClick={handleClearFilters}
             variant="outlined"
             color="secondary"
+            data-testid="search-clear-all-button"
           >
             Clear All
           </Button>
@@ -544,6 +548,7 @@ const Search: React.FC = () => {
             onClick={handleLoadMore}
             disabled={loadingMore}
             startIcon={loadingMore ? <CircularProgress size={20} /> : undefined}
+            data-testid="search-load-more-button"
           >
             {loadingMore ? 'Loading...' : 'Load More Recipes'}
           </Button>

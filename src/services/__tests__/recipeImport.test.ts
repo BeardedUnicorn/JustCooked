@@ -126,14 +126,78 @@ describe('recipeImport', () => {
     test('should fall back to original image URL on image processing failure', async () => {
       // The actual implementation of processRecipeImage catches the error and returns the original URL
       mockProcessRecipeImage.mockResolvedValue(mockImportedRecipe.image);
-      
+
       await importRecipeFromUrl(url);
 
       expect(mockSaveRecipe).toHaveBeenCalled();
       const savedRecipe = mockSaveRecipe.mock.calls[0][0];
-      
+
       // The recipe should still be saved, but with the original image URL
       expect(savedRecipe.image).toBe(mockImportedRecipe.image);
+    });
+
+    test('should auto-detect and save ingredients during import', async () => {
+      await importRecipeFromUrl(url);
+
+      // Verify that autoDetectIngredients was called with ingredient names
+      expect(mockAutoDetectIngredients).toHaveBeenCalledWith([
+        'all-purpose flour',
+        'granulated sugar',
+        'eggs',
+        'milk',
+        'butter'
+      ]);
+    });
+
+    test('should continue recipe import even if ingredient detection fails', async () => {
+      // Mock ingredient detection to fail
+      mockAutoDetectIngredients.mockImplementation(() => {
+        throw new Error('Ingredient detection failed');
+      });
+
+      // Recipe import should still succeed
+      await importRecipeFromUrl(url);
+
+      expect(mockSaveRecipe).toHaveBeenCalled();
+      const savedRecipe = mockSaveRecipe.mock.calls[0][0];
+      expect(savedRecipe.title).toBe('Chocolate Chip Cookies');
+    });
+
+    test('should await ingredient detection before saving recipe', async () => {
+      let ingredientDetectionCompleted = false;
+
+      // Mock ingredient detection with delay to test async behavior
+      mockAutoDetectIngredients.mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        ingredientDetectionCompleted = true;
+        return [];
+      });
+
+      // Mock save recipe to verify ingredient detection completed first
+      mockSaveRecipe.mockImplementation(async () => {
+        expect(ingredientDetectionCompleted).toBe(true);
+      });
+
+      await importRecipeFromUrl(url);
+
+      expect(mockAutoDetectIngredients).toHaveBeenCalled();
+      expect(mockSaveRecipe).toHaveBeenCalled();
+    });
+
+    test('should handle empty ingredients gracefully', async () => {
+      // Mock recipe with no ingredients
+      mockInvoke.mockResolvedValue({
+        ...mockImportedRecipe,
+        ingredients: [],
+      });
+
+      await importRecipeFromUrl(url);
+
+      // Verify empty ingredient list was handled
+      expect(mockAutoDetectIngredients).toHaveBeenCalledWith([]);
+
+      const savedRecipe = mockSaveRecipe.mock.calls[0][0];
+      expect(savedRecipe.ingredients).toEqual([]);
     });
   });
 });

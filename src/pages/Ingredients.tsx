@@ -182,18 +182,20 @@ const Ingredients: React.FC = () => {
             variant="outlined"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="ingredients-search-input"
             InputProps={{
               startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
             }}
             sx={{ minWidth: 300, flex: 1 }}
           />
-          
+
           <FormControl sx={{ minWidth: 200 }}>
             <InputLabel>Category</InputLabel>
             <Select
               value={selectedCategory}
               label="Category"
               onChange={(e) => setSelectedCategory(e.target.value)}
+              data-testid="ingredients-category-select"
             >
               <MenuItem value="all">All Categories</MenuItem>
               {INGREDIENT_CATEGORIES.map(category => (
@@ -221,7 +223,7 @@ const Ingredients: React.FC = () => {
             </TableHead>
             <TableBody>
               {paginatedIngredients.map((ingredient) => (
-                <TableRow key={ingredient.id} hover>
+                <TableRow key={ingredient.id} hover data-testid={`ingredient-row-${ingredient.id}`}>
                   <TableCell>
                     <Typography variant="body1" fontWeight="medium">
                       {ingredient.name}
@@ -263,6 +265,7 @@ const Ingredients: React.FC = () => {
                         <IconButton
                           size="small"
                           onClick={() => handleOpenDialog(ingredient)}
+                          data-testid={`ingredient-${ingredient.id}-edit-button`}
                         >
                           <EditIcon />
                         </IconButton>
@@ -272,6 +275,7 @@ const Ingredients: React.FC = () => {
                           size="small"
                           color="error"
                           onClick={() => handleDeleteIngredient(ingredient.id)}
+                          data-testid={`ingredient-${ingredient.id}-delete-button`}
                         >
                           <DeleteIcon />
                         </IconButton>
@@ -304,12 +308,13 @@ const Ingredients: React.FC = () => {
         aria-label="add ingredient"
         sx={{ position: 'fixed', bottom: 16, right: 16 }}
         onClick={() => handleOpenDialog()}
+        data-testid="ingredients-add-fab"
       >
         <AddIcon />
       </Fab>
 
       {/* Add/Edit Ingredient Dialog */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth data-testid="ingredients-dialog">
         <DialogTitle>
           {editingIngredient ? 'Edit Ingredient' : 'Add New Ingredient'}
         </DialogTitle>
@@ -319,7 +324,7 @@ const Ingredients: React.FC = () => {
               {error}
             </Alert>
           )}
-          
+
           <TextField
             label="Ingredient Name"
             fullWidth
@@ -327,14 +332,16 @@ const Ingredients: React.FC = () => {
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             margin="normal"
             required
+            data-testid="ingredients-dialog-name-input"
           />
-          
+
           <FormControl fullWidth margin="normal">
             <InputLabel>Category</InputLabel>
             <Select
               value={formData.category}
               label="Category"
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              data-testid="ingredients-dialog-category-select"
             >
               {INGREDIENT_CATEGORIES.map(category => (
                 <MenuItem key={category.id} value={category.id}>
@@ -353,11 +360,12 @@ const Ingredients: React.FC = () => {
             helperText="Alternative names for this ingredient, separated by commas"
             multiline
             rows={2}
+            data-testid="ingredients-dialog-aliases-input"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSaveIngredient} variant="contained">
+          <Button onClick={handleCloseDialog} data-testid="ingredients-dialog-cancel-button">Cancel</Button>
+          <Button onClick={handleSaveIngredient} variant="contained" data-testid="ingredients-dialog-save-button">
             {editingIngredient ? 'Update' : 'Add'}
           </Button>
         </DialogActions>

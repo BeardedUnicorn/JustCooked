@@ -170,6 +170,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       onClose={handleClose}
       maxWidth="md"
       fullWidth
+      data-testid="batch-import-dialog"
       PaperProps={{
         sx: { minHeight: '500px' }
       }}
@@ -196,6 +197,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://www.allrecipes.com/recipes/79/desserts"
                 error={url.length > 0 && !isValidUrl(url)}
+                data-testid="batch-import-url-input"
                 helperText={
                   url.length > 0 && !isValidUrl(url)
                     ? 'Please enter a valid AllRecipes category URL'
@@ -211,6 +213,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                   <Switch
                     checked={limitRecipes}
                     onChange={(e) => setLimitRecipes(e.target.checked)}
+                    data-testid="batch-import-limit-switch"
                   />
                 }
                 label="Limit number of recipes"
@@ -222,6 +225,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                   value={maxRecipes}
                   onChange={(e) => setMaxRecipes(e.target.value === '' ? '' : Number(e.target.value))}
                   inputProps={{ min: 1, max: 1000 }}
+                  data-testid="batch-import-max-recipes-input"
                   sx={{ mt: 1, width: '200px' }}
                   helperText="Recommended: 50-100 recipes for testing"
                 />
@@ -284,19 +288,20 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       <DialogActions>
         {!isImporting ? (
           <>
-            <Button onClick={handleClose}>Cancel</Button>
+            <Button onClick={handleClose} data-testid="batch-import-cancel-button">Cancel</Button>
             <Button
               variant="contained"
               onClick={handleStartImport}
               disabled={!url.trim() || !isValidUrl(url)}
               startIcon={<DownloadIcon />}
+              data-testid="batch-import-start-button"
             >
               Start Import
             </Button>
           </>
         ) : (
           <>
-            <Button onClick={handleCancelImport} color="error">
+            <Button onClick={handleCancelImport} color="error" data-testid="batch-import-cancel-import-button">
               Cancel Import
             </Button>
           </>

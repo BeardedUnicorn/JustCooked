@@ -81,7 +81,12 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
 
     // Auto-detect and add new ingredients to the database
     const ingredientNames = parsedIngredients.map(ing => ing.name);
-    autoDetectIngredients(ingredientNames);
+    try {
+      await autoDetectIngredients(ingredientNames);
+    } catch (error) {
+      console.warn('Failed to auto-detect ingredients, continuing with recipe import:', error);
+      // Don't fail the entire import if ingredient detection fails
+    }
 
     // Save the recipe
     await saveRecipe(recipe);

@@ -120,6 +120,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             edge="start"
             onClick={() => setOpen(!open)}
             sx={{ mr: theme.spacing(2) }}
+            data-testid="navigation-drawer-toggle"
           >
             <MenuIcon />
           </IconButton>
@@ -132,6 +133,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <SearchBar
               onSearch={handleSearch}
               placeholder="Search recipes..."
+              data-testid="app-layout-search-bar"
             />
           </Box>
           <Box sx={{ flexGrow: 1 }} />
@@ -160,6 +162,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 key={item.text}
                 component="button"
                 onClick={() => navigate(item.path)}
+                data-testid={`navigation-menu-${item.label.toLowerCase()}`}
                 sx={{
                   cursor: 'pointer',
                   backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
@@ -217,6 +220,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           anchor="left"
           open={open}
           onClose={() => setOpen(false)}
+          data-testid="mobile-navigation-drawer"
           ModalProps={{
             keepMounted: true, // Better open performance on mobile
           }}
@@ -241,6 +245,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   navigate(item.path);
                   setOpen(false);
                 }}
+                data-testid={`mobile-navigation-menu-${item.label.toLowerCase()}`}
                 sx={{
                   cursor: 'pointer',
                   backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
@@ -344,6 +349,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           onChange={(_, newValue) => {
             navigate(newValue);
           }}
+          data-testid="mobile-bottom-navigation"
           sx={{
             position: 'fixed',
             bottom: 0,
@@ -361,6 +367,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               value={item.path}
               icon={item.icon}
               aria-label={`Navigate to ${item.text}`}
+              data-testid={`mobile-bottom-nav-${item.label.toLowerCase()}`}
             />
           ))}
         </BottomNavigation>

@@ -8,6 +8,9 @@ mod image_storage;
 mod batch_import;
 mod database;
 
+#[cfg(test)]
+mod ingredient_parsing_tests;
+
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
@@ -46,6 +49,7 @@ struct FrontendIngredient {
     name: String,
     amount: f64,
     unit: String,
+    section: Option<String>,
 }
 
 #[tauri::command]
@@ -86,29 +90,16 @@ fn convert_imported_recipe_to_frontend(imported: ImportedRecipe) -> FrontendReci
     let current_time = chrono::Utc::now().to_rfc3339();
     
     // Parse ingredients from strings to structured format
-    let ingredients = imported.ingredients.iter().map(|ingredient_str| {
-        // Simple parsing - in a real implementation, you might want more sophisticated parsing
-        let parts: Vec<&str> = ingredient_str.splitn(3, ' ').collect();
-        let (amount, unit, name) = if parts.len() >= 3 {
-            let amount_str = parts[0];
-            let amount = amount_str.parse::<f64>().unwrap_or(1.0);
-            let unit = parts[1].to_string();
-            let name = parts[2..].join(" ");
-            (amount, unit, name)
-        } else if parts.len() == 2 {
-            let amount_str = parts[0];
-            let amount = amount_str.parse::<f64>().unwrap_or(1.0);
-            let name = parts[1].to_string();
-            (amount, "".to_string(), name)
+    let ingredients = imported.ingredients.iter().filter_map(|ingredient_str| {
+        // Check if ingredient has section information (format: [Section Name] ingredient text)
+        let (section, ingredient_text) = if let Some(captures) = regex::Regex::new(r"^\[([^\]]+)\]\s*(.+)$").unwrap().captures(ingredient_str) {
+            (Some(captures[1].to_string()), captures[2].to_string())
         } else {
-            (1.0, "".to_string(), ingredient_str.clone())
+            (None, ingredient_str.clone())
         };
-        
-        FrontendIngredient {
-            name,
-            amount,
-            unit,
-        }
+
+        // Parse ingredient using improved logic
+        parse_ingredient_string(&ingredient_text, section)
     }).collect();
     
     // Parse tags from keywords
@@ -429,6 +420,217 @@ async fn db_clear_search_history(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Parse ingredient string into structured format with improved logic
+fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Option<FrontendIngredient> {
+    let trimmed = ingredient_text.trim();
+
+    // Skip empty or invalid ingredients
+    if trimmed.is_empty() || !is_valid_ingredient_name(trimmed) {
+        return None;
+    }
+
+    // Try to parse amount, unit, and name using regex patterns
+    let patterns = [
+        // Pattern 1: "2 cups all-purpose flour"
+        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(cup|cups|tablespoon|tablespoons|tbsp|teaspoon|teaspoons|tsp|pound|pounds|lb|ounce|ounces|oz|gram|grams|g|kilogram|kilograms|kg|liter|liters|l|milliliter|milliliters|ml|pint|pints|pt|quart|quarts|qt|gallon|gallons|gal|clove|cloves|slice|slices|piece|pieces|can|cans|package|packages|jar|jars|bottle|bottles)\s+(.+)$",
+        // Pattern 2: "2 large eggs"
+        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(large|medium|small|whole|fresh|dried)\s+(.+)$",
+        // Pattern 3: "1/2 onion, diced"
+        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(.+?)(?:,\s*(.+))?$",
+    ];
+
+    for pattern in &patterns {
+        if let Ok(regex) = regex::Regex::new(pattern) {
+            if let Some(captures) = regex.captures(trimmed) {
+                let amount_str = captures.get(1)?.as_str();
+                let amount = parse_fraction_to_decimal(amount_str);
+
+                let (unit, name) = if captures.len() > 3 {
+                    // Pattern with unit
+                    let unit = captures.get(2)?.as_str().to_string();
+                    let name = captures.get(3)?.as_str().to_string();
+                    (normalize_unit(&unit), clean_ingredient_name(&name))
+                } else {
+                    // Pattern without explicit unit
+                    let name = captures.get(2)?.as_str().to_string();
+                    let cleaned_name = clean_ingredient_name(&name);
+                    let unit = if should_use_empty_unit(&cleaned_name) { "".to_string() } else { "unit".to_string() };
+                    (unit, cleaned_name)
+                };
+
+                if !name.is_empty() && is_valid_ingredient_name(&name) {
+                    return Some(FrontendIngredient {
+                        name,
+                        amount,
+                        unit,
+                        section,
+                    });
+                }
+            }
+        }
+    }
+
+    // Fallback: treat as ingredient name with amount 1
+    let cleaned_name = clean_ingredient_name(trimmed);
+    if !cleaned_name.is_empty() && is_valid_ingredient_name(&cleaned_name) {
+        let unit = if should_use_empty_unit(&cleaned_name) { "".to_string() } else { "unit".to_string() };
+        Some(FrontendIngredient {
+            name: cleaned_name,
+            amount: 1.0,
+            unit,
+            section,
+        })
+    } else {
+        None
+    }
+}
+
+/// Parse fraction strings to decimal
+fn parse_fraction_to_decimal(amount_str: &str) -> f64 {
+    let trimmed = amount_str.trim();
+
+    // Handle mixed numbers like "1 1/2"
+    if let Some(space_pos) = trimmed.find(' ') {
+        let whole_part = &trimmed[..space_pos];
+        let fraction_part = &trimmed[space_pos + 1..];
+
+        let whole = whole_part.parse::<f64>().unwrap_or(0.0);
+        let fraction = parse_simple_fraction(fraction_part);
+        return whole + fraction;
+    }
+
+    // Handle simple fractions like "1/2"
+    if trimmed.contains('/') {
+        return parse_simple_fraction(trimmed);
+    }
+
+    // Handle unicode fractions
+    match trimmed {
+        "¼" => 0.25,
+        "½" => 0.5,
+        "¾" => 0.75,
+        "⅓" => 0.333,
+        "⅔" => 0.667,
+        "⅛" => 0.125,
+        "⅜" => 0.375,
+        "⅝" => 0.625,
+        "⅞" => 0.875,
+        _ => trimmed.parse::<f64>().unwrap_or(1.0)
+    }
+}
+
+/// Parse simple fractions like "1/2"
+fn parse_simple_fraction(fraction_str: &str) -> f64 {
+    if let Some(slash_pos) = fraction_str.find('/') {
+        let numerator = fraction_str[..slash_pos].parse::<f64>().unwrap_or(1.0);
+        let denominator = fraction_str[slash_pos + 1..].parse::<f64>().unwrap_or(1.0);
+        if denominator != 0.0 {
+            return numerator / denominator;
+        }
+    }
+    1.0
+}
+
+/// Normalize unit names to standard forms
+fn normalize_unit(unit: &str) -> String {
+    match unit.to_lowercase().as_str() {
+        "cup" | "cups" | "c" => "cup".to_string(),
+        "tablespoon" | "tablespoons" | "tbsp" | "tbs" => "tbsp".to_string(),
+        "teaspoon" | "teaspoons" | "tsp" => "tsp".to_string(),
+        "pound" | "pounds" | "lb" => "lb".to_string(),
+        "ounce" | "ounces" | "oz" => "oz".to_string(),
+        "gram" | "grams" | "g" => "g".to_string(),
+        "kilogram" | "kilograms" | "kg" => "kg".to_string(),
+        "liter" | "liters" | "l" => "liter".to_string(),
+        "milliliter" | "milliliters" | "ml" => "ml".to_string(),
+        "pint" | "pints" | "pt" => "pint".to_string(),
+        "quart" | "quarts" | "qt" => "quart".to_string(),
+        "gallon" | "gallons" | "gal" => "gallon".to_string(),
+        "clove" | "cloves" => "clove".to_string(),
+        "slice" | "slices" => "slice".to_string(),
+        "piece" | "pieces" => "piece".to_string(),
+        "can" | "cans" => "can".to_string(),
+        "package" | "packages" => "package".to_string(),
+        "jar" | "jars" => "jar".to_string(),
+        "bottle" | "bottles" => "bottle".to_string(),
+        _ => unit.to_string(),
+    }
+}
+
+/// Clean ingredient name by removing preparation instructions
+fn clean_ingredient_name(name: &str) -> String {
+    let mut cleaned = name.trim().to_string();
+
+    // Remove preparation instructions after commas
+    if let Some(comma_pos) = cleaned.find(',') {
+        cleaned = cleaned[..comma_pos].trim().to_string();
+    }
+
+    // Remove "to taste" and similar phrases
+    cleaned = regex::Regex::new(r"\s*,?\s*(to\s+taste|or\s+to\s+taste|as\s+needed|or\s+as\s+needed|divided)$")
+        .unwrap()
+        .replace(&cleaned, "")
+        .to_string();
+
+    // Remove parenthetical content
+    cleaned = regex::Regex::new(r"\s*\([^)]*\)\s*")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    // Clean up whitespace
+    cleaned = regex::Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .trim()
+        .to_string();
+
+    cleaned
+}
+
+/// Check if ingredient should use empty unit (for count-based items)
+fn should_use_empty_unit(name: &str) -> bool {
+    let lower_name = name.to_lowercase();
+    let count_based = [
+        "egg", "eggs", "onion", "onions", "apple", "apples", "banana", "bananas",
+        "lemon", "lemons", "lime", "limes", "orange", "oranges", "potato", "potatoes",
+        "tomato", "tomatoes", "carrot", "carrots", "clove", "cloves"
+    ];
+
+    count_based.iter().any(|&item| lower_name.contains(item))
+}
+
+/// Validate that an ingredient name is reasonable (reused from recipe_import.rs)
+fn is_valid_ingredient_name(name: &str) -> bool {
+    let trimmed = name.trim();
+
+    // Must have some content
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Must contain at least one letter
+    if !trimmed.chars().any(|c| c.is_alphabetic()) {
+        return false;
+    }
+
+    // Reject obviously invalid names
+    let invalid_names = [
+        "chopped", "sliced", "diced", "minced", "beaten", "melted", "softened",
+        "divided", "taste", "needed", "desired", "optional", "garnish",
+        "spray", "leaf", "leaves", "caps", "whites", "yolks", "cubed",
+        "halved", "quartered", "peeled", "seeded", "trimmed",
+        "or more to taste", "or as needed", "to taste", "as needed"
+    ];
+
+    let lower_name = trimmed.to_lowercase();
+    if invalid_names.iter().any(|&invalid| lower_name == invalid) {
+        return false;
+    }
+
+    true
+}
+
 // Conversion functions
 fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
     use chrono::{DateTime, Utc};
@@ -438,6 +640,7 @@ fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
         amount: ing.amount.to_string(),
         unit: ing.unit,
         category: None,
+        section: ing.section,
     }).collect();
     
     let date_added = DateTime::parse_from_rfc3339(&frontend.date_added)
@@ -476,6 +679,7 @@ fn convert_db_to_frontend_recipe(db: DbRecipe) -> FrontendRecipe {
         name: ing.name,
         amount: ing.amount.parse().unwrap_or(1.0),
         unit: ing.unit,
+        section: ing.section,
     }).collect();
     
     FrontendRecipe {

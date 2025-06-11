@@ -176,6 +176,7 @@ const CookingMode: React.FC = () => {
           onClick={() => navigate(`/recipe/${id}`)}
           variant="outlined"
           size={isMobile ? 'small' : 'medium'}
+          data-testid="cooking-mode-exit-button"
         >
           Exit Cooking
         </Button>
@@ -191,7 +192,7 @@ const CookingMode: React.FC = () => {
           {recipe.title}
         </Typography>
         
-        <IconButton onClick={toggleFullscreen} size={isMobile ? 'small' : 'medium'}>
+        <IconButton onClick={toggleFullscreen} size={isMobile ? 'small' : 'medium'} data-testid="cooking-mode-fullscreen-button">
           {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
         </IconButton>
       </Box>
@@ -215,13 +216,14 @@ const CookingMode: React.FC = () => {
             {formatTime(timer)}
           </Typography>
           <Box sx={{ mt: 1 }}>
-            <IconButton 
+            <IconButton
               onClick={() => setIsTimerRunning(!isTimerRunning)}
               sx={{ color: 'white', mr: 1 }}
+              data-testid="cooking-mode-timer-play-pause"
             >
               {isTimerRunning ? <PauseIcon /> : <PlayArrowIcon />}
             </IconButton>
-            <IconButton onClick={handleStopTimer} sx={{ color: 'white' }}>
+            <IconButton onClick={handleStopTimer} sx={{ color: 'white' }} data-testid="cooking-mode-timer-stop">
               <StopIcon />
             </IconButton>
           </Box>
@@ -242,13 +244,14 @@ const CookingMode: React.FC = () => {
           </Typography>
           <List dense>
             {recipe.ingredients.map((ingredient, index) => (
-              <ListItem key={index} dense>
+              <ListItem key={index} dense data-testid={`cooking-mode-ingredient-${index}`}>
                 <Checkbox
                   checked={checkedIngredients.has(index)}
                   onChange={() => handleIngredientCheck(index)}
                   size="small"
+                  data-testid={`cooking-mode-ingredient-checkbox-${index}`}
                 />
-                <ListItemText 
+                <ListItemText
                   primary={formatIngredientForDisplay(ingredient)}
                   sx={{
                     textDecoration: checkedIngredients.has(index) ? 'line-through' : 'none',
@@ -295,6 +298,7 @@ const CookingMode: React.FC = () => {
                 disabled={currentStep === 0}
                 variant="outlined"
                 size="large"
+                data-testid="cooking-mode-previous-step"
               >
                 Previous
               </Button>
@@ -304,6 +308,7 @@ const CookingMode: React.FC = () => {
                 startIcon={<TimerIcon />}
                 variant="outlined"
                 size="large"
+                data-testid="cooking-mode-timer-button"
               >
                 Timer
               </Button>
@@ -315,6 +320,7 @@ const CookingMode: React.FC = () => {
                 variant="contained"
                 size="large"
                 color={currentStep === recipe.instructions.length - 1 ? 'success' : 'primary'}
+                data-testid="cooking-mode-next-step"
               >
                 {currentStep === recipe.instructions.length - 1 ? 'Complete' : 'Next'}
               </Button>
@@ -324,7 +330,7 @@ const CookingMode: React.FC = () => {
       </Box>
 
       {/* Timer Dialog */}
-      <Dialog open={timerDialogOpen} onClose={() => setTimerDialogOpen(false)}>
+      <Dialog open={timerDialogOpen} onClose={() => setTimerDialogOpen(false)} data-testid="cooking-mode-timer-dialog">
         <DialogTitle>Set Timer</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
@@ -334,6 +340,7 @@ const CookingMode: React.FC = () => {
                 variant="outlined"
                 onClick={() => handleStartTimer(minutes)}
                 size="small"
+                data-testid={`cooking-mode-timer-${minutes}min`}
               >
                 {minutes}m
               </Button>
@@ -341,7 +348,7 @@ const CookingMode: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setTimerDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setTimerDialogOpen(false)} data-testid="cooking-mode-timer-cancel">Cancel</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -113,6 +113,7 @@ const RecipeView: React.FC = () => {
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={handleBack}
+          data-testid="recipe-view-back-button"
         >
           Back
         </Button>
@@ -129,6 +130,7 @@ const RecipeView: React.FC = () => {
             onClick={handleStartCooking}
             size="large"
             aria-label="start cooking mode"
+            data-testid="recipe-view-start-cooking-button"
           >
             Start Cooking
           </Button>
@@ -136,6 +138,7 @@ const RecipeView: React.FC = () => {
             variant="outlined"
             startIcon={<PrintIcon />}
             onClick={handlePrint}
+            data-testid="recipe-view-print-button"
           >
             Print
           </Button>
@@ -144,6 +147,7 @@ const RecipeView: React.FC = () => {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={() => setDeleteDialogOpen(true)}
+            data-testid="recipe-view-delete-button"
           >
             Delete
           </Button>
@@ -155,6 +159,7 @@ const RecipeView: React.FC = () => {
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
+        data-testid="recipe-view-delete-dialog"
       >
         <DialogTitle>Delete Recipe</DialogTitle>
         <DialogContent>
@@ -163,8 +168,8 @@ const RecipeView: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error">Delete</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)} data-testid="recipe-view-delete-cancel">Cancel</Button>
+          <Button onClick={handleDelete} color="error" data-testid="recipe-view-delete-confirm">Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -17,6 +17,7 @@ import { useImageUrl } from '@hooks/useImageUrl';
 import { parseIngredientNameAndPreparation, formatAmountForDisplay } from '@utils/ingredientUtils';
 import { formatTimeForDisplay, calculateTotalTime } from '@utils/timeUtils';
 import { scaleIngredients, isValidServingSize, getScalingDescription } from '@utils/servingUtils';
+import SectionedIngredients from '@components/SectionedIngredients';
 
 interface RecipeDetailProps {
   recipe: Recipe;
@@ -143,6 +144,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                     onClick={decrementServings}
                     disabled={currentServings <= 1}
                     aria-label="decrease servings"
+                    data-testid="recipe-detail-decrease-servings"
                     sx={{
                       width: 28,
                       height: 28,
@@ -161,6 +163,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                       }
                     }}
                     size="small"
+                    data-testid="recipe-detail-servings-input"
                     sx={{
                       width: 60,
                       '& .MuiInputBase-input': {
@@ -181,6 +184,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                     onClick={incrementServings}
                     disabled={currentServings >= 50}
                     aria-label="increase servings"
+                    data-testid="recipe-detail-increase-servings"
                     sx={{
                       width: 28,
                       height: 28,
@@ -234,6 +238,7 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
                 variant="outlined"
                 startIcon={<EditIcon />}
                 onClick={onEdit}
+                data-testid="recipe-detail-edit-button"
               >
                 Edit
               </Button>
@@ -250,45 +255,10 @@ const RecipeDetail: React.FC<RecipeDetailProps> = ({ recipe, onEdit }) => {
               Ingredients
             </Typography>
             <Divider sx={{ mb: 2 }} />
-            <TableContainer>
-              <Table size="small" sx={{ '& .MuiTableCell-root': { border: 'none', py: 1, px: 0.5 } }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Amount</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Ingredient</TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', color: 'text.secondary', fontSize: '0.875rem' }}>Preparation</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {scaledIngredients.map((ingredient, index) => {
-                    const { ingredient: ingredientName, preparation } = parseIngredientNameAndPreparation(ingredient.name);
-                    const amountWithUnit = ingredient.unit 
-                      ? `${formatAmountForDisplay(ingredient.amount)} ${ingredient.unit}`
-                      : formatAmountForDisplay(ingredient.amount);
-                    
-                    return (
-                      <TableRow key={index} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                        <TableCell sx={{ verticalAlign: 'top', minWidth: '80px' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                            {amountWithUnit}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ verticalAlign: 'top' }}>
-                          <Typography variant="body2">
-                            {ingredientName}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ verticalAlign: 'top' }}>
-                          <Typography variant="body2" color="text.secondary" sx={{ fontStyle: preparation ? 'italic' : 'normal' }}>
-                            {preparation || '—'}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <SectionedIngredients
+              ingredients={scaledIngredients}
+              data-testid="recipe-detail-ingredients"
+            />
           </Paper>
         </Grid>
 

@@ -12,7 +12,7 @@ export function shouldUseEmptyUnit(ingredientName: string): boolean {
     'potato', 'potatoes', 'carrot', 'carrots', 'bell pepper', 'bell peppers',
     'avocado', 'avocados', 'cucumber', 'cucumbers', 'zucchini', 'zucchinis',
     'eggplant', 'eggplants', 'mushroom', 'mushrooms', 'clove', 'cloves',
-    'bay leaf', 'bay leaves', 'chicken breast', 'chicken breasts',
+    'garlic', 'bay leaf', 'bay leaves', 'chicken breast', 'chicken breasts',
     'chicken thigh', 'chicken thighs', 'pork chop', 'pork chops',
     'steak', 'steaks', 'fillet', 'fillets', 'shrimp', 'prawns'
   ];
@@ -25,90 +25,163 @@ export function shouldUseEmptyUnit(ingredientName: string): boolean {
 
 // Parse ingredients from array of strings
 export function parseIngredients(ingredientStrings: string[]): Ingredient[] {
-  return ingredientStrings.map(item => {
-    const cleanedItem = item.trim();
+  return ingredientStrings.map(item => parseIngredient(item));
+}
 
-    // Enhanced regex to handle more complex ingredient formats
-    // Matches: amount, unit, name (with optional preparation instructions)
-    const patterns = [
-      // Pattern 0: Fix malformed "1 unit .5 cups milk" -> extract the real amount and unit
-      /^(\d+)\s+unit\s+(\d*\.?\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 1: Mixed numbers like "1 1/2 tablespoons olive oil"
-      /^(\d+\s+\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 2: Simple fractions like "1/2 cup flour"
-      /^(\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 3: Ranges like "2-3 cups flour"
-      /^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞]+-[\d\s\/¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 4: Parenthetical amounts like "1 (15 oz) can tomatoes"
-      /^(\d+)\s*\([^)]+\)\s*([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 5: Unicode fractions like "¼ cup flour"
-      /^([¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 6: Mixed numbers with unicode like "1½ cups flour"
-      /^(\d+[¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 7: Decimal numbers like "1.5 cups flour"
-      /^(\d+\.?\d*)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-      // Pattern 8: Simple whole numbers like "2 cups flour"
-      /^(\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
-    ];
+// Parse a single ingredient string into structured format
+export function parseIngredient(item: string): Ingredient {
+  if (!item || typeof item !== 'string') {
+    return { name: '', amount: 1, unit: 'unit' };
+  }
 
-    for (let i = 0; i < patterns.length; i++) {
-      const pattern = patterns[i];
-      const match = cleanedItem.match(pattern);
-      if (match) {
-        let amountStr, unit, name, preparation;
+  const cleanedItem = item.trim();
+  if (!cleanedItem) {
+    return { name: '', amount: 1, unit: 'unit' };
+  }
 
-        if (i === 0) {
-          // Special handling for malformed "1 unit .5 cups milk" pattern
-          const wholeAmount = parseFloat(match[1]);
-          const decimalAmount = parseFloat(match[2]);
-          const combinedAmount = wholeAmount + decimalAmount;
-          unit = normalizeUnit(match[3].trim());
-          name = match[4] ? match[4].trim() : cleanedItem;
-          preparation = match[5] ? match[5].trim() : '';
+  // Check if ingredient has section information (format: [Section Name] ingredient text)
+  let section: string | undefined;
+  let ingredientText = cleanedItem;
 
-          const finalName = preparation ? `${name}, ${preparation}` : name;
-          return { name: finalName, amount: combinedAmount, unit };
+  const sectionMatch = cleanedItem.match(/^\[([^\]]+)\]\s*(.+)$/);
+  if (sectionMatch) {
+    section = sectionMatch[1].trim();
+    ingredientText = sectionMatch[2].trim();
+  }
+
+  // Enhanced regex patterns to handle complex ingredient formats
+  const patterns = [
+    // Pattern 0: Fix malformed "ounce) package cream cheese, softened" -> extract missing opening parenthesis
+    /^([a-zA-Z]+\))\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 1: Parenthetical amounts like "1 (15 oz) can tomatoes" or "(15 oz) can tomatoes"
+    /^(?:(\d+(?:\s+\d+\/\d+|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])?)\s+)?\(([^)]+)\)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 2: Mixed numbers like "1 1/2 tablespoons olive oil"
+    /^(\d+\s+\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 3: Simple fractions like "1/2 cup flour"
+    /^(\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 4: Ranges like "2-3 cups flour"
+    /^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞]+-[\d\s\/¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 5: Unicode fractions like "¼ cup flour"
+    /^([¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 6: Mixed numbers with unicode like "1½ cups flour"
+    /^(\d+[¼½¾⅓⅔⅛⅜⅝⅞]+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 7: Decimal numbers like "1.5 cups flour"
+    /^(\d+\.?\d*)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+    // Pattern 8: Simple whole numbers like "2 cups flour"
+    /^(\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$/,
+  ];
+
+  for (let i = 0; i < patterns.length; i++) {
+    const match = ingredientText.match(patterns[i]);
+    if (match) {
+      let amount: number;
+      let unit: string;
+      let name: string;
+      let preparation: string = '';
+
+      if (i === 0) {
+        // Handle malformed "ounce) package..." pattern
+        // const malformedUnit = match[1]; // e.g., "ounce)" - not used
+        const restOfIngredient = match[2]; // e.g., "package cream cheese"
+        preparation = match[3] || ''; // e.g., "softened"
+
+        // Extract the unit from the malformed pattern
+        // const unitName = malformedUnit.replace(')', ''); // e.g., "ounce" - not used
+
+        // Parse the rest to find container type and ingredient
+        const restParts = restOfIngredient.split(' ');
+        if (restParts.length >= 2) {
+          const containerType = restParts[0]; // e.g., "package"
+          name = restParts.slice(1).join(' '); // e.g., "cream cheese"
+
+          // Use the container type as the unit
+          unit = normalizeUnit(containerType);
+          amount = 1; // Default amount for malformed patterns
         } else {
-          // Normal pattern handling
-          amountStr = match[1];
-          const detectedUnit = match[2] ? match[2].trim() : '';
-          name = match[3] ? match[3].trim() : cleanedItem;
-          preparation = match[4] ? match[4].trim() : '';
+          // Fallback
+          amount = 1;
+          unit = 'unit';
+          name = restOfIngredient;
+        }
+      } else if (i === 1) {
+        // Handle parenthetical amounts like "1 (15 oz) can tomatoes"
+        const leadingAmount = match[1]; // Could be undefined for "(15 oz) can tomatoes"
+        const parentheticalContent = match[2]; // e.g., "15 oz"
+        const containerType = match[3]; // e.g., "can"
+        const ingredientName = match[4]; // e.g., "tomatoes" or "diced tomatoes"
+        preparation = match[5] || '';
 
-          // Determine the appropriate unit
-          if (detectedUnit) {
-            unit = normalizeUnit(detectedUnit);
-          } else {
-            // Use empty unit for count-based ingredients, otherwise use 'unit'
-            unit = shouldUseEmptyUnit(name) ? '' : 'unit';
-          }
+        // Use leading amount if present, otherwise extract from parenthetical
+        if (leadingAmount) {
+          amount = parseAmount(leadingAmount);
+        } else {
+          const amountMatch = parentheticalContent.match(/^(\d+(?:\.\d+)?)/);
+          amount = amountMatch ? parseFloat(amountMatch[1]) : 1;
+        }
 
-          const amount = parseAmount(amountStr);
-          const finalName = preparation ? `${name}, ${preparation}` : name;
+        // Extract unit from parenthetical content, fallback to container type
+        const unitMatch = parentheticalContent.match(/([a-zA-Z]+)/);
+        if (unitMatch) {
+          unit = normalizeUnit(unitMatch[1]);
+        } else {
+          unit = normalizeUnit(containerType);
+        }
 
-          return { name: finalName, amount, unit };
+        // For the name, preserve the full ingredient name including any descriptors
+        // Don't separate preparation methods for canned/packaged goods
+        name = ingredientName;
+      } else {
+        // Handle normal patterns (2-8)
+        const amountStr = match[1];
+        const detectedUnit = match[2] ? match[2].trim() : '';
+        name = match[3] ? match[3].trim() : cleanedItem;
+        preparation = match[4] ? match[4].trim() : '';
+
+        amount = parseAmount(amountStr);
+
+        // Determine the appropriate unit
+        if (detectedUnit) {
+          unit = normalizeUnit(detectedUnit);
+        } else {
+          // Use empty unit for count-based ingredients, otherwise use 'unit'
+          unit = shouldUseEmptyUnit(name) ? '' : 'unit';
         }
       }
-    }
 
-    // Fallback: try to extract just a number at the beginning
-    const simpleMatch = cleanedItem.match(/^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(.+)$/);
-    if (simpleMatch) {
-      const amount = parseAmount(simpleMatch[1]);
-      const name = simpleMatch[2].trim();
-      // Use empty unit for count-based ingredients, otherwise use 'unit'
-      const unit = shouldUseEmptyUnit(name) ? '' : 'unit';
-      return { name, amount, unit };
-    }
+      // Clean the ingredient name and separate preparation methods
+      // For parenthetical amounts (canned goods), preserve the full name
+      if (i === 1) {
+        // Don't separate preparation methods for canned/packaged goods
+        const finalName = preparation ? `${name}, ${preparation}` : name;
+        return { name: finalName, amount, unit, section };
+      } else {
+        const { ingredient: cleanedName, preparation: extractedPrep } = separatePreparationFromName(name);
+        const finalPreparation = preparation || extractedPrep;
 
-    // Final fallback: treat as ingredient name with amount 1
-    const unit = shouldUseEmptyUnit(cleanedItem) ? '' : 'unit';
-    return {
-      name: cleanedItem,
-      amount: 1,
-      unit,
-    };
-  });
+        // Only include preparation in name if it's essential to the ingredient identity
+        const finalName = shouldIncludePreparation(cleanedName, finalPreparation)
+          ? `${cleanedName}, ${finalPreparation}`
+          : cleanedName;
+
+        return { name: finalName, amount, unit, section };
+      }
+    }
+  }
+
+  // Fallback: try to extract just a number at the beginning
+  const simpleMatch = ingredientText.match(/^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(.+)$/);
+  if (simpleMatch) {
+    const amount = parseAmount(simpleMatch[1]);
+    const rawName = simpleMatch[2].trim();
+    const { ingredient: cleanedName } = separatePreparationFromName(rawName);
+    const unit = shouldUseEmptyUnit(cleanedName) ? '' : 'unit';
+    return { name: cleanedName, amount, unit, section };
+  }
+
+  // Final fallback: treat the entire string as the ingredient name
+  const { ingredient: cleanedName } = separatePreparationFromName(ingredientText);
+  const unit = shouldUseEmptyUnit(cleanedName) ? '' : 'unit';
+  return { name: cleanedName, amount: 1, unit, section };
 }
 
 // Parse amount from string (handles fractions, ranges, unicode fractions)
@@ -210,7 +283,7 @@ export function normalizeUnit(unit: string): string {
 // Parse ingredient name to separate base ingredient from preparation method
 export function parseIngredientNameAndPreparation(name: string): { ingredient: string; preparation: string } {
   const trimmedName = name.trim();
-  
+
   // Common preparation method patterns
   const preparationPatterns = [
     // Comma-separated preparations
@@ -220,13 +293,13 @@ export function parseIngredientNameAndPreparation(name: string): { ingredient: s
     /^(.+?),\s*(room\s+temperature|at\s+room\s+temperature)(.*)$/i,
     /^(.+?),\s*(divided)(.*)$/i,
     /^(.+?),\s*(to\s+taste)(.*)$/i,
-    
+
     // Standalone preparation words at the beginning (but preserve "ground beef", "ground turkey", etc.)
     /^(finely\s+)?(diced|chopped|sliced|minced|grated|shredded|crushed)\s+(.+)$/i,
     /^(melted|softened|cooked|raw|dried|frozen)\s+(.+)$/i,
     /^(fresh)\s+(.+)$/i
   ];
-  
+
   for (const pattern of preparationPatterns) {
     const match = trimmedName.match(pattern);
     if (match) {
@@ -243,20 +316,100 @@ export function parseIngredientNameAndPreparation(name: string): { ingredient: s
         const prep1 = match[1] || '';
         const prep2 = match[2] || '';
         const ingredient = match[3] || match[2] || '';
-        
+
         // Don't separate "ground" from "ground beef", "ground turkey", etc.
         if (prep2 === 'ground' && /^(beef|turkey|chicken|pork|lamb)$/i.test(ingredient)) {
           return { ingredient: trimmedName, preparation: '' };
         }
-        
+
         const preparation = (prep1 + prep2).trim();
         return { ingredient: ingredient.trim(), preparation };
       }
     }
   }
-  
+
   // No preparation method found
   return { ingredient: trimmedName, preparation: '' };
+}
+
+// Enhanced function to separate preparation methods from ingredient names
+export function separatePreparationFromName(name: string): { ingredient: string; preparation: string } {
+  const trimmedName = name.trim();
+
+  // Enhanced preparation method patterns
+  const preparationPatterns = [
+    // Comma-separated preparations with more comprehensive patterns
+    /^(.+?),\s*(finely\s+)?(diced|chopped|sliced|minced|grated|shredded|crushed|ground|julienned)(.*)$/i,
+    /^(.+?),\s*(melted|softened|cooked|raw|fresh|dried|frozen|thawed|drained)(.*)$/i,
+    /^(.+?),\s*(peeled|seeded|stemmed|trimmed|halved|quartered|split|cored|pitted)(.*)$/i,
+    /^(.+?),\s*(room\s+temperature|at\s+room\s+temperature|softened|cubed|cut\s+into\s+pieces)(.*)$/i,
+    /^(.+?),\s*(divided|separated|beaten|whipped|sifted)(.*)$/i,
+    /^(.+?),\s*(to\s+taste|or\s+to\s+taste|or\s+more\s+to\s+taste)(.*)$/i,
+    /^(.+?),\s*(undrained|drained|rinsed|rinsed\s+and\s+drained)(.*)$/i,
+
+    // Standalone preparation words at the beginning
+    /^(finely\s+)?(diced|chopped|sliced|minced|grated|shredded|crushed|julienned)\s+(.+)$/i,
+    /^(melted|softened|cooked|raw|dried|frozen|thawed)\s+(.+)$/i,
+    /^(fresh|dried)\s+(.+)$/i
+  ];
+
+  for (const pattern of preparationPatterns) {
+    const match = trimmedName.match(pattern);
+    if (match) {
+      if (pattern.source.includes('^(.+?),')) {
+        // Comma-separated pattern
+        const ingredient = match[1].trim();
+        const prep1 = match[2] || '';
+        const prep2 = match[3] || '';
+        const prep3 = match[4] || '';
+        const preparation = (prep1 + prep2 + prep3).trim();
+        return { ingredient, preparation };
+      } else {
+        // Standalone preparation at beginning
+        let prep1 = match[1] || '';
+        let prep2 = match[2] || '';
+        let ingredient = match[3] || '';
+
+        // Handle different pattern structures
+        if (!ingredient && prep2) {
+          // Pattern like /^(fresh|dried)\s+(.+)$/i where match[2] is the ingredient
+          ingredient = prep2;
+          prep2 = prep1;
+          prep1 = '';
+        }
+
+        // Don't separate "ground" from "ground beef", "ground turkey", etc.
+        if (prep2 === 'ground' && /^(beef|turkey|chicken|pork|lamb)$/i.test(ingredient)) {
+          return { ingredient: trimmedName, preparation: '' };
+        }
+
+        // Don't separate "fresh" from certain ingredients where it's part of the name
+        if (prep2 === 'fresh' && /^(herbs|basil|parsley|cilantro|dill|mint|thyme|rosemary|oregano)$/i.test(ingredient)) {
+          return { ingredient: trimmedName, preparation: '' };
+        }
+
+        const preparation = (prep1 + prep2).trim();
+        return { ingredient: ingredient.trim(), preparation };
+      }
+    }
+  }
+
+  // No preparation method found
+  return { ingredient: trimmedName, preparation: '' };
+}
+
+// Determine if preparation should be included in the final ingredient name
+export function shouldIncludePreparation(_ingredient: string, preparation: string): boolean {
+  if (!preparation) return false;
+
+  // Essential preparations that affect the ingredient identity
+  const essentialPreparations = [
+    'ground', 'whole', 'crushed', 'powder', 'paste', 'extract', 'concentrate',
+    'smoked', 'cured', 'aged', 'roasted', 'toasted'
+  ];
+
+  const normalizedPrep = preparation.toLowerCase().trim();
+  return essentialPreparations.some(essential => normalizedPrep.includes(essential));
 }
 
 // Format ingredient for display (handles empty units properly)

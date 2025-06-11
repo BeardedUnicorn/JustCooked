@@ -109,6 +109,7 @@ const Import: React.FC = () => {
                 startIcon={<CloudDownloadIcon />}
                 onClick={() => setBatchImportOpen(true)}
                 fullWidth
+                data-testid="import-batch-import-button"
               >
                 Start Batch Import
               </Button>
@@ -135,6 +136,7 @@ const Import: React.FC = () => {
           onKeyPress={handleKeyPress}
           disabled={loading}
           placeholder="https://www.allrecipes.com/recipe/... or any supported site"
+          data-testid="import-url-input"
           sx={{ mb: 3 }}
           inputProps={{
             'aria-describedby': 'url-helper-text',
@@ -149,6 +151,7 @@ const Import: React.FC = () => {
           onClick={handleImport}
           startIcon={loading && <CircularProgress size={20} color="inherit" />}
           aria-label="Import recipe from URL"
+          data-testid="import-recipe-button"
         >
           {loading ? 'Importing...' : 'Import Recipe'}
         </Button>

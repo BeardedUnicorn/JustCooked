@@ -172,6 +172,7 @@ const Collections: React.FC = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => setCreateDialogOpen(true)}
+          data-testid="collections-add-button"
         >
           Add Collection
         </Button>
@@ -201,6 +202,7 @@ const Collections: React.FC = () => {
                   },
                 }}
                 onClick={() => navigate(`/collections/${collection.id}`)}
+                data-testid={`collection-card-${collection.id}`}
               >
                 <CardContent sx={{ flexGrow: 1 }}>
                   <Box display="flex" alignItems="center" mb={2}>
@@ -247,6 +249,7 @@ const Collections: React.FC = () => {
                       openEditDialog(collection);
                     }}
                     aria-label="Edit collection"
+                    data-testid={`collection-${collection.id}-edit-button`}
                   >
                     <EditIcon fontSize="small" />
                   </IconButton>
@@ -258,6 +261,7 @@ const Collections: React.FC = () => {
                       openDeleteDialog(collection);
                     }}
                     aria-label="Delete collection"
+                    data-testid={`collection-${collection.id}-delete-button`}
                   >
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -281,6 +285,7 @@ const Collections: React.FC = () => {
               size="large"
               startIcon={<AddIcon />}
               onClick={() => setCreateDialogOpen(true)}
+              data-testid="collections-create-first-button"
             >
               Create Collection
             </Button>
@@ -292,6 +297,7 @@ const Collections: React.FC = () => {
       <Fab
         color="primary"
         aria-label="add collection"
+        data-testid="collections-fab-button"
         sx={{
           position: 'fixed',
           bottom: 80, // Above bottom navigation on mobile
@@ -304,7 +310,7 @@ const Collections: React.FC = () => {
       </Fab>
 
       {/* Create Collection Dialog */}
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="sm" fullWidth data-testid="collections-create-dialog">
         <DialogTitle>Create New Collection</DialogTitle>
         <DialogContent>
           <TextField
@@ -317,6 +323,7 @@ const Collections: React.FC = () => {
             onChange={(e) => setNewCollectionName(e.target.value)}
             sx={{ mb: 2 }}
             placeholder="e.g., Weeknight Dinners, Holiday Desserts"
+            data-testid="collections-create-name-input"
           />
           <TextField
             margin="dense"
@@ -328,6 +335,7 @@ const Collections: React.FC = () => {
             value={newCollectionDescription}
             onChange={(e) => setNewCollectionDescription(e.target.value)}
             placeholder="Describe what this collection is for..."
+            data-testid="collections-create-description-input"
           />
         </DialogContent>
         <DialogActions>
@@ -335,13 +343,14 @@ const Collections: React.FC = () => {
             setCreateDialogOpen(false);
             setNewCollectionName('');
             setNewCollectionDescription('');
-          }}>
+          }} data-testid="collections-create-cancel-button">
             Cancel
           </Button>
-          <Button 
-            onClick={handleCreateCollection} 
+          <Button
+            onClick={handleCreateCollection}
             variant="contained"
             disabled={!newCollectionName.trim()}
+            data-testid="collections-create-submit-button"
           >
             Create Collection
           </Button>
@@ -349,7 +358,7 @@ const Collections: React.FC = () => {
       </Dialog>
 
       {/* Edit Collection Dialog */}
-      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth data-testid="collections-edit-dialog">
         <DialogTitle>Edit Collection</DialogTitle>
         <DialogContent>
           <TextField
@@ -361,6 +370,7 @@ const Collections: React.FC = () => {
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
             sx={{ mb: 2 }}
+            data-testid="collections-edit-name-input"
           />
           <TextField
             margin="dense"
@@ -371,6 +381,7 @@ const Collections: React.FC = () => {
             variant="outlined"
             value={editDescription}
             onChange={(e) => setEditDescription(e.target.value)}
+            data-testid="collections-edit-description-input"
           />
         </DialogContent>
         <DialogActions>
@@ -379,13 +390,14 @@ const Collections: React.FC = () => {
             setEditingCollection(null);
             setEditName('');
             setEditDescription('');
-          }}>
+          }} data-testid="collections-edit-cancel-button">
             Cancel
           </Button>
-          <Button 
-            onClick={handleEditCollection} 
+          <Button
+            onClick={handleEditCollection}
             variant="contained"
             disabled={!editName.trim()}
+            data-testid="collections-edit-submit-button"
           >
             Save Changes
           </Button>
@@ -393,7 +405,7 @@ const Collections: React.FC = () => {
       </Dialog>
 
       {/* Delete Collection Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} data-testid="collections-delete-dialog">
         <DialogTitle>Delete Collection</DialogTitle>
         <DialogContent>
           <Typography>
@@ -404,10 +416,10 @@ const Collections: React.FC = () => {
           <Button onClick={() => {
             setDeleteDialogOpen(false);
             setDeletingCollection(null);
-          }}>
+          }} data-testid="collections-delete-cancel-button">
             Cancel
           </Button>
-          <Button onClick={handleDeleteCollection} color="error" variant="contained">
+          <Button onClick={handleDeleteCollection} color="error" variant="contained" data-testid="collections-delete-confirm-button">
             Delete
           </Button>
         </DialogActions>

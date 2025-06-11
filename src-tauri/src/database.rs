@@ -10,6 +10,7 @@ pub struct Ingredient {
     pub amount: String,
     pub unit: String,
     pub category: Option<String>,
+    pub section: Option<String>, // Optional section for grouped ingredients
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,6 +316,9 @@ impl Database {
         .execute(&self.pool)
         .await
         .context("Failed to save recipe")?;
+
+        // Auto-detect and save ingredients to the ingredients database
+        self.auto_detect_ingredients_from_recipe(recipe).await?;
 
         Ok(())
     }
@@ -680,6 +684,7 @@ impl Database {
                             amount,
                             unit,
                             category: None,
+                            section: None,
                         })
                     })
                     .collect()
@@ -1119,6 +1124,242 @@ impl Database {
             .context("Failed to clear search history")?;
 
         Ok(())
+    }
+
+    // Ingredient auto-detection methods
+    pub async fn auto_detect_ingredients_from_recipe(&self, recipe: &Recipe) -> Result<()> {
+        let ingredient_names: Vec<String> = recipe.ingredients.iter()
+            .map(|ingredient| self.clean_ingredient_name(&ingredient.name))
+            .collect();
+
+        for name in ingredient_names {
+            // Check if ingredient already exists
+            let existing = self.find_ingredient_by_name(&name).await?;
+
+            if existing.is_none() {
+                // Create new ingredient with auto-detected category
+                let category = self.detect_ingredient_category(&name);
+                let new_ingredient = IngredientDatabase {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: name.clone(),
+                    category,
+                    aliases: Vec::new(),
+                    date_added: chrono::Utc::now().to_rfc3339(),
+                    date_modified: chrono::Utc::now().to_rfc3339(),
+                };
+
+                // Save the new ingredient
+                self.save_ingredient(&new_ingredient).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn find_ingredient_by_name(&self, name: &str) -> Result<Option<IngredientDatabase>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT * FROM ingredients
+            WHERE LOWER(name) = LOWER(?) OR aliases LIKE ?
+            LIMIT 1
+            "#,
+        )
+        .bind(name)
+        .bind(format!("%{}%", name.to_lowercase()))
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to search for existing ingredient")?;
+
+        match rows {
+            Some(row) => Ok(Some(self.row_to_ingredient(row)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn clean_ingredient_name(&self, name: &str) -> String {
+        let mut cleaned = name.trim().to_string();
+
+        // Remove preparation instructions after commas first
+        if let Some(comma_pos) = cleaned.find(',') {
+            cleaned = cleaned[..comma_pos].trim().to_string();
+        }
+
+        // Remove "to taste" and similar phrases
+        cleaned = regex::Regex::new(r"\s*,?\s*(to\s+taste|or\s+to\s+taste|as\s+needed|or\s+as\s+needed|divided)$")
+            .unwrap()
+            .replace(&cleaned, "")
+            .to_string();
+
+        // Remove parenthetical content (like package sizes)
+        cleaned = regex::Regex::new(r"\s*\([^)]*\)\s*")
+            .unwrap()
+            .replace_all(&cleaned, " ")
+            .to_string();
+
+        // Remove malformed quantity patterns at the beginning
+        cleaned = regex::Regex::new(r"^(ounce|pound|cup|tablespoon|teaspoon|gram|kilogram|liter|milliliter)\)\s+")
+            .unwrap()
+            .replace(&cleaned, "")
+            .to_string();
+
+        // Convert to lowercase for consistency
+        cleaned = cleaned.to_lowercase();
+
+        // Remove common descriptive words that aren't part of the core ingredient name
+        let words_to_remove = [
+            "fresh", "dried", "chopped", "diced", "sliced", "minced", "grated",
+            "cooked", "raw", "organic", "large", "small", "medium", "whole",
+            "ground", "crushed", "finely", "roughly", "thinly", "thickly",
+            "frozen", "canned", "bottled", "packaged", "prepared", "ready",
+            "unsalted", "salted", "sweetened", "unsweetened", "light", "heavy",
+            "extra", "pure", "natural", "artificial", "homemade", "store-bought"
+        ];
+
+        for word in &words_to_remove {
+            // Remove word at beginning
+            cleaned = regex::Regex::new(&format!(r"^{}\s+", regex::escape(word)))
+                .unwrap()
+                .replace(&cleaned, "")
+                .to_string();
+            // Remove word at end
+            cleaned = regex::Regex::new(&format!(r"\s+{}$", regex::escape(word)))
+                .unwrap()
+                .replace(&cleaned, "")
+                .to_string();
+            // Remove word in middle (with spaces on both sides)
+            cleaned = regex::Regex::new(&format!(r"\s+{}\s+", regex::escape(word)))
+                .unwrap()
+                .replace_all(&cleaned, " ")
+                .to_string();
+        }
+
+        // Clean up extra whitespace
+        cleaned = regex::Regex::new(r"\s+")
+            .unwrap()
+            .replace_all(&cleaned, " ")
+            .trim()
+            .to_string();
+
+        // Return original if cleaning results in empty string
+        if cleaned.is_empty() {
+            name.trim().to_string()
+        } else {
+            cleaned
+        }
+    }
+
+    fn detect_ingredient_category(&self, name: &str) -> String {
+        let name_lower = name.to_lowercase();
+
+        // Vegetables
+        let vegetables = [
+            "onion", "garlic", "tomato", "carrot", "celery", "bell pepper", "pepper",
+            "broccoli", "cauliflower", "spinach", "lettuce", "cucumber", "zucchini",
+            "potato", "sweet potato", "corn", "peas", "beans", "mushroom", "cabbage",
+            "kale", "arugula", "radish", "beet", "turnip", "parsnip", "leek", "shallot"
+        ];
+
+        // Meat & Poultry
+        let meat = [
+            "chicken", "beef", "pork", "turkey", "lamb", "duck", "bacon", "ham",
+            "sausage", "ground beef", "ground turkey", "ground chicken", "steak",
+            "roast", "chops", "breast", "thigh", "wing", "drumstick"
+        ];
+
+        // Seafood
+        let seafood = [
+            "salmon", "tuna", "cod", "halibut", "shrimp", "crab", "lobster", "scallops",
+            "mussels", "clams", "oysters", "fish", "tilapia", "mahi mahi", "snapper"
+        ];
+
+        // Dairy
+        let dairy = [
+            "milk", "cheese", "butter", "cream", "yogurt", "sour cream", "cottage cheese",
+            "cream cheese", "mozzarella", "cheddar", "parmesan", "feta", "ricotta",
+            "heavy cream", "half and half", "buttermilk"
+        ];
+
+        // Grains & Starches
+        let grains = [
+            "rice", "pasta", "bread", "flour", "oats", "quinoa", "barley", "wheat",
+            "noodles", "spaghetti", "macaroni", "penne", "linguine", "couscous",
+            "bulgur", "millet", "buckwheat", "rye", "cornmeal"
+        ];
+
+        // Oils & Fats
+        let oils = [
+            "oil", "olive oil", "vegetable oil", "canola oil", "coconut oil",
+            "sesame oil", "avocado oil", "sunflower oil", "peanut oil", "lard",
+            "shortening", "margarine"
+        ];
+
+        // Herbs & Spices
+        let herbs_spices = [
+            "salt", "pepper", "basil", "oregano", "thyme", "rosemary", "sage",
+            "parsley", "cilantro", "dill", "mint", "chives", "paprika", "cumin",
+            "coriander", "cinnamon", "nutmeg", "ginger", "turmeric", "curry",
+            "chili", "cayenne", "bay leaf", "vanilla", "cardamom", "cloves"
+        ];
+
+        // Fruits
+        let fruits = [
+            "apple", "banana", "orange", "lemon", "lime", "strawberry", "blueberry",
+            "raspberry", "blackberry", "grape", "pineapple", "mango", "peach",
+            "pear", "plum", "cherry", "watermelon", "cantaloupe", "honeydew",
+            "kiwi", "papaya", "coconut", "avocado"
+        ];
+
+        // Check each category
+        for vegetable in &vegetables {
+            if name_lower.contains(vegetable) {
+                return "vegetables".to_string();
+            }
+        }
+
+        for meat_item in &meat {
+            if name_lower.contains(meat_item) {
+                return "meat".to_string();
+            }
+        }
+
+        for seafood_item in &seafood {
+            if name_lower.contains(seafood_item) {
+                return "seafood".to_string();
+            }
+        }
+
+        for dairy_item in &dairy {
+            if name_lower.contains(dairy_item) {
+                return "dairy".to_string();
+            }
+        }
+
+        for grain in &grains {
+            if name_lower.contains(grain) {
+                return "grains".to_string();
+            }
+        }
+
+        for oil in &oils {
+            if name_lower.contains(oil) {
+                return "oils".to_string();
+            }
+        }
+
+        for herb_spice in &herbs_spices {
+            if name_lower.contains(herb_spice) {
+                return "herbs-spices".to_string();
+            }
+        }
+
+        for fruit in &fruits {
+            if name_lower.contains(fruit) {
+                return "fruits".to_string();
+            }
+        }
+
+        // Default category
+        "other".to_string()
     }
 
     // Helper methods for row conversion

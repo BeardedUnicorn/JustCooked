@@ -76,7 +76,7 @@ const Home: React.FC = () => {
           <Typography variant="h5" component="h2">
             Recently Added
           </Typography>
-          <Button onClick={() => navigate('/search')}>View All</Button>
+          <Button onClick={() => navigate('/search')} data-testid="home-view-all-button">View All</Button>
         </Box>
         <Divider sx={{ mb: 3 }} />
 
@@ -109,6 +109,7 @@ const Home: React.FC = () => {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() => navigate('/import')}
+              data-testid="home-import-recipe-button"
             >
               Import Recipe
             </Button>
@@ -133,6 +134,7 @@ const Home: React.FC = () => {
                     '&:hover': { transform: 'translateY(-4px)', transition: '0.2s' },
                   }}
                   onClick={() => navigate(`/search?tag=${encodeURIComponent(category.name)}`)}
+                  data-testid={`home-category-${category.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
                   <CardContent>
                     <Typography variant="h6" component="h3">
