@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Box, Typography, Chip, Grid, Paper, List, ListItem, ListItemText,
-  Divider, Stack, Button, IconButton, TextField, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow
+  Divider, Stack, Button, IconButton, TextField
 } from '@mui/material';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
@@ -14,7 +13,6 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import { Recipe } from '@app-types';
 import { useImageUrl } from '@hooks/useImageUrl';
-import { parseIngredientNameAndPreparation, formatAmountForDisplay } from '@utils/ingredientUtils';
 import { formatTimeForDisplay, calculateTotalTime } from '@utils/timeUtils';
 import { scaleIngredients, isValidServingSize, getScalingDescription } from '@utils/servingUtils';
 import SectionedIngredients from '@components/SectionedIngredients';

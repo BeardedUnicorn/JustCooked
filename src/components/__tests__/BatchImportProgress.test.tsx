@@ -247,8 +247,8 @@ describe('BatchImportProgress', () => {
     });
     render(<BatchImportProgress progress={progress} />);
 
-    // Should show "Unknown" for remaining time
-    expect(screen.getByText(/Unknown/)).toBeInTheDocument();
+    // Should show "Calculating..." for remaining time when no estimate is available
+    expect(screen.getByText(/Calculating.../)).toBeInTheDocument();
   });
 
   test('does not show current URL when not provided', () => {

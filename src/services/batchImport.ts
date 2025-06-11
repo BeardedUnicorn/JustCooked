@@ -28,9 +28,15 @@ export class BatchImportService {
         throw new Error('Invalid AllRecipes URL. Please provide a valid AllRecipes category URL.');
       }
 
-      // Stop any existing import
+      // Stop any existing import and clean up
       if (this.currentImportId) {
-        await this.cancelBatchImport();
+        try {
+          await this.cancelBatchImport();
+        } catch (error) {
+          console.warn('Failed to cancel previous import, continuing with new import:', error);
+        }
+        // Clear the current import ID to allow new import
+        this.currentImportId = null;
       }
 
       // Get existing recipe URLs to skip
@@ -91,13 +97,21 @@ export class BatchImportService {
       return;
     }
 
+    const importIdToCancel = this.currentImportId;
+
     try {
-      await invoke('cancel_batch_import', { importId: this.currentImportId });
+      await invoke('cancel_batch_import', { importId: importIdToCancel });
       this.stopProgressTracking();
       this.currentImportId = null;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to cancel batch import:', error);
-      throw new Error(`Failed to cancel batch import: ${error instanceof Error ? error.message : String(error)}`);
+      // Don't throw error if session not found - it might have already completed
+      if (!error.toString().includes('Import session not found')) {
+        throw new Error(`Failed to cancel batch import: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      // Clean up local state even if backend session not found
+      this.stopProgressTracking();
+      this.currentImportId = null;
     }
   }
 
@@ -128,13 +142,22 @@ export class BatchImportService {
           this.onProgressCallback(progress);
 
           // Stop tracking if import is complete or cancelled
+          // Handle both enum values and string values from Rust backend
+          const statusStr = typeof progress.status === 'string' ? progress.status.toLowerCase() : progress.status;
           if (
-            progress.status === BatchImportStatus.COMPLETED ||
-            progress.status === BatchImportStatus.CANCELLED ||
-            progress.status === BatchImportStatus.ERROR
+            statusStr === BatchImportStatus.COMPLETED ||
+            statusStr === 'completed' ||
+            statusStr === BatchImportStatus.CANCELLED ||
+            statusStr === 'cancelled' ||
+            statusStr === BatchImportStatus.ERROR ||
+            statusStr === 'error'
           ) {
             this.stopProgressTracking();
-            this.currentImportId = null;
+            // Don't clear currentImportId immediately - let the dialog handle cleanup
+            // This prevents "session not found" errors when trying to start a new import
+            setTimeout(() => {
+              this.currentImportId = null;
+            }, 5000); // Clear after 5 seconds
           }
         }
       } catch (error) {

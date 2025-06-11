@@ -39,24 +39,36 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
   }
 
   const getStatusInfo = (status: BatchImportStatus) => {
-    switch (status) {
+    // Handle both enum values and string values from Rust backend
+    const statusStr = typeof status === 'string' ? status.toLowerCase() : status;
+
+    switch (statusStr) {
       case BatchImportStatus.IDLE:
+      case 'idle':
         return { label: 'Idle', color: 'default' as const, icon: <ScheduleIcon /> };
       case BatchImportStatus.STARTING:
+      case 'starting':
         return { label: 'Starting...', color: 'primary' as const, icon: <ScheduleIcon /> };
       case BatchImportStatus.CRAWLING_CATEGORIES:
+      case 'crawlingcategories':
         return { label: 'Finding Categories', color: 'primary' as const, icon: <SearchIcon /> };
       case BatchImportStatus.EXTRACTING_RECIPES:
+      case 'extractingrecipes':
         return { label: 'Extracting Recipes', color: 'primary' as const, icon: <CategoryIcon /> };
       case BatchImportStatus.FILTERING_EXISTING:
+      case 'filteringexisting':
         return { label: 'Filtering Existing', color: 'primary' as const, icon: <SearchIcon /> };
       case BatchImportStatus.IMPORTING_RECIPES:
+      case 'importingrecipes':
         return { label: 'Importing Recipes', color: 'primary' as const, icon: <DownloadIcon /> };
       case BatchImportStatus.COMPLETED:
+      case 'completed':
         return { label: 'Completed', color: 'success' as const, icon: <CheckCircleIcon /> };
       case BatchImportStatus.CANCELLED:
+      case 'cancelled':
         return { label: 'Cancelled', color: 'warning' as const, icon: <ErrorIcon /> };
       case BatchImportStatus.ERROR:
+      case 'error':
         return { label: 'Error', color: 'error' as const, icon: <ErrorIcon /> };
       default:
         return { label: 'Unknown', color: 'default' as const, icon: <ScheduleIcon /> };
@@ -105,12 +117,18 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
   };
 
   const formatEstimatedTime = (seconds?: number) => {
-    if (!seconds) return 'Unknown';
-    
+    if (seconds === undefined || seconds === null) return 'Calculating...';
+    if (seconds === 0) return 'Almost done';
+    if (seconds < 0) return 'Unknown';
+
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    
-    if (minutes > 0) {
+
+    if (minutes > 60) {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return `${hours}h ${remainingMinutes}m`;
+    } else if (minutes > 0) {
       return `${minutes}m ${remainingSeconds}s`;
     }
     return `${remainingSeconds}s`;

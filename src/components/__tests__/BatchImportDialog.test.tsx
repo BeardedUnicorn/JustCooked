@@ -94,24 +94,11 @@ describe('BatchImportDialog', () => {
     expect(urlInput.value).toBe('https://www.allrecipes.com/recipes/79/desserts');
   });
 
-  test('shows recipe limit options when enabled', async () => {
-    const user = userEvent.setup();
+  test('shows warning about batch import duration', () => {
     render(<BatchImportDialog {...defaultProps} />);
 
-    const limitSwitch = screen.getByRole('checkbox', { name: /limit number of recipes/i });
-    await user.click(limitSwitch);
-
-    expect(screen.getByLabelText('Maximum recipes')).toBeInTheDocument();
-
-    // Add a recipe count to trigger the estimate
-    const maxRecipesInput = screen.getByLabelText('Maximum recipes');
-    await user.clear(maxRecipesInput);
-    await user.type(maxRecipesInput, '50');
-
-    // Wait for the estimated time to appear
-    await waitFor(() => {
-      expect(screen.getByText(/estimated time: 5-10 minutes/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/batch importing can take a long time/i)).toBeInTheDocument();
+    expect(screen.getByText(/you can cancel the import at any time/i)).toBeInTheDocument();
   });
 
   test('starts batch import when form is submitted', async () => {
@@ -127,38 +114,11 @@ describe('BatchImportDialog', () => {
     await user.click(startButton);
 
     expect(mockBatchImportService.startBatchImport).toHaveBeenCalledWith(
-      'https://www.allrecipes.com/recipes/79/desserts',
-      expect.objectContaining({
-        maxRecipes: undefined,
-      })
+      'https://www.allrecipes.com/recipes/79/desserts'
     );
   });
 
-  test('starts batch import with recipe limit', async () => {
-    const user = userEvent.setup();
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
 
-    render(<BatchImportDialog {...defaultProps} />);
-
-    const urlInput = screen.getByLabelText('Category URL');
-    const limitSwitch = screen.getByRole('checkbox', { name: /limit number of recipes/i });
-    const startButton = screen.getByText('Start Import');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(limitSwitch);
-
-    const maxRecipesInput = screen.getByLabelText('Maximum recipes');
-    await user.type(maxRecipesInput, '50');
-
-    await user.click(startButton);
-
-    expect(mockBatchImportService.startBatchImport).toHaveBeenCalledWith(
-      'https://www.allrecipes.com/recipes/79/desserts',
-      expect.objectContaining({
-        maxRecipes: 50,
-      })
-    );
-  });
 
   test('handles import start error', async () => {
     const user = userEvent.setup();

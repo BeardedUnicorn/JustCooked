@@ -169,7 +169,13 @@ impl BatchImporter {
                 let avg_time_per_recipe = elapsed as f64 / processed as f64;
                 let remaining_recipes = total - processed;
                 let estimated_remaining = (remaining_recipes as f64 * avg_time_per_recipe) as u32;
-                return Some(estimated_remaining);
+
+                // Cap the estimate at a reasonable maximum (24 hours)
+                return Some(estimated_remaining.min(86400));
+            } else if total > 0 && processed == 0 && elapsed > 5 {
+                // Only provide initial estimate after some time has passed (5 seconds)
+                // This prevents showing estimates immediately when no progress has been made
+                return Some(total * 4);
             }
         }
 
@@ -249,8 +255,8 @@ impl BatchImporter {
         self.update_status(BatchImportStatus::FilteringExisting);
         let (filtered_urls, skipped_count) = self.filter_existing_urls(recipe_urls, &request.existing_urls);
 
-        // Apply max_recipes limit if specified
-        let limited_urls = if let Some(max) = request.max_recipes {
+        // Apply max_recipes limit if specified (for testing purposes only)
+        let final_urls = if let Some(max) = request.max_recipes {
             filtered_urls.into_iter().take(max as usize).collect()
         } else {
             filtered_urls
@@ -259,8 +265,9 @@ impl BatchImporter {
         // Update counts
         {
             let mut progress = self.progress.lock().unwrap();
-            progress.total_recipes = limited_urls.len() as u32;
+            progress.total_recipes = final_urls.len() as u32;
             progress.skipped_recipes = skipped_count;
+            // Don't set initial time estimate here - let it be calculated dynamically
         }
 
         if self.is_cancelled() {
@@ -269,7 +276,7 @@ impl BatchImporter {
 
         // Step 4: Import recipes
         self.update_status(BatchImportStatus::ImportingRecipes);
-        self.import_recipes(app, limited_urls).await;
+        self.import_recipes(app, final_urls).await;
 
         self.update_status(BatchImportStatus::Completed);
         Ok(self.build_result(start_time))
@@ -334,7 +341,7 @@ impl BatchImporter {
             categories.dedup_by(|a, b| a.url == b.url);
 
             // Limit the number of categories to prevent excessive crawling
-            const MAX_CATEGORIES: usize = 50;
+            const MAX_CATEGORIES: usize = 150;
             if categories.len() > MAX_CATEGORIES {
                 eprintln!("Warning: Found {} categories, limiting to {} to prevent excessive crawling",
                          categories.len(), MAX_CATEGORIES);
@@ -366,7 +373,7 @@ impl BatchImporter {
     fn is_valid_category_url(&self, url: &str) -> bool {
         if let Ok(parsed) = Url::parse(url) {
             if let Some(host) = parsed.host_str() {
-                return host.contains("allrecipes.com") && 
+                return host.contains("allrecipes.com") &&
                        parsed.path().contains("/recipes/") &&
                        !parsed.path().contains("/recipe/"); // Exclude individual recipes
             }
@@ -667,11 +674,16 @@ impl BatchImporter {
                 match import_recipe_from_url(&url_clone).await {
                     Ok(imported_recipe) => {
                         // Convert imported recipe to database recipe
-                        let db_recipe = self_clone.convert_imported_to_db_recipe(imported_recipe);
+                        let db_recipe = self_clone.convert_imported_to_db_recipe(imported_recipe.clone());
 
                         // Save recipe to database
                         match db_clone.save_recipe(&db_recipe).await {
                             Ok(_) => {
+                                // Capture raw ingredients for analysis (don't fail import if this fails)
+                                if let Err(e) = self_clone.capture_raw_ingredients_batch(&db_clone, &imported_recipe, Some(&db_recipe.id)).await {
+                                    eprintln!("Warning: Failed to capture raw ingredients for {}: {}", url_clone, e);
+                                }
+
                                 // Track the imported recipe ID
                                 {
                                     let mut imported_ids = imported_ids_clone.lock().unwrap();
@@ -834,6 +846,34 @@ impl BatchImporterTask {
     fn update_progress_with_estimation(&self) {
         // For task-level progress updates, we'll implement a simplified version
         // The main BatchImporter will handle the full estimation logic
+    }
+
+    async fn capture_raw_ingredients_batch(
+        &self,
+        db: &crate::database::Database,
+        imported_recipe: &crate::recipe_import::ImportedRecipe,
+        recipe_id: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now();
+        let mut raw_ingredients = Vec::new();
+
+        for raw_text in &imported_recipe.ingredients {
+            let raw_ingredient = crate::database::RawIngredient {
+                id: uuid::Uuid::new_v4().to_string(),
+                raw_text: raw_text.clone(),
+                source_url: imported_recipe.source_url.clone(),
+                recipe_id: recipe_id.map(|id| id.to_string()),
+                recipe_title: Some(imported_recipe.name.clone()),
+                date_captured: now,
+            };
+            raw_ingredients.push(raw_ingredient);
+        }
+
+        if !raw_ingredients.is_empty() {
+            db.save_raw_ingredients_batch(&raw_ingredients).await?;
+        }
+
+        Ok(())
     }
 }
 

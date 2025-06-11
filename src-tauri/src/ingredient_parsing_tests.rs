@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::recipe_import::{clean_raw_ingredient_string, is_valid_ingredient_name};
 
     #[test]

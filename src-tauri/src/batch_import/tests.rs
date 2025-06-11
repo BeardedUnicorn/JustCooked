@@ -838,7 +838,7 @@ mod tests {
         // Simulate concurrent updates to progress
         let mut handles = Vec::new();
 
-        for i in 0..5 {
+        for _i in 0..5 {
             let importer_clone = Arc::new(importer.clone_for_task());
             let handle = tokio::spawn(async move {
                 // Simulate processing a recipe

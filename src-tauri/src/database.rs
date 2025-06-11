@@ -82,6 +82,16 @@ pub struct RecipeCollection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawIngredient {
+    pub id: String,
+    pub raw_text: String,
+    pub source_url: String,
+    pub recipe_id: Option<String>,
+    pub recipe_title: Option<String>,
+    pub date_captured: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentSearch {
     pub id: String,
     pub query: String,
@@ -235,6 +245,23 @@ impl Database {
         .execute(&self.pool)
         .await
         .context("Failed to create search_history table")?;
+
+        // Create raw ingredients table for ingredient parsing analysis
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS raw_ingredients (
+                id TEXT PRIMARY KEY,
+                raw_text TEXT NOT NULL,
+                source_url TEXT NOT NULL,
+                recipe_id TEXT,
+                recipe_title TEXT,
+                date_captured TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create raw_ingredients table")?;
 
         // Create indexes for better performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title)")
@@ -1360,6 +1387,95 @@ impl Database {
 
         // Default category
         "other".to_string()
+    }
+
+    // Raw ingredients methods for ingredient parsing analysis
+    #[allow(dead_code)]
+    pub async fn save_raw_ingredient(&self, raw_ingredient: &RawIngredient) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO raw_ingredients (
+                id, raw_text, source_url, recipe_id, recipe_title, date_captured
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&raw_ingredient.id)
+        .bind(&raw_ingredient.raw_text)
+        .bind(&raw_ingredient.source_url)
+        .bind(&raw_ingredient.recipe_id)
+        .bind(&raw_ingredient.recipe_title)
+        .bind(raw_ingredient.date_captured.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save raw ingredient")?;
+
+        Ok(())
+    }
+
+    pub async fn save_raw_ingredients_batch(&self, raw_ingredients: &[RawIngredient]) -> Result<()> {
+        if raw_ingredients.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.begin_transaction().await?;
+
+        for raw_ingredient in raw_ingredients {
+            sqlx::query(
+                r#"
+                INSERT OR REPLACE INTO raw_ingredients (
+                    id, raw_text, source_url, recipe_id, recipe_title, date_captured
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&raw_ingredient.id)
+            .bind(&raw_ingredient.raw_text)
+            .bind(&raw_ingredient.source_url)
+            .bind(&raw_ingredient.recipe_id)
+            .bind(&raw_ingredient.recipe_title)
+            .bind(raw_ingredient.date_captured.to_rfc3339())
+            .execute(&mut *tx)
+            .await
+            .context("Failed to save raw ingredient in batch")?;
+        }
+
+        tx.commit().await.context("Failed to commit raw ingredients batch")?;
+        Ok(())
+    }
+
+    pub async fn get_raw_ingredients_by_source(&self, source_url: &str) -> Result<Vec<RawIngredient>> {
+        let rows = sqlx::query("SELECT * FROM raw_ingredients WHERE source_url = ? ORDER BY date_captured DESC")
+            .bind(source_url)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch raw ingredients by source")?;
+
+        let mut raw_ingredients = Vec::new();
+        for row in rows {
+            let date_captured_str: String = row.get("date_captured");
+            let date_captured = DateTime::parse_from_rfc3339(&date_captured_str)
+                .context("Failed to parse date_captured")?
+                .with_timezone(&Utc);
+
+            raw_ingredients.push(RawIngredient {
+                id: row.get("id"),
+                raw_text: row.get("raw_text"),
+                source_url: row.get("source_url"),
+                recipe_id: row.get("recipe_id"),
+                recipe_title: row.get("recipe_title"),
+                date_captured,
+            });
+        }
+
+        Ok(raw_ingredients)
+    }
+
+    pub async fn get_raw_ingredients_count(&self) -> Result<i64> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM raw_ingredients")
+            .fetch_one(&self.pool)
+            .await
+            .context("Failed to get raw ingredients count")?;
+
+        Ok(count)
     }
 
     // Helper methods for row conversion

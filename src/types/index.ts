@@ -29,3 +29,6 @@ export { BatchImportStatus, DEFAULT_BATCH_IMPORT_CONFIG } from './batchImport';
 // Search-related types
 export type { SearchFilters } from './searchFilters';
 export type { RecentSearch } from './recentSearch';
+
+// Raw ingredient types for parsing analysis
+export type { RawIngredient } from './rawIngredient';

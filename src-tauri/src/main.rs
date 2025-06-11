@@ -14,7 +14,7 @@ mod ingredient_parsing_tests;
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -137,16 +137,20 @@ async fn save_imported_recipe(
     app: tauri::AppHandle,
     imported_recipe: ImportedRecipe,
 ) -> Result<String, String> {
-    let frontend_recipe = convert_imported_recipe_to_frontend(imported_recipe);
+    let frontend_recipe = convert_imported_recipe_to_frontend(imported_recipe.clone());
     let recipe_id = frontend_recipe.id.clone();
-    
+
     // Convert frontend recipe to database recipe and save to database
     let db_recipe = convert_frontend_to_db_recipe(frontend_recipe);
-    
+
     // Initialize database and save recipe
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     db.save_recipe(&db_recipe).await.map_err(|e| e.to_string())?;
-    
+
+    // Capture raw ingredients for analysis
+    capture_raw_ingredients(&db, &imported_recipe, Some(&recipe_id)).await
+        .map_err(|e| format!("Failed to capture raw ingredients: {}", e))?;
+
     Ok(recipe_id)
 }
 
@@ -728,7 +732,11 @@ async fn start_batch_import(
     tokio::spawn(async move {
         let _result = importer_clone.start_batch_import(app, request).await;
 
-        // Clean up the importer from state when done
+        // Keep the importer in state for a short time after completion
+        // to allow the frontend to fetch final progress before cleanup
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        // Clean up the importer from state after delay
         {
             let mut importers = state_clone.lock().unwrap();
             importers.remove(&import_id_clone);
@@ -736,6 +744,52 @@ async fn start_batch_import(
     });
 
     Ok(import_id)
+}
+
+// Helper function to capture raw ingredients for analysis
+async fn capture_raw_ingredients(
+    db: &Database,
+    imported_recipe: &ImportedRecipe,
+    recipe_id: Option<&str>,
+) -> Result<(), anyhow::Error> {
+    let now = chrono::Utc::now();
+    let mut raw_ingredients = Vec::new();
+
+    for raw_text in &imported_recipe.ingredients {
+        let raw_ingredient = RawIngredient {
+            id: uuid::Uuid::new_v4().to_string(),
+            raw_text: raw_text.clone(),
+            source_url: imported_recipe.source_url.clone(),
+            recipe_id: recipe_id.map(|id| id.to_string()),
+            recipe_title: Some(imported_recipe.name.clone()),
+            date_captured: now,
+        };
+        raw_ingredients.push(raw_ingredient);
+    }
+
+    if !raw_ingredients.is_empty() {
+        db.save_raw_ingredients_batch(&raw_ingredients).await?;
+    }
+
+    Ok(())
+}
+
+// Raw ingredients commands
+#[tauri::command]
+async fn db_get_raw_ingredients_by_source(
+    app: tauri::AppHandle,
+    source_url: String,
+) -> Result<Vec<RawIngredient>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let raw_ingredients = db.get_raw_ingredients_by_source(&source_url).await.map_err(|e| e.to_string())?;
+    Ok(raw_ingredients)
+}
+
+#[tauri::command]
+async fn db_get_raw_ingredients_count(app: tauri::AppHandle) -> Result<i64, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let count = db.get_raw_ingredients_count().await.map_err(|e| e.to_string())?;
+    Ok(count)
 }
 
 #[tauri::command]
@@ -812,7 +866,9 @@ pub fn run() {
             db_save_search_history,
             db_get_recent_searches,
             db_delete_search_history,
-            db_clear_search_history
+            db_clear_search_history,
+            db_get_raw_ingredients_by_source,
+            db_get_raw_ingredients_count
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
