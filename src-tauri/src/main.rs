@@ -424,7 +424,7 @@ async fn db_clear_search_history(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Parse ingredient string into structured format with improved logic
+/// Parse ingredient string into structured format with comprehensive pattern matching
 fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Option<FrontendIngredient> {
     let trimmed = ingredient_text.trim();
 
@@ -433,38 +433,91 @@ fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Op
         return None;
     }
 
-    // Try to parse amount, unit, and name using regex patterns
+    // Enhanced regex patterns to handle all identified formats from CSV analysis
     let patterns = [
-        // Pattern 1: "2 cups all-purpose flour"
-        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(cup|cups|tablespoon|tablespoons|tbsp|teaspoon|teaspoons|tsp|pound|pounds|lb|ounce|ounces|oz|gram|grams|g|kilogram|kilograms|kg|liter|liters|l|milliliter|milliliters|ml|pint|pints|pt|quart|quarts|qt|gallon|gallons|gal|clove|cloves|slice|slices|piece|pieces|can|cans|package|packages|jar|jars|bottle|bottles)\s+(.+)$",
-        // Pattern 2: "2 large eggs"
-        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(large|medium|small|whole|fresh|dried)\s+(.+)$",
-        // Pattern 3: "1/2 onion, diced"
-        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(.+?)(?:,\s*(.+))?$",
+        // Pattern 1: Parenthetical amounts like "1 (15 oz) can tomatoes" or "(15 oz) can tomatoes"
+        r"^(?:(\d+(?:\s+\d+\/\d+|\.\d+|[¼½¾⅓⅔⅛⅜⅝⅞])?)\s+)?\(([^)]+)\)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 2: Mixed numbers like "1 1/2 tablespoons olive oil"
+        r"^(\d+\s+\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 3: Simple fractions like "1/2 cup flour"
+        r"^(\d+\/\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 4: Ranges like "2-3 cups flour" or "1 to 2 pounds"
+        r"^(\d+(?:\.\d+)?\s*(?:[-–—]|to)\s*\d+(?:\.\d+)?)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 5: Decimal amounts like "1.5 cups flour" or "0.25 teaspoon salt"
+        r"^(\d*\.?\d+)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 6: Unicode fractions like "½ cup flour"
+        r"^([¼½¾⅓⅔⅛⅜⅝⅞])\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*?)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 7: Count-based with descriptors like "2 large eggs" or "3 medium onions"
+        r"^(\d+(?:\.\d+)?)\s+(large|medium|small|whole|fresh|dried|frozen|cooked)\s+(.+?)(?:,\s*(.+))?$",
+
+        // Pattern 8: Simple count like "2 onions" or "3 apples"
+        r"^(\d+(?:\.\d+)?)\s+(.+?)(?:,\s*(.+))?$",
     ];
 
-    for pattern in &patterns {
+    for (i, pattern) in patterns.iter().enumerate() {
         if let Ok(regex) = regex::Regex::new(pattern) {
             if let Some(captures) = regex.captures(trimmed) {
-                let amount_str = captures.get(1)?.as_str();
-                let amount = parse_fraction_to_decimal(amount_str);
+                let (amount, unit, name, preparation) = if i == 0 {
+                    // Handle parenthetical amounts (Pattern 1)
+                    let count = captures.get(1).map(|m| m.as_str()).unwrap_or("1");
+                    let paren_content = captures.get(2)?.as_str();
+                    let container_type = captures.get(3)?.as_str();
+                    let ingredient_name = captures.get(4)?.as_str();
+                    let prep = captures.get(5).map(|m| m.as_str()).unwrap_or("");
 
-                let (unit, name) = if captures.len() > 3 {
-                    // Pattern with unit
-                    let unit = captures.get(2)?.as_str().to_string();
-                    let name = captures.get(3)?.as_str().to_string();
-                    (normalize_unit(&unit), clean_ingredient_name(&name))
+                    let amount = parse_enhanced_amount(count);
+                    let unit = extract_unit_from_parenthetical(paren_content, container_type);
+
+                    // For parenthetical amounts, preserve the full description
+                    let full_name = if prep.is_empty() {
+                        format!("{} {}", container_type, ingredient_name)
+                    } else {
+                        format!("{} {}, {}", container_type, ingredient_name, prep)
+                    };
+
+                    (amount, unit, full_name, String::new())
                 } else {
-                    // Pattern without explicit unit
-                    let name = captures.get(2)?.as_str().to_string();
-                    let cleaned_name = clean_ingredient_name(&name);
-                    let unit = if should_use_empty_unit(&cleaned_name) { "".to_string() } else { "unit".to_string() };
-                    (unit, cleaned_name)
+                    // Handle other patterns (2-8)
+                    let amount_str = captures.get(1)?.as_str();
+                    let second_capture = captures.get(2)?.as_str();
+                    let third_capture = captures.get(3)?.as_str();
+                    let prep = captures.get(4).map(|m| m.as_str()).unwrap_or("");
+
+                    let amount = parse_enhanced_amount(amount_str);
+
+                    // Determine if second capture is a unit or descriptor
+                    let (unit, name) = if is_measurement_unit(second_capture) {
+                        (normalize_unit(second_capture), third_capture.to_string())
+                    } else {
+                        // It's a descriptor like "large", "medium", etc.
+                        let combined_name = format!("{} {}", second_capture, third_capture);
+                        let unit = if should_use_empty_unit(&combined_name) {
+                            String::new()
+                        } else {
+                            "unit".to_string()
+                        };
+                        (unit, combined_name)
+                    };
+
+                    (amount, unit, name, prep.to_string())
                 };
 
-                if !name.is_empty() && is_valid_ingredient_name(&name) {
+                let cleaned_name = clean_ingredient_name(&name);
+                let final_name = if !preparation.is_empty() && should_include_preparation(&cleaned_name, &preparation) {
+                    format!("{}, {}", cleaned_name, preparation)
+                } else {
+                    cleaned_name
+                };
+
+                if !final_name.is_empty() && is_valid_ingredient_name(&final_name) {
                     return Some(FrontendIngredient {
-                        name,
+                        name: final_name,
                         amount,
                         unit,
                         section,
@@ -477,7 +530,7 @@ fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Op
     // Fallback: treat as ingredient name with amount 1
     let cleaned_name = clean_ingredient_name(trimmed);
     if !cleaned_name.is_empty() && is_valid_ingredient_name(&cleaned_name) {
-        let unit = if should_use_empty_unit(&cleaned_name) { "".to_string() } else { "unit".to_string() };
+        let unit = if should_use_empty_unit(&cleaned_name) { String::new() } else { "unit".to_string() };
         Some(FrontendIngredient {
             name: cleaned_name,
             amount: 1.0,
@@ -489,9 +542,16 @@ fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Op
     }
 }
 
-/// Parse fraction strings to decimal
-fn parse_fraction_to_decimal(amount_str: &str) -> f64 {
+/// Enhanced amount parsing with comprehensive format support
+fn parse_enhanced_amount(amount_str: &str) -> f64 {
     let trimmed = amount_str.trim();
+
+    // Handle ranges like "2-3" or "1 to 2" - take the average
+    if let Some(captures) = regex::Regex::new(r"^(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)$").unwrap().captures(trimmed) {
+        let start = captures.get(1).unwrap().as_str().parse::<f64>().unwrap_or(1.0);
+        let end = captures.get(2).unwrap().as_str().parse::<f64>().unwrap_or(1.0);
+        return (start + end) / 2.0;
+    }
 
     // Handle mixed numbers like "1 1/2"
     if let Some(space_pos) = trimmed.find(' ') {
@@ -508,19 +568,28 @@ fn parse_fraction_to_decimal(amount_str: &str) -> f64 {
         return parse_simple_fraction(trimmed);
     }
 
-    // Handle unicode fractions
+    // Handle unicode fractions with more precision
     match trimmed {
         "¼" => 0.25,
         "½" => 0.5,
         "¾" => 0.75,
-        "⅓" => 0.333,
-        "⅔" => 0.667,
+        "⅓" => 1.0/3.0,
+        "⅔" => 2.0/3.0,
         "⅛" => 0.125,
         "⅜" => 0.375,
         "⅝" => 0.625,
         "⅞" => 0.875,
-        _ => trimmed.parse::<f64>().unwrap_or(1.0)
+        _ => {
+            // Handle decimal numbers, including those with precision issues from CSV
+            let cleaned = trimmed.replace(",", ""); // Remove any commas
+            cleaned.parse::<f64>().unwrap_or(1.0)
+        }
     }
+}
+
+/// Parse fraction strings to decimal (kept for backward compatibility)
+fn parse_fraction_to_decimal(amount_str: &str) -> f64 {
+    parse_enhanced_amount(amount_str)
 }
 
 /// Parse simple fractions like "1/2"
@@ -535,48 +604,155 @@ fn parse_simple_fraction(fraction_str: &str) -> f64 {
     1.0
 }
 
-/// Normalize unit names to standard forms
+/// Enhanced unit normalization with comprehensive support
 fn normalize_unit(unit: &str) -> String {
-    match unit.to_lowercase().as_str() {
+    let lower = unit.to_lowercase();
+    match lower.as_str() {
+        // Volume measurements
         "cup" | "cups" | "c" => "cup".to_string(),
         "tablespoon" | "tablespoons" | "tbsp" | "tbs" => "tbsp".to_string(),
         "teaspoon" | "teaspoons" | "tsp" => "tsp".to_string(),
+        "pint" | "pints" | "pt" => "pint".to_string(),
+        "quart" | "quarts" | "qt" => "quart".to_string(),
+        "gallon" | "gallons" | "gal" => "gallon".to_string(),
+        "liter" | "liters" | "l" => "liter".to_string(),
+        "milliliter" | "milliliters" | "ml" => "ml".to_string(),
+        "fluid ounce" | "fluid ounces" | "fl oz" => "fl oz".to_string(),
+
+        // Weight measurements
         "pound" | "pounds" | "lb" => "lb".to_string(),
         "ounce" | "ounces" | "oz" => "oz".to_string(),
         "gram" | "grams" | "g" => "g".to_string(),
         "kilogram" | "kilograms" | "kg" => "kg".to_string(),
-        "liter" | "liters" | "l" => "liter".to_string(),
-        "milliliter" | "milliliters" | "ml" => "ml".to_string(),
-        "pint" | "pints" | "pt" => "pint".to_string(),
-        "quart" | "quarts" | "qt" => "quart".to_string(),
-        "gallon" | "gallons" | "gal" => "gallon".to_string(),
+
+        // Count-based units
         "clove" | "cloves" => "clove".to_string(),
         "slice" | "slices" => "slice".to_string(),
         "piece" | "pieces" => "piece".to_string(),
+        "head" | "heads" => "head".to_string(),
+        "bunch" | "bunches" => "bunch".to_string(),
+        "stalk" | "stalks" => "stalk".to_string(),
+        "sprig" | "sprigs" => "sprig".to_string(),
+        "leaf" | "leaves" => "leaf".to_string(),
+
+        // Container units
         "can" | "cans" => "can".to_string(),
         "package" | "packages" => "package".to_string(),
         "jar" | "jars" => "jar".to_string(),
         "bottle" | "bottles" => "bottle".to_string(),
-        _ => unit.to_string(),
+        "box" | "boxes" => "box".to_string(),
+        "bag" | "bags" => "bag".to_string(),
+        "container" | "containers" => "container".to_string(),
+
+        // Size descriptors
+        "large" => "large".to_string(),
+        "medium" => "medium".to_string(),
+        "small" => "small".to_string(),
+        "whole" => "whole".to_string(),
+        "fresh" => "fresh".to_string(),
+        "dried" => "dried".to_string(),
+        "frozen" => "frozen".to_string(),
+
+        _ => unit.to_string()
     }
 }
 
-/// Clean ingredient name by removing preparation instructions
+/// Check if a string represents a measurement unit
+fn is_measurement_unit(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let units = [
+        // Volume
+        "cup", "cups", "c", "tablespoon", "tablespoons", "tbsp", "tbs",
+        "teaspoon", "teaspoons", "tsp", "pint", "pints", "pt",
+        "quart", "quarts", "qt", "gallon", "gallons", "gal",
+        "liter", "liters", "l", "milliliter", "milliliters", "ml",
+        "fluid ounce", "fluid ounces", "fl oz",
+
+        // Weight
+        "pound", "pounds", "lb", "ounce", "ounces", "oz",
+        "gram", "grams", "g", "kilogram", "kilograms", "kg",
+
+        // Count/Container
+        "clove", "cloves", "slice", "slices", "piece", "pieces",
+        "head", "heads", "bunch", "bunches", "stalk", "stalks",
+        "sprig", "sprigs", "leaf", "leaves", "can", "cans",
+        "package", "packages", "jar", "jars", "bottle", "bottles",
+        "box", "boxes", "bag", "bags", "container", "containers"
+    ];
+
+    units.iter().any(|&unit| lower == unit)
+}
+
+/// Extract unit from parenthetical content like "(15 oz)" combined with container type
+fn extract_unit_from_parenthetical(paren_content: &str, container_type: &str) -> String {
+    // Extract the unit from parenthetical content
+    let paren_unit = if let Some(captures) = regex::Regex::new(r"(\d+(?:\.\d+)?)\s*([a-zA-Z\s]+)").unwrap().captures(paren_content) {
+        normalize_unit(captures.get(2).unwrap().as_str().trim())
+    } else {
+        paren_content.to_string()
+    };
+
+    // Combine with container type for full unit description
+    format!("{} {}", paren_unit, normalize_unit(container_type))
+}
+
+/// Determine if preparation should be included in the ingredient name
+fn should_include_preparation(_ingredient_name: &str, preparation: &str) -> bool {
+    if preparation.is_empty() {
+        return false;
+    }
+
+    let prep_lower = preparation.to_lowercase();
+
+    // Include preparation for essential descriptors
+    let essential_preparations = [
+        "drained", "undrained", "rinsed", "packed", "softened", "melted",
+        "room temperature", "cold", "warm", "hot", "frozen", "thawed",
+        "cooked", "uncooked", "raw", "fresh", "dried"
+    ];
+
+    essential_preparations.iter().any(|&prep| prep_lower.contains(prep))
+}
+
+/// Enhanced ingredient name cleaning with comprehensive pattern handling
 fn clean_ingredient_name(name: &str) -> String {
     let mut cleaned = name.trim().to_string();
 
-    // Remove preparation instructions after commas
-    if let Some(comma_pos) = cleaned.find(',') {
-        cleaned = cleaned[..comma_pos].trim().to_string();
-    }
+    // Remove brand names and "such as" references
+    cleaned = regex::Regex::new(r"\s*\(such as [^)]*\)\s*")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .to_string();
 
-    // Remove "to taste" and similar phrases
-    cleaned = regex::Regex::new(r"\s*,?\s*(to\s+taste|or\s+to\s+taste|as\s+needed|or\s+as\s+needed|divided)$")
+    // Remove temperature specifications
+    cleaned = regex::Regex::new(r"\s*\(\d+\s*degrees?\s*[FC][^)]*\)\s*")
+        .unwrap()
+        .replace_all(&cleaned, " ")
+        .to_string();
+
+    // Remove "or to taste", "as needed", "divided" etc.
+    cleaned = regex::Regex::new(r"\s*,?\s*(or\s+)?to\s+taste\s*$")
         .unwrap()
         .replace(&cleaned, "")
         .to_string();
 
-    // Remove parenthetical content
+    cleaned = regex::Regex::new(r"\s*,?\s*(or\s+)?as\s+needed\s*$")
+        .unwrap()
+        .replace(&cleaned, "")
+        .to_string();
+
+    cleaned = regex::Regex::new(r"\s*,?\s*divided\s*$")
+        .unwrap()
+        .replace(&cleaned, "")
+        .to_string();
+
+    // Remove "or more" phrases
+    cleaned = regex::Regex::new(r"\s*,?\s*or\s+more.*$")
+        .unwrap()
+        .replace(&cleaned, "")
+        .to_string();
+
+    // Remove generic parenthetical content (but preserve essential info)
     cleaned = regex::Regex::new(r"\s*\([^)]*\)\s*")
         .unwrap()
         .replace_all(&cleaned, " ")
@@ -589,22 +765,49 @@ fn clean_ingredient_name(name: &str) -> String {
         .trim()
         .to_string();
 
-    cleaned
+    // If cleaning resulted in empty string, return original
+    if cleaned.is_empty() {
+        name.trim().to_string()
+    } else {
+        cleaned
+    }
 }
 
-/// Check if ingredient should use empty unit (for count-based items)
+/// Enhanced check for count-based ingredients that should use empty unit
 fn should_use_empty_unit(name: &str) -> bool {
     let lower_name = name.to_lowercase();
     let count_based = [
-        "egg", "eggs", "onion", "onions", "apple", "apples", "banana", "bananas",
-        "lemon", "lemons", "lime", "limes", "orange", "oranges", "potato", "potatoes",
-        "tomato", "tomatoes", "carrot", "carrots", "clove", "cloves"
+        // Fruits
+        "apple", "apples", "banana", "bananas", "lemon", "lemons", "lime", "limes",
+        "orange", "oranges", "peach", "peaches", "pear", "pears", "cherry", "cherries",
+        "strawberry", "strawberries", "avocado", "avocados",
+
+        // Vegetables
+        "onion", "onions", "potato", "potatoes", "tomato", "tomatoes", "carrot", "carrots",
+        "bell pepper", "bell peppers", "pepper", "peppers", "cucumber", "cucumbers",
+        "zucchini", "eggplant", "eggplants", "shallot", "shallots",
+
+        // Proteins
+        "egg", "eggs", "chicken breast", "chicken breasts", "chicken thigh", "chicken thighs",
+        "drumstick", "drumsticks", "fillet", "fillets", "chop", "chops",
+
+        // Herbs and aromatics
+        "clove", "cloves", "bay leaf", "bay leaves", "sprig", "sprigs",
+
+        // Bread and baked goods
+        "slice", "slices", "roll", "rolls", "bun", "buns", "tortilla", "tortillas",
+
+        // Other countable items
+        "link", "links", "strip", "strips", "piece", "pieces"
     ];
 
-    count_based.iter().any(|&item| lower_name.contains(item))
+    count_based.iter().any(|&item| {
+        // Check for exact matches or if the ingredient name contains the count-based item
+        lower_name == item || lower_name.contains(&format!(" {}", item)) || lower_name.starts_with(&format!("{} ", item))
+    })
 }
 
-/// Validate that an ingredient name is reasonable (reused from recipe_import.rs)
+/// Enhanced validation for ingredient names with comprehensive filtering
 fn is_valid_ingredient_name(name: &str) -> bool {
     let trimmed = name.trim();
 
@@ -618,17 +821,48 @@ fn is_valid_ingredient_name(name: &str) -> bool {
         return false;
     }
 
-    // Reject obviously invalid names
+    // Must be longer than 1 character (unless it's a single letter ingredient like "a")
+    if trimmed.len() == 1 && !trimmed.chars().next().unwrap().is_alphabetic() {
+        return false;
+    }
+
+    let lower_name = trimmed.to_lowercase();
+
+    // Reject obviously invalid names (preparation methods only)
     let invalid_names = [
         "chopped", "sliced", "diced", "minced", "beaten", "melted", "softened",
         "divided", "taste", "needed", "desired", "optional", "garnish",
-        "spray", "leaf", "leaves", "caps", "whites", "yolks", "cubed",
-        "halved", "quartered", "peeled", "seeded", "trimmed",
-        "or more to taste", "or as needed", "to taste", "as needed"
+        "spray", "cubed", "halved", "quartered", "peeled", "seeded", "trimmed",
+        "mashed", "crushed", "ground", "grated", "shredded", "julienned",
+        "or more to taste", "or as needed", "to taste", "as needed",
+        "for garnish", "for serving", "for dusting", "for rolling"
     ];
 
-    let lower_name = trimmed.to_lowercase();
     if invalid_names.iter().any(|&invalid| lower_name == invalid) {
+        return false;
+    }
+
+    // Reject names that are just preparation instructions
+    if regex::Regex::new(r"^(finely\s+)?(chopped|diced|sliced|minced|grated|shredded|crushed|ground|beaten|melted|softened|peeled|seeded|trimmed|halved|quartered|mashed|julienned)(\s+.*)?$")
+        .unwrap()
+        .is_match(&lower_name) {
+        return false;
+    }
+
+    // Reject names that are just measurements without ingredient
+    if regex::Regex::new(r"^[\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+\s*(ounce|pound|cup|tablespoon|teaspoon|gram|kilogram|liter|milliliter|inch)\s*$")
+        .unwrap()
+        .is_match(&lower_name) {
+        return false;
+    }
+
+    // Reject names that are just "or" alternatives
+    if lower_name.starts_with("or ") {
+        return false;
+    }
+
+    // Reject names that are just brand references
+    if regex::Regex::new(r"^such as .+$").unwrap().is_match(&lower_name) {
         return false;
     }
 
