@@ -10,6 +10,7 @@ use tokio::time::sleep;
 use tokio::task::JoinSet;
 use tokio::sync::Semaphore;
 use url::Url;
+use tracing::{info, error, warn, instrument};
 
 use crate::recipe_import::import_recipe_from_url;
 
@@ -92,6 +93,7 @@ pub struct BatchImporter {
 #[derive(Clone)]
 struct BatchImporterTask {
     progress: Arc<Mutex<BatchImportProgress>>,
+    start_time: Arc<Mutex<Option<Instant>>>,
 }
 
 impl BatchImporter {
@@ -192,11 +194,20 @@ impl BatchImporter {
     fn clone_for_task(&self) -> BatchImporterTask {
         BatchImporterTask {
             progress: Arc::clone(&self.progress),
+            start_time: Arc::clone(&self.start_time),
         }
     }
 
+    #[instrument(skip_all, fields(start_url = %request.start_url, max_recipes = ?request.max_recipes))]
     pub async fn start_batch_import(&self, app: tauri::AppHandle, request: BatchImportRequest) -> Result<BatchImportResult, String> {
         let start_time = Instant::now();
+
+        info!("=== STARTING BATCH IMPORT ===");
+        info!("Starting batch import from URL: {}", request.start_url);
+        if let Some(max) = request.max_recipes {
+            info!("Max recipes limit set to: {}", max);
+        }
+        info!("Existing URLs to skip: {}", request.existing_urls.as_ref().map_or(0, |urls| urls.len()));
 
         // Reset state
         *self.cancelled.lock().unwrap() = false;
@@ -224,10 +235,15 @@ impl BatchImporter {
         }
 
         // Step 1: Crawl categories
+        info!("Step 1: Crawling categories from {}", request.start_url);
         self.update_status(BatchImportStatus::CrawlingCategories);
         let categories = match self.crawl_categories(&request.start_url).await {
-            Ok(cats) => cats,
+            Ok(cats) => {
+                info!("Successfully found {} categories", cats.len());
+                cats
+            },
             Err(e) => {
+                error!("Failed to crawl categories: {}", e);
                 self.update_status(BatchImportStatus::Error);
                 return Err(format!("Failed to crawl categories: {}", e));
             }
@@ -238,10 +254,15 @@ impl BatchImporter {
         }
 
         // Step 2: Extract recipe URLs from all categories
+        info!("Step 2: Extracting recipe URLs from {} categories", categories.len());
         self.update_status(BatchImportStatus::ExtractingRecipes);
         let recipe_urls = match self.extract_all_recipe_urls(&categories).await {
-            Ok(urls) => urls,
+            Ok(urls) => {
+                info!("Successfully extracted {} recipe URLs", urls.len());
+                urls
+            },
             Err(e) => {
+                error!("Failed to extract recipe URLs: {}", e);
                 self.update_status(BatchImportStatus::Error);
                 return Err(format!("Failed to extract recipe URLs: {}", e));
             }
@@ -252,12 +273,17 @@ impl BatchImporter {
         }
 
         // Step 3: Filter out existing URLs
+        info!("Step 3: Filtering existing URLs");
         self.update_status(BatchImportStatus::FilteringExisting);
         let (filtered_urls, skipped_count) = self.filter_existing_urls(recipe_urls, &request.existing_urls);
+        info!("Filtered URLs: {} new, {} skipped (already exist)", filtered_urls.len(), skipped_count);
 
         // Apply max_recipes limit if specified (for testing purposes only)
         let final_urls = if let Some(max) = request.max_recipes {
-            filtered_urls.into_iter().take(max as usize).collect()
+            let original_count = filtered_urls.len();
+            let limited = filtered_urls.into_iter().take(max as usize).collect::<Vec<_>>();
+            info!("Applied max_recipes limit: {} URLs (limited from {})", limited.len(), original_count);
+            limited
         } else {
             filtered_urls
         };
@@ -275,11 +301,17 @@ impl BatchImporter {
         }
 
         // Step 4: Import recipes
+        info!("=== STEP 4: IMPORTING RECIPES ===");
+        info!("Starting import of {} recipes", final_urls.len());
         self.update_status(BatchImportStatus::ImportingRecipes);
         self.import_recipes(app, final_urls).await;
 
+        let result = self.build_result(start_time);
+        info!("Batch import completed: {} successful, {} failed, {} skipped in {}s",
+              result.successful_imports, result.failed_imports, result.skipped_recipes, result.duration);
+
         self.update_status(BatchImportStatus::Completed);
-        Ok(self.build_result(start_time))
+        Ok(result)
     }
 
     async fn crawl_categories(&self, start_url: &str) -> Result<Vec<CategoryInfo>, String> {
@@ -611,15 +643,24 @@ impl BatchImporter {
     }
 
     async fn import_recipes(&self, app: tauri::AppHandle, recipe_urls: Vec<String>) {
+        info!("=== IMPORT_RECIPES CALLED ===");
+        info!("Number of URLs to import: {}", recipe_urls.len());
+
         // Check for cancellation before starting
         if self.is_cancelled() {
+            warn!("Import cancelled before starting recipe import");
             return;
         }
 
         // Initialize database connection
+        info!("Initializing database connection...");
         let db = match crate::database::Database::new(&app).await {
-            Ok(database) => Arc::new(database),
+            Ok(database) => {
+                info!("Database connection established successfully");
+                Arc::new(database)
+            },
             Err(e) => {
+                error!("Failed to initialize database: {}", e);
                 self.add_error(
                     "database".to_string(),
                     format!("Failed to initialize database: {}", e),
@@ -671,17 +712,23 @@ impl BatchImporter {
                 sleep(Duration::from_millis(1000)).await;
 
                 // Import the recipe
+                info!("Importing recipe from: {}", url_clone);
                 match import_recipe_from_url(&url_clone).await {
                     Ok(imported_recipe) => {
+                        info!("Successfully scraped recipe: {} from {}", imported_recipe.name, url_clone);
+
                         // Convert imported recipe to database recipe
                         let db_recipe = self_clone.convert_imported_to_db_recipe(imported_recipe.clone());
 
                         // Save recipe to database
+                        info!("Saving recipe to database: {}", db_recipe.title);
                         match db_clone.save_recipe(&db_recipe).await {
                             Ok(_) => {
+                                info!("Successfully saved recipe to database: {}", db_recipe.title);
+
                                 // Capture raw ingredients for analysis (don't fail import if this fails)
                                 if let Err(e) = self_clone.capture_raw_ingredients_batch(&db_clone, &imported_recipe, Some(&db_recipe.id)).await {
-                                    eprintln!("Warning: Failed to capture raw ingredients for {}: {}", url_clone, e);
+                                    warn!("Failed to capture raw ingredients for {}: {}", url_clone, e);
                                 }
 
                                 // Track the imported recipe ID
@@ -692,8 +739,10 @@ impl BatchImporter {
 
                                 let mut progress = progress_clone.lock().unwrap();
                                 progress.successful_imports += 1;
+                                info!("Recipe import successful. Total successful: {}", progress.successful_imports);
                             }
                             Err(save_error) => {
+                                error!("Failed to save recipe to database for {}: {}", url_clone, save_error);
                                 let mut progress = progress_clone.lock().unwrap();
                                 progress.failed_imports += 1;
 
@@ -706,6 +755,7 @@ impl BatchImporter {
                         }
                     }
                     Err(e) => {
+                        error!("Failed to import recipe from {}: {} ({})", url_clone, e.message, e.error_type);
                         let mut progress = progress_clone.lock().unwrap();
                         progress.failed_imports += 1;
 
@@ -717,18 +767,32 @@ impl BatchImporter {
                     }
                 }
 
-                // Update processed count AFTER processing
+                // Update processed count AFTER processing (atomic update)
                 {
                     let mut counter = processed_counter_clone.lock().unwrap();
                     *counter += 1;
                     let processed_count = *counter;
+                    drop(counter); // Release counter lock early
 
+                    // Update progress and estimation in a single lock
                     let mut progress = progress_clone.lock().unwrap();
                     progress.processed_recipes = processed_count;
-                }
 
-                // Update estimated time remaining after processing
-                self_clone.update_progress_with_estimation();
+                    // Calculate and update estimated time remaining in the same lock
+                    if let Some(start_time) = *self_clone.start_time.lock().unwrap() {
+                        let elapsed = start_time.elapsed().as_secs() as u32;
+                        let total = progress.total_recipes;
+
+                        if processed_count > 0 && total > processed_count {
+                            let avg_time_per_recipe = elapsed as f64 / processed_count as f64;
+                            let remaining_recipes = total - processed_count;
+                            let estimated_remaining = (remaining_recipes as f64 * avg_time_per_recipe) as u32;
+                            progress.estimated_time_remaining = Some(estimated_remaining.min(86400));
+                        } else if total > 0 && processed_count == 0 && elapsed > 5 {
+                            progress.estimated_time_remaining = Some(total * 4);
+                        }
+                    }
+                }
             });
 
             // Limit the number of concurrent tasks to prevent overwhelming the system
@@ -844,8 +908,35 @@ impl BatchImporterTask {
     }
 
     fn update_progress_with_estimation(&self) {
-        // For task-level progress updates, we'll implement a simplified version
-        // The main BatchImporter will handle the full estimation logic
+        let estimated_time = self.calculate_estimated_time_remaining();
+        let mut progress = self.progress.lock().unwrap();
+        progress.estimated_time_remaining = estimated_time;
+    }
+
+    fn calculate_estimated_time_remaining(&self) -> Option<u32> {
+        let progress = self.progress.lock().unwrap();
+        let start_time = self.start_time.lock().unwrap();
+
+        if let Some(start) = *start_time {
+            let elapsed = start.elapsed().as_secs() as u32;
+            let processed = progress.processed_recipes;
+            let total = progress.total_recipes;
+
+            if processed > 0 && total > processed {
+                let avg_time_per_recipe = elapsed as f64 / processed as f64;
+                let remaining_recipes = total - processed;
+                let estimated_remaining = (remaining_recipes as f64 * avg_time_per_recipe) as u32;
+
+                // Cap the estimate at a reasonable maximum (24 hours)
+                return Some(estimated_remaining.min(86400));
+            } else if total > 0 && processed == 0 && elapsed > 5 {
+                // Only provide initial estimate after some time has passed (5 seconds)
+                // This prevents showing estimates immediately when no progress has been made
+                return Some(total * 4);
+            }
+        }
+
+        None
     }
 
     async fn capture_raw_ingredients_batch(
@@ -888,27 +979,54 @@ fn parse_ingredient_string_for_db(ingredient_text: &str, section: Option<String>
 
     // Try to parse amount, unit, and name using regex patterns
     let patterns = [
-        // Pattern 1: "2 cups all-purpose flour"
+        // Pattern 1: "1 (15 ounce) package pretzel snaps" - parenthetical amounts from AllRecipes
+        r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+\(([^)]+)\)\s+(package|packages|bag|bags|can|cans|jar|jars|bottle|bottles|box|boxes|container|containers)\s+(.+)$",
+        // Pattern 2: "2 cups all-purpose flour"
         r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(cup|cups|tablespoon|tablespoons|tbsp|teaspoon|teaspoons|tsp|pound|pounds|lb|ounce|ounces|oz|gram|grams|g|kilogram|kilograms|kg|liter|liters|l|milliliter|milliliters|ml|pint|pints|pt|quart|quarts|qt|gallon|gallons|gal|clove|cloves|slice|slices|piece|pieces|can|cans|package|packages|jar|jars|bottle|bottles)\s+(.+)$",
-        // Pattern 2: "2 large eggs"
+        // Pattern 3: "2 large eggs"
         r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(large|medium|small|whole|fresh|dried)\s+(.+)$",
-        // Pattern 3: "1/2 onion, diced"
+        // Pattern 4: "1/2 onion, diced"
         r"^([\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+)\s+(.+?)(?:,\s*(.+))?$",
     ];
 
-    for pattern in &patterns {
+    for (pattern_index, pattern) in patterns.iter().enumerate() {
         if let Ok(regex) = regex::Regex::new(pattern) {
             if let Some(captures) = regex.captures(trimmed) {
                 let amount_str = captures.get(1)?.as_str();
                 let amount = parse_fraction_to_decimal(amount_str);
 
-                let (unit, name) = if captures.len() > 3 {
-                    // Pattern with unit
+                let (unit, name) = if pattern_index == 0 {
+                    // Pattern 1: "1 (15 ounce) package pretzel snaps" - parenthetical amounts
+                    let parenthetical = captures.get(2)?.as_str(); // "15 ounce"
+                    let container = captures.get(3)?.as_str(); // "package"
+                    let ingredient = captures.get(4)?.as_str(); // "pretzel snaps"
+
+                    // Parse the parenthetical amount and unit
+                    let (paren_amount, paren_unit) = if let Some(space_pos) = parenthetical.find(' ') {
+                        let paren_amount_str = &parenthetical[..space_pos];
+                        let paren_unit_str = &parenthetical[space_pos + 1..];
+                        (paren_amount_str, paren_unit_str)
+                    } else {
+                        ("", parenthetical)
+                    };
+
+                    // Create descriptive name including container and size info
+                    let full_name = if !paren_amount.is_empty() {
+                        format!("{} {} {} {}", paren_amount, paren_unit, container, ingredient)
+                    } else {
+                        format!("{} {} {}", paren_unit, container, ingredient)
+                    };
+
+                    // Use the container as the unit (e.g., "package", "bag", "can")
+                    // Don't normalize the container unit, just use it as-is
+                    (container.to_string(), clean_ingredient_name(&full_name))
+                } else if captures.len() > 3 {
+                    // Patterns with unit (2, 3)
                     let unit = captures.get(2)?.as_str().to_string();
                     let name = captures.get(3)?.as_str().to_string();
                     (normalize_unit(&unit), clean_ingredient_name(&name))
                 } else {
-                    // Pattern without explicit unit
+                    // Pattern without explicit unit (4)
                     let name = captures.get(2)?.as_str().to_string();
                     let cleaned_name = clean_ingredient_name(&name);
                     let unit = if should_use_empty_unit(&cleaned_name) { "".to_string() } else { "unit".to_string() };
@@ -1092,3 +1210,6 @@ fn is_valid_ingredient_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod time_estimation_tests;

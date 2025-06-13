@@ -17,6 +17,7 @@ import Pantry from '@pages/Pantry';
 import Ingredients from '@pages/Ingredients';
 import RecipeView from '@pages/RecipeView';
 import CookingMode from '@pages/CookingMode';
+import Settings from '@pages/Settings';
 import { migrateJsonRecipes } from '@services/recipeStorage';
 
 function App() {
@@ -56,6 +57,7 @@ function App() {
                   <Route path="/collections/:id" element={<CollectionView />} />
                   <Route path="/pantry" element={<Pantry />} />
                   <Route path="/ingredients" element={<Ingredients />} />
+                  <Route path="/settings" element={<Settings />} />
                   <Route path="/recipe/:id" element={<RecipeView />} />
                 </Routes>
               </AppLayout>

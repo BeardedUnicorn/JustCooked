@@ -17,7 +17,10 @@ import CollectionsIcon from '@mui/icons-material/Collections';
 import BookIcon from '@mui/icons-material/Book';
 import MenuIcon from '@mui/icons-material/Menu';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import SettingsIcon from '@mui/icons-material/Settings';
 import SearchBar from './SearchBar';
+import QueueStatusButton from './QueueStatusButton';
+import QueueManagementPopup from './QueueManagementPopup';
 
 const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' && prop !== 'isMobile' })<{
   open?: boolean;
@@ -42,6 +45,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [open, setOpen] = useState(!isMobile);
+  const [queuePopupOpen, setQueuePopupOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -56,6 +60,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { text: 'Collections', icon: <CollectionsIcon />, path: '/collections', label: 'Collections' },
     { text: 'Pantry', icon: <KitchenIcon />, path: '/pantry', label: 'Pantry' },
     { text: 'Ingredients', icon: <InventoryIcon />, path: '/ingredients', label: 'Ingredients' },
+    { text: 'Settings', icon: <SettingsIcon />, path: '/settings', label: 'Settings' },
   ];
 
   // Close drawer on mobile when route changes
@@ -137,6 +142,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             />
           </Box>
           <Box sx={{ flexGrow: 1 }} />
+          <QueueStatusButton onClick={() => setQueuePopupOpen(true)} />
         </Toolbar>
       </AppBar>
 
@@ -372,6 +378,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           ))}
         </BottomNavigation>
       )}
+
+      {/* Queue Management Popup */}
+      <QueueManagementPopup
+        open={queuePopupOpen}
+        onClose={() => setQueuePopupOpen(false)}
+      />
     </Box>
   );
 };

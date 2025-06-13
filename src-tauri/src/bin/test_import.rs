@@ -4,7 +4,7 @@ use scraper::{Html, Selector};
 
 #[tokio::main]
 async fn main() {
-    let url = "https://www.allrecipes.com/recipe/247073/cinnabon-cinnamon-roll-cake/";
+    let url = "https://www.allrecipes.com/recipe/8486405/chocolate-candy-corn-pretzel-bites/";
 
     println!("Testing recipe import from: {}", url);
     println!("{}", "=".repeat(60));

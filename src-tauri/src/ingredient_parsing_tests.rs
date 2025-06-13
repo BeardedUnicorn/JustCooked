@@ -154,6 +154,30 @@ mod tests {
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("can"));
         assert!(ingredient.name.contains("tomatoes"));
+
+        // Test AllRecipes format: "1 (15 ounce) package pretzel snaps"
+        let result = crate::parse_ingredient_string("1 (15 ounce) package pretzel snaps (square waffle-shaped pretzels)", None);
+        assert!(result.is_some());
+        let ingredient = result.unwrap();
+        assert_eq!(ingredient.amount, 1.0);
+        assert_eq!(ingredient.unit, "package");
+        assert!(ingredient.name.contains("15 ounce package pretzel snaps"));
+
+        // Test AllRecipes format: "1 (10 ounce) bag chocolate candies"
+        let result = crate::parse_ingredient_string("1 (10 ounce) bag chocolate candies (such as Hershey®'s Hugs®)", None);
+        assert!(result.is_some());
+        let ingredient = result.unwrap();
+        assert_eq!(ingredient.amount, 1.0);
+        assert_eq!(ingredient.unit, "bag");
+        assert!(ingredient.name.contains("10 ounce bag chocolate candies"));
+
+        // Test AllRecipes format: "1 (14 ounce) package candy corn"
+        let result = crate::parse_ingredient_string("1 (14 ounce) package candy corn", None);
+        assert!(result.is_some());
+        let ingredient = result.unwrap();
+        assert_eq!(ingredient.amount, 1.0);
+        assert_eq!(ingredient.unit, "package");
+        assert!(ingredient.name.contains("14 ounce package candy corn"));
     }
 
     #[test]

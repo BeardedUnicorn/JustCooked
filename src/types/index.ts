@@ -26,9 +26,27 @@ export type {
 } from './batchImport';
 export { BatchImportStatus, DEFAULT_BATCH_IMPORT_CONFIG } from './batchImport';
 
+// Import queue types
+export type {
+  ImportQueueTask,
+  ImportQueueStatus,
+  QueueProgressUpdate,
+  ImportQueueConfig
+} from './importQueue';
+export { ImportQueueTaskStatus, DEFAULT_IMPORT_QUEUE_CONFIG } from './importQueue';
+
 // Search-related types
 export type { SearchFilters } from './searchFilters';
 export type { RecentSearch } from './recentSearch';
 
 // Raw ingredient types for parsing analysis
 export type { RawIngredient } from './rawIngredient';
+
+// Database management types
+export type {
+  DatabaseExport,
+  DatabaseImportResult,
+  DatabaseStats,
+  DatabaseOperationProgress
+} from './databaseManagement';
+export { DatabaseOperation } from './databaseManagement';

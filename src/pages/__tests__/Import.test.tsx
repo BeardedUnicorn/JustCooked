@@ -1,8 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
 import Import from '@pages/Import';
 import { importRecipeFromUrl } from '@services/recipeImport';
+import importQueueReducer from '@store/slices/importQueueSlice';
 
 // Mock the recipe import service
 jest.mock('@services/recipeImport');
@@ -15,6 +18,26 @@ jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
   useNavigate: () => mockNavigate,
 }));
+
+// Mock Tauri API
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: jest.fn().mockResolvedValue({
+    tasks: [],
+    currentTaskId: null,
+    isProcessing: false,
+    totalPending: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+  }),
+}));
+
+const createTestStore = () => {
+  return configureStore({
+    reducer: {
+      importQueue: importQueueReducer,
+    },
+  });
+};
 
 const mockImportedRecipe = {
   id: 'imported-recipe-1',
@@ -43,10 +66,13 @@ const mockImportedRecipe = {
 };
 
 const renderImport = () => {
+  const store = createTestStore();
   return render(
-    <BrowserRouter>
-      <Import />
-    </BrowserRouter>
+    <Provider store={store}>
+      <BrowserRouter>
+        <Import />
+      </BrowserRouter>
+    </Provider>
   );
 };
 

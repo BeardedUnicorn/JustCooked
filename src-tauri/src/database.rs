@@ -108,6 +108,35 @@ pub struct SearchFilters {
     pub is_favorite: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseExport {
+    pub version: String,
+    pub export_date: DateTime<Utc>,
+    pub recipes: Vec<Recipe>,
+    pub ingredients: Vec<IngredientDatabase>,
+    pub pantry_items: Vec<PantryItem>,
+    pub recipe_collections: Vec<RecipeCollection>,
+    pub recent_searches: Vec<RecentSearch>,
+    pub raw_ingredients: Vec<RawIngredient>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DatabaseImportResult {
+    pub recipes_imported: i32,
+    pub recipes_failed: i32,
+    pub ingredients_imported: i32,
+    pub ingredients_failed: i32,
+    pub pantry_items_imported: i32,
+    pub pantry_items_failed: i32,
+    pub collections_imported: i32,
+    pub collections_failed: i32,
+    pub searches_imported: i32,
+    pub searches_failed: i32,
+    pub raw_ingredients_imported: i32,
+    pub raw_ingredients_failed: i32,
+    pub errors: Vec<String>,
+}
+
 pub struct Database {
     pool: SqlitePool,
 }
@@ -1588,6 +1617,319 @@ impl Database {
             collections,
             nutritional_info,
         })
+    }
+
+    // Database management methods
+    pub async fn export_all_data(&self) -> Result<DatabaseExport> {
+        let recipes = self.get_all_recipes().await?;
+        let ingredients = self.get_all_ingredients().await?;
+        let pantry_items = self.get_all_pantry_items().await?;
+        let recipe_collections = self.get_all_recipe_collections().await?;
+        let recent_searches = self.get_recent_searches(100).await?; // Get last 100 searches
+        let raw_ingredients = self.get_all_raw_ingredients().await?;
+
+        Ok(DatabaseExport {
+            version: "1.0".to_string(),
+            export_date: chrono::Utc::now(),
+            recipes,
+            ingredients,
+            pantry_items,
+            recipe_collections,
+            recent_searches,
+            raw_ingredients,
+        })
+    }
+
+    pub async fn import_all_data(&self, data: &DatabaseExport, replace_existing: bool) -> Result<DatabaseImportResult> {
+        let mut tx = self.pool.begin().await.context("Failed to start transaction")?;
+        let mut result = DatabaseImportResult::default();
+
+        if replace_existing {
+            // Clear all tables
+            sqlx::query("DELETE FROM recipes").execute(&mut *tx).await.context("Failed to clear recipes")?;
+            sqlx::query("DELETE FROM ingredients").execute(&mut *tx).await.context("Failed to clear ingredients")?;
+            sqlx::query("DELETE FROM pantry_items").execute(&mut *tx).await.context("Failed to clear pantry_items")?;
+            sqlx::query("DELETE FROM recipe_collections").execute(&mut *tx).await.context("Failed to clear recipe_collections")?;
+            sqlx::query("DELETE FROM search_history").execute(&mut *tx).await.context("Failed to clear search_history")?;
+            sqlx::query("DELETE FROM raw_ingredients").execute(&mut *tx).await.context("Failed to clear raw_ingredients")?;
+        }
+
+        // Import recipes
+        for recipe in &data.recipes {
+            match self.save_recipe_with_transaction(&mut tx, recipe).await {
+                Ok(_) => result.recipes_imported += 1,
+                Err(e) => {
+                    result.recipes_failed += 1;
+                    result.errors.push(format!("Recipe '{}': {}", recipe.title, e));
+                }
+            }
+        }
+
+        // Import ingredients
+        for ingredient in &data.ingredients {
+            match self.save_ingredient_with_transaction(&mut tx, ingredient).await {
+                Ok(_) => result.ingredients_imported += 1,
+                Err(e) => {
+                    result.ingredients_failed += 1;
+                    result.errors.push(format!("Ingredient '{}': {}", ingredient.name, e));
+                }
+            }
+        }
+
+        // Import pantry items
+        for pantry_item in &data.pantry_items {
+            match self.save_pantry_item_with_transaction(&mut tx, pantry_item).await {
+                Ok(_) => result.pantry_items_imported += 1,
+                Err(e) => {
+                    result.pantry_items_failed += 1;
+                    result.errors.push(format!("Pantry item '{}': {}", pantry_item.ingredient_name, e));
+                }
+            }
+        }
+
+        // Import recipe collections
+        for collection in &data.recipe_collections {
+            match self.save_recipe_collection_with_transaction(&mut tx, collection).await {
+                Ok(_) => result.collections_imported += 1,
+                Err(e) => {
+                    result.collections_failed += 1;
+                    result.errors.push(format!("Collection '{}': {}", collection.name, e));
+                }
+            }
+        }
+
+        // Import search history
+        for search in &data.recent_searches {
+            match self.save_search_history_with_transaction(&mut tx, search).await {
+                Ok(_) => result.searches_imported += 1,
+                Err(e) => {
+                    result.searches_failed += 1;
+                    result.errors.push(format!("Search '{}': {}", search.query, e));
+                }
+            }
+        }
+
+        // Import raw ingredients
+        for raw_ingredient in &data.raw_ingredients {
+            match self.save_raw_ingredient_with_transaction(&mut tx, raw_ingredient).await {
+                Ok(_) => result.raw_ingredients_imported += 1,
+                Err(e) => {
+                    result.raw_ingredients_failed += 1;
+                    result.errors.push(format!("Raw ingredient: {}", e));
+                }
+            }
+        }
+
+        tx.commit().await.context("Failed to commit transaction")?;
+        Ok(result)
+    }
+
+    pub async fn reset_all_data(&self) -> Result<()> {
+        let mut tx = self.pool.begin().await.context("Failed to start transaction")?;
+
+        // Clear all tables
+        sqlx::query("DELETE FROM recipes").execute(&mut *tx).await.context("Failed to clear recipes")?;
+        sqlx::query("DELETE FROM ingredients").execute(&mut *tx).await.context("Failed to clear ingredients")?;
+        sqlx::query("DELETE FROM pantry_items").execute(&mut *tx).await.context("Failed to clear pantry_items")?;
+        sqlx::query("DELETE FROM recipe_collections").execute(&mut *tx).await.context("Failed to clear recipe_collections")?;
+        sqlx::query("DELETE FROM search_history").execute(&mut *tx).await.context("Failed to clear search_history")?;
+        sqlx::query("DELETE FROM raw_ingredients").execute(&mut *tx).await.context("Failed to clear raw_ingredients")?;
+
+        // Reset SQLite sequence counters
+        sqlx::query("DELETE FROM sqlite_sequence").execute(&mut *tx).await.context("Failed to reset sequences")?;
+
+        tx.commit().await.context("Failed to commit transaction")?;
+        Ok(())
+    }
+
+    // Helper method to get all raw ingredients
+    async fn get_all_raw_ingredients(&self) -> Result<Vec<RawIngredient>> {
+        let rows = sqlx::query("SELECT * FROM raw_ingredients ORDER BY date_captured DESC")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch raw ingredients")?;
+
+        let mut raw_ingredients = Vec::new();
+        for row in rows {
+            raw_ingredients.push(RawIngredient {
+                id: row.get("id"),
+                raw_text: row.get("raw_text"),
+                source_url: row.get("source_url"),
+                recipe_id: row.get("recipe_id"),
+                recipe_title: row.get("recipe_title"),
+                date_captured: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_captured"))
+                    .context("Failed to parse date_captured")?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(raw_ingredients)
+    }
+
+    // Transaction helper methods
+    async fn save_recipe_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, recipe: &Recipe) -> Result<()> {
+        let ingredients_json = serde_json::to_string(&recipe.ingredients)
+            .context("Failed to serialize ingredients")?;
+        let instructions_json = serde_json::to_string(&recipe.instructions)
+            .context("Failed to serialize instructions")?;
+        let tags_json = serde_json::to_string(&recipe.tags)
+            .context("Failed to serialize tags")?;
+        let collections_json = serde_json::to_string(&recipe.collections)
+            .context("Failed to serialize collections")?;
+        let nutritional_info_json = match &recipe.nutritional_info {
+            Some(info) => Some(serde_json::to_string(info).context("Failed to serialize nutritional info")?),
+            None => None,
+        };
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO recipes (
+                id, title, description, image, source_url, prep_time, cook_time, total_time,
+                servings, ingredients, instructions, tags, date_added, date_modified,
+                rating, difficulty, is_favorite, personal_notes, collections, nutritional_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&recipe.id)
+        .bind(&recipe.title)
+        .bind(&recipe.description)
+        .bind(&recipe.image)
+        .bind(&recipe.source_url)
+        .bind(&recipe.prep_time)
+        .bind(&recipe.cook_time)
+        .bind(&recipe.total_time)
+        .bind(recipe.servings)
+        .bind(&ingredients_json)
+        .bind(&instructions_json)
+        .bind(&tags_json)
+        .bind(recipe.date_added.to_rfc3339())
+        .bind(recipe.date_modified.to_rfc3339())
+        .bind(recipe.rating)
+        .bind(&recipe.difficulty)
+        .bind(recipe.is_favorite)
+        .bind(&recipe.personal_notes)
+        .bind(&collections_json)
+        .bind(&nutritional_info_json)
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save recipe")?;
+
+        Ok(())
+    }
+
+    async fn save_ingredient_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, ingredient: &IngredientDatabase) -> Result<()> {
+        let aliases_json = serde_json::to_string(&ingredient.aliases)
+            .context("Failed to serialize aliases")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO ingredients (
+                id, name, category, aliases, date_added, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&ingredient.id)
+        .bind(&ingredient.name)
+        .bind(&ingredient.category)
+        .bind(&aliases_json)
+        .bind(ingredient.date_added.clone())
+        .bind(ingredient.date_modified.clone())
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save ingredient")?;
+
+        Ok(())
+    }
+
+    async fn save_pantry_item_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, pantry_item: &PantryItem) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO pantry_items (
+                id, ingredient_name, quantity, unit, expiry_date, location, notes, date_added, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&pantry_item.id)
+        .bind(&pantry_item.ingredient_name)
+        .bind(pantry_item.quantity)
+        .bind(&pantry_item.unit)
+        .bind(&pantry_item.expiry_date)
+        .bind(&pantry_item.location)
+        .bind(&pantry_item.notes)
+        .bind(pantry_item.date_added.clone())
+        .bind(pantry_item.date_modified.clone())
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save pantry item")?;
+
+        Ok(())
+    }
+
+    async fn save_recipe_collection_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, collection: &RecipeCollection) -> Result<()> {
+        let recipe_ids_json = serde_json::to_string(&collection.recipe_ids)
+            .context("Failed to serialize recipe IDs")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO recipe_collections (
+                id, name, description, recipe_ids, date_created, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&collection.id)
+        .bind(&collection.name)
+        .bind(&collection.description)
+        .bind(&recipe_ids_json)
+        .bind(collection.date_created.clone())
+        .bind(collection.date_modified.clone())
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save recipe collection")?;
+
+        Ok(())
+    }
+
+    async fn save_search_history_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, search: &RecentSearch) -> Result<()> {
+        let filters_json = serde_json::to_string(&search.filters)
+            .context("Failed to serialize search filters")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO search_history (
+                id, query, filters, timestamp
+            ) VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(&search.id)
+        .bind(&search.query)
+        .bind(&filters_json)
+        .bind(search.timestamp.clone())
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save search history")?;
+
+        Ok(())
+    }
+
+    async fn save_raw_ingredient_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, raw_ingredient: &RawIngredient) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO raw_ingredients (
+                id, raw_text, source_url, recipe_id, recipe_title, date_captured
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&raw_ingredient.id)
+        .bind(&raw_ingredient.raw_text)
+        .bind(&raw_ingredient.source_url)
+        .bind(&raw_ingredient.recipe_id)
+        .bind(&raw_ingredient.recipe_title)
+        .bind(raw_ingredient.date_captured.to_rfc3339())
+        .execute(&mut **tx)
+        .await
+        .context("Failed to save raw ingredient")?;
+
+        Ok(())
     }
 }
 

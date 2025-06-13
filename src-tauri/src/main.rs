@@ -7,6 +7,8 @@ mod recipe_import;
 mod image_storage;
 mod batch_import;
 mod database;
+mod import_queue;
+mod logging;
 
 #[cfg(test)]
 mod ingredient_parsing_tests;
@@ -14,10 +16,14 @@ mod ingredient_parsing_tests;
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient};
+use import_queue::{ImportQueue, ImportQueueStatus};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult};
+use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use tracing::{info, warn, error};
+use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,9 +60,16 @@ struct FrontendIngredient {
 
 #[tauri::command]
 async fn import_recipe(url: String) -> Result<ImportedRecipe, String> {
+    info!("Starting recipe import from URL: {}", url);
     match import_recipe_from_url(&url).await {
-        Ok(recipe) => Ok(recipe),
-        Err(e) => Err(e.message),
+        Ok(recipe) => {
+            info!("Successfully imported recipe: {} from {}", recipe.name, url);
+            Ok(recipe)
+        },
+        Err(e) => {
+            error!("Failed to import recipe from {}: {} ({})", url, e.message, e.error_type);
+            Err(e.message)
+        },
     }
 }
 
@@ -156,6 +169,9 @@ async fn save_imported_recipe(
 
 // Global state for batch import
 type BatchImporterMap = Arc<Mutex<HashMap<String, Arc<BatchImporter>>>>;
+
+// Global state for import queue
+type ImportQueueState = Arc<ImportQueue>;
 
 // Database commands
 #[tauri::command]
@@ -475,10 +491,21 @@ fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Op
                     let unit = extract_unit_from_parenthetical(paren_content, container_type);
 
                     // For parenthetical amounts, preserve the full description
-                    let full_name = if prep.is_empty() {
-                        format!("{} {}", container_type, ingredient_name)
+                    // For AllRecipes format with full words, include the size info in the name
+                    let full_name = if paren_content.contains("ounce") || paren_content.contains("pound") || paren_content.contains("gram") {
+                        // AllRecipes format: include size info in name
+                        if prep.is_empty() {
+                            format!("{} {} {}", paren_content, container_type, ingredient_name)
+                        } else {
+                            format!("{} {} {}, {}", paren_content, container_type, ingredient_name, prep)
+                        }
                     } else {
-                        format!("{} {}, {}", container_type, ingredient_name, prep)
+                        // Traditional format: just container and ingredient
+                        if prep.is_empty() {
+                            format!("{} {}", container_type, ingredient_name)
+                        } else {
+                            format!("{} {}, {}", container_type, ingredient_name, prep)
+                        }
                     };
 
                     (amount, unit, full_name, String::new())
@@ -692,8 +719,16 @@ fn extract_unit_from_parenthetical(paren_content: &str, container_type: &str) ->
         paren_content.to_string()
     };
 
-    // Combine with container type for full unit description
-    format!("{} {}", paren_unit, normalize_unit(container_type))
+    // For AllRecipes format with full words like "ounce", "pound", etc.,
+    // the parenthetical amount is descriptive and should be included in the name,
+    // so we use just the container type as the unit
+    if paren_content.contains("ounce") || paren_content.contains("pound") || paren_content.contains("gram") {
+        normalize_unit(container_type)
+    } else {
+        // For traditional format with abbreviations like "oz", "lb", etc.,
+        // combine with container type for full unit description
+        format!("{} {}", paren_unit, normalize_unit(container_type))
+    }
 }
 
 /// Determine if preparation should be included in the ingredient name
@@ -1026,6 +1061,38 @@ async fn db_get_raw_ingredients_count(app: tauri::AppHandle) -> Result<i64, Stri
     Ok(count)
 }
 
+// Database management commands
+#[tauri::command]
+async fn db_export_database(app: tauri::AppHandle) -> Result<DatabaseExport, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+
+    let export_data = db.export_all_data().await.map_err(|e| e.to_string())?;
+
+    Ok(export_data)
+}
+
+#[tauri::command]
+async fn db_import_database(
+    app: tauri::AppHandle,
+    data: DatabaseExport,
+    replace_existing: bool,
+) -> Result<DatabaseImportResult, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+
+    let result = db.import_all_data(&data, replace_existing).await.map_err(|e| e.to_string())?;
+
+    Ok(result)
+}
+
+#[tauri::command]
+async fn db_reset_database(app: tauri::AppHandle) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+
+    db.reset_all_data().await.map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn get_batch_import_progress(
     import_id: String,
@@ -1055,16 +1122,94 @@ async fn cancel_batch_import(
     }
 }
 
+// Import Queue Commands
+#[tauri::command]
+async fn add_to_import_queue(
+    app: tauri::AppHandle,
+    description: String,
+    request: BatchImportRequest,
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<String, String> {
+    info!("=== ADD_TO_IMPORT_QUEUE CALLED ===");
+    info!("Adding task to import queue: {}", description);
+    info!("Request details: start_url={}, max_recipes={:?}, max_depth={:?}, existing_urls_count={}",
+          request.start_url, request.max_recipes, request.max_depth,
+          request.existing_urls.as_ref().map_or(0, |urls| urls.len()));
+
+    let task_id = queue_state.add_task(description, request)?;
+    info!("Task added with ID: {}", task_id);
+
+    // Trigger queue processing
+    info!("Spawning queue processing task...");
+    let queue_clone = queue_state.inner().clone();
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        info!("Queue processing task started");
+        queue_clone.process_queue(app_clone).await;
+        info!("Queue processing task completed");
+    });
+
+    info!("add_to_import_queue returning task_id: {}", task_id);
+    Ok(task_id)
+}
+
+#[tauri::command]
+async fn get_import_queue_status(
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<ImportQueueStatus, String> {
+    Ok(queue_state.get_status())
+}
+
+#[tauri::command]
+async fn remove_from_import_queue(
+    task_id: String,
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<(), String> {
+    info!("Removing task from import queue: {}", task_id);
+    queue_state.remove_task(&task_id)
+}
+
+#[tauri::command]
+async fn get_queue_task_progress(
+    task_id: String,
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<Option<BatchImportProgress>, String> {
+    Ok(queue_state.get_task_progress(&task_id))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let batch_importers: BatchImporterMap = Arc::new(Mutex::new(HashMap::new()));
+    let import_queue: ImportQueueState = Arc::new(ImportQueue::new());
 
     tauri::Builder::default()
+        .setup(|app| {
+            // Initialize logging system
+            let app_data_dir = app.path().app_data_dir()
+                .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+            if let Err(e) = logging::init_logging(&app_data_dir) {
+                eprintln!("Failed to initialize logging: {}", e);
+                return Err(format!("Logging initialization failed: {}", e).into());
+            }
+
+            // Log application startup
+            info!("JustCooked application starting up");
+            info!("App data directory: {:?}", app_data_dir);
+
+            // Clean up old log files
+            if let Err(e) = logging::cleanup_old_logs(&app_data_dir) {
+                warn!("Failed to cleanup old logs: {}", e);
+            }
+
+            Ok(())
+        })
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(batch_importers)
+        .manage(import_queue)
         .invoke_handler(tauri::generate_handler![
             import_recipe,
             download_recipe_image,
@@ -1074,6 +1219,10 @@ pub fn run() {
             start_batch_import,
             get_batch_import_progress,
             cancel_batch_import,
+            add_to_import_queue,
+            get_import_queue_status,
+            remove_from_import_queue,
+            get_queue_task_progress,
             db_save_recipe,
             db_get_all_recipes,
             db_get_recipes_paginated,
@@ -1102,7 +1251,17 @@ pub fn run() {
             db_delete_search_history,
             db_clear_search_history,
             db_get_raw_ingredients_by_source,
-            db_get_raw_ingredients_count
+            db_get_raw_ingredients_count,
+            db_export_database,
+            db_import_database,
+            db_reset_database,
+            log_info,
+            log_warn,
+            log_error,
+            log_debug,
+            get_log_file_path,
+            get_log_directory_path,
+            open_log_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

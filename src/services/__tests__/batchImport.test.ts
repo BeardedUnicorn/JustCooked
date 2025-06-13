@@ -12,6 +12,17 @@ jest.mock('@services/recipeStorage', () => ({
   getExistingRecipeUrls: jest.fn(() => Promise.resolve([])),
 }));
 
+// Mock logging service
+jest.mock('@services/loggingService', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    logError: jest.fn(),
+  })),
+}));
+
 describe('BatchImportService', () => {
   let service: BatchImportService;
 

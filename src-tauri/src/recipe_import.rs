@@ -2,6 +2,7 @@ use reqwest;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
+use tracing::{info, warn, error, debug, instrument};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportedRecipe {
@@ -32,15 +33,22 @@ impl std::fmt::Display for RecipeImportError {
 
 impl std::error::Error for RecipeImportError {}
 
+#[instrument(skip_all, fields(url = %url))]
 pub async fn import_recipe_from_url(url: &str) -> Result<ImportedRecipe, RecipeImportError> {
+    debug!("Starting recipe import from URL: {}", url);
+
     // Validate URL
-    let parsed_url = Url::parse(url).map_err(|_| RecipeImportError {
-        message: "Invalid URL format".to_string(),
-        error_type: "ValidationError".to_string(),
+    let parsed_url = Url::parse(url).map_err(|e| {
+        error!("Invalid URL format for {}: {}", url, e);
+        RecipeImportError {
+            message: "Invalid URL format".to_string(),
+            error_type: "ValidationError".to_string(),
+        }
     })?;
 
     // Check if it's a supported site
     if !is_supported_url(&parsed_url) {
+        warn!("Unsupported website attempted: {}", url);
         return Err(RecipeImportError {
             message: "Unsupported website. Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes.".to_string(),
             error_type: "UnsupportedSite".to_string(),
@@ -48,33 +56,64 @@ pub async fn import_recipe_from_url(url: &str) -> Result<ImportedRecipe, RecipeI
     }
 
     // Fetch the webpage
+    debug!("Creating HTTP client for URL: {}", url);
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         .build()
-        .map_err(|e| RecipeImportError {
-            message: format!("Failed to create HTTP client: {}", e),
-            error_type: "NetworkError".to_string(),
+        .map_err(|e| {
+            error!("Failed to create HTTP client: {}", e);
+            RecipeImportError {
+                message: format!("Failed to create HTTP client: {}", e),
+                error_type: "NetworkError".to_string(),
+            }
         })?;
 
-    let response = client.get(url).send().await.map_err(|e| RecipeImportError {
-        message: format!("Failed to fetch webpage: {}", e),
-        error_type: "NetworkError".to_string(),
+    info!("Fetching webpage: {}", url);
+    let response = client.get(url).send().await.map_err(|e| {
+        error!("Failed to fetch webpage {}: {}", url, e);
+        RecipeImportError {
+            message: format!("Failed to fetch webpage: {}", e),
+            error_type: "NetworkError".to_string(),
+        }
     })?;
 
-    if !response.status().is_success() {
+    let status = response.status();
+    debug!("HTTP response status: {}", status);
+
+    if !status.is_success() {
+        error!("HTTP error for {}: {}", url, status);
         return Err(RecipeImportError {
-            message: format!("HTTP error: {}", response.status()),
+            message: format!("HTTP error: {}", status),
             error_type: "NetworkError".to_string(),
         });
     }
 
-    let html_content = response.text().await.map_err(|e| RecipeImportError {
-        message: format!("Failed to read response body: {}", e),
-        error_type: "NetworkError".to_string(),
+    debug!("Reading response body for: {}", url);
+    let html_content = response.text().await.map_err(|e| {
+        error!("Failed to read response body for {}: {}", url, e);
+        RecipeImportError {
+            message: format!("Failed to read response body: {}", e),
+            error_type: "NetworkError".to_string(),
+        }
     })?;
 
+    info!("Successfully fetched {} bytes from {}", html_content.len(), url);
+
     // Parse the HTML and extract recipe data
-    extract_recipe_data(&html_content, url)
+    debug!("Starting recipe data extraction for: {}", url);
+    let result = extract_recipe_data(&html_content, url);
+
+    match &result {
+        Ok(recipe) => {
+            info!("Successfully extracted recipe '{}' with {} ingredients and {} instructions",
+                  recipe.name, recipe.ingredients.len(), recipe.instructions.len());
+        },
+        Err(e) => {
+            error!("Failed to extract recipe data from {}: {} ({})", url, e.message, e.error_type);
+        }
+    }
+
+    result
 }
 
 pub fn is_supported_url(url: &Url) -> bool {
@@ -94,16 +133,28 @@ pub fn is_supported_url(url: &Url) -> bool {
     }
 }
 
+#[instrument(skip_all, fields(source_url = %source_url))]
 pub fn extract_recipe_data(html: &str, source_url: &str) -> Result<ImportedRecipe, RecipeImportError> {
+    debug!("Parsing HTML document for: {}", source_url);
     let document = Html::parse_document(html);
 
     // First try to extract from JSON-LD structured data
+    debug!("Attempting JSON-LD extraction for: {}", source_url);
     if let Ok(recipe) = extract_from_json_ld(&document, source_url) {
+        info!("Successfully extracted recipe from JSON-LD: {}", recipe.name);
         return Ok(recipe);
     }
 
     // Fallback to HTML scraping
-    extract_from_html_selectors(&document, source_url)
+    warn!("JSON-LD extraction failed, falling back to HTML selectors for: {}", source_url);
+    let result = extract_from_html_selectors(&document, source_url);
+
+    match &result {
+        Ok(recipe) => info!("Successfully extracted recipe from HTML selectors: {}", recipe.name),
+        Err(e) => error!("HTML selector extraction also failed: {} ({})", e.message, e.error_type),
+    }
+
+    result
 }
 
 pub fn extract_from_json_ld(document: &Html, source_url: &str) -> Result<ImportedRecipe, RecipeImportError> {

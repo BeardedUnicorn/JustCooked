@@ -5,6 +5,9 @@ import {
   BatchImportStatus
 } from '@app-types';
 import { getExistingRecipeUrls } from '@services/recipeStorage';
+import { createLogger } from '@services/loggingService';
+
+const logger = createLogger('BatchImport');
 
 export class BatchImportService {
   private currentImportId: string | null = null;
@@ -23,26 +26,38 @@ export class BatchImportService {
     }
   ): Promise<string> {
     try {
+      await logger.info('Starting batch import', {
+        startUrl,
+        maxRecipes: options?.maxRecipes,
+        maxDepth: options?.maxDepth
+      });
+
       // Validate URL
       if (!this.isValidAllRecipesUrl(startUrl)) {
-        throw new Error('Invalid AllRecipes URL. Please provide a valid AllRecipes category URL.');
+        const error = new Error('Invalid AllRecipes URL. Please provide a valid AllRecipes category URL.');
+        await logger.error('Invalid URL provided for batch import', { startUrl });
+        throw error;
       }
 
       // Stop any existing import and clean up
       if (this.currentImportId) {
+        await logger.warn('Cancelling existing batch import to start new one', {
+          existingImportId: this.currentImportId,
+          newUrl: startUrl
+        });
         try {
           await this.cancelBatchImport();
         } catch (error) {
-          console.warn('Failed to cancel previous import, continuing with new import:', error);
+          await logger.warn('Failed to cancel previous import, continuing with new import', { error: error instanceof Error ? error.message : String(error) });
         }
         // Clear the current import ID to allow new import
         this.currentImportId = null;
       }
 
       // Get existing recipe URLs to skip
-      console.log('Getting existing recipe URLs...');
+      await logger.debug('Fetching existing recipe URLs for deduplication');
       const existingUrls = await getExistingRecipeUrls();
-      console.log(`Found ${existingUrls.length} existing recipe URLs`);
+      await logger.info('Retrieved existing recipe URLs', { count: existingUrls.length });
 
       const request: BatchImportRequest = {
         startUrl,
@@ -51,21 +66,28 @@ export class BatchImportService {
         existingUrls,
       };
 
-      console.log('Starting batch import:', request);
+      await logger.debug('Sending batch import request to backend', {
+        startUrl: request.startUrl,
+        maxRecipes: request.maxRecipes,
+        existingUrlCount: request.existingUrls?.length || 0
+      });
 
       // Start the import
       const importId: string = await invoke('start_batch_import', { request });
       this.currentImportId = importId;
 
+      await logger.info('Batch import started successfully', { importId });
+
       // Set up progress tracking
       if (options?.onProgress) {
         this.onProgressCallback = options.onProgress;
         this.startProgressTracking();
+        await logger.debug('Progress tracking enabled for batch import', { importId });
       }
 
       return importId;
     } catch (error) {
-      console.error('Failed to start batch import:', error);
+      await logger.logError(error, 'Failed to start batch import', { startUrl });
       throw new Error(`Failed to start batch import: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -84,7 +106,10 @@ export class BatchImportService {
       });
       return progress;
     } catch (error) {
-      console.error('Failed to get batch import progress:', error);
+      await logger.warn('Failed to get batch import progress', {
+        importId: this.currentImportId,
+        error: error instanceof Error ? error.message : String(error)
+      });
       return null;
     }
   }
@@ -135,10 +160,14 @@ export class BatchImportService {
   private startProgressTracking(): void {
     this.stopProgressTracking(); // Clear any existing interval
 
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 5;
+
     this.progressInterval = setInterval(async () => {
       try {
         const progress = await this.getProgress();
         if (progress && this.onProgressCallback) {
+          consecutiveErrors = 0; // Reset error counter on success
           this.onProgressCallback(progress);
 
           // Stop tracking if import is complete or cancelled
@@ -161,8 +190,15 @@ export class BatchImportService {
           }
         }
       } catch (error) {
-        console.error('Error tracking progress:', error);
-        this.stopProgressTracking();
+        consecutiveErrors++;
+        await logger.logError(error, 'Error tracking progress');
+
+        // Stop tracking after too many consecutive errors
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          logger.error(`Stopping progress tracking after ${maxConsecutiveErrors} consecutive errors`);
+          this.stopProgressTracking();
+          this.currentImportId = null;
+        }
       }
     }, 2000); // Update every 2 seconds
   }

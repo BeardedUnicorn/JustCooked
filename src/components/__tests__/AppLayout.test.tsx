@@ -1,10 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
+import { Provider } from 'react-redux';
 import { ThemeProvider } from '@mui/material/styles';
 import { useMediaQuery } from '@mui/material';
+import { configureStore } from '@reduxjs/toolkit';
 import AppLayout from '@components/AppLayout';
 import darkTheme from '@styles/theme';
+import importQueueReducer from '@store/slices/importQueueSlice';
 
 // Mock useMediaQuery
 jest.mock('@mui/material', () => ({
@@ -22,15 +25,38 @@ jest.mock('react-router-dom', () => ({
   useLocation: () => mockLocation,
 }));
 
+// Mock Tauri API
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: jest.fn().mockResolvedValue({
+    tasks: [],
+    currentTaskId: null,
+    isProcessing: false,
+    totalPending: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+  }),
+}));
+
+const createTestStore = () => {
+  return configureStore({
+    reducer: {
+      importQueue: importQueueReducer,
+    },
+  });
+};
+
 const renderAppLayout = (children = <div>Test Content</div>, isMobile = false) => {
   (useMediaQuery as jest.Mock).mockReturnValue(isMobile);
-  
+  const store = createTestStore();
+
   return render(
-    <BrowserRouter>
-      <ThemeProvider theme={darkTheme}>
-        <AppLayout>{children}</AppLayout>
-      </ThemeProvider>
-    </BrowserRouter>
+    <Provider store={store}>
+      <BrowserRouter>
+        <ThemeProvider theme={darkTheme}>
+          <AppLayout>{children}</AppLayout>
+        </ThemeProvider>
+      </BrowserRouter>
+    </Provider>
   );
 };
 
@@ -178,12 +204,15 @@ describe('AppLayout Component', () => {
 
       // Switch to mobile
       (useMediaQuery as jest.Mock).mockReturnValue(true);
+      const store = createTestStore();
       rerender(
-        <BrowserRouter>
-          <ThemeProvider theme={darkTheme}>
-            <AppLayout><div>Test Content</div></AppLayout>
-          </ThemeProvider>
-        </BrowserRouter>
+        <Provider store={store}>
+          <BrowserRouter>
+            <ThemeProvider theme={darkTheme}>
+              <AppLayout><div>Test Content</div></AppLayout>
+            </ThemeProvider>
+          </BrowserRouter>
+        </Provider>
       );
 
       // Mobile layout - bottom navigation should be visible

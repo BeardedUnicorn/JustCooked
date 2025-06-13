@@ -20,28 +20,32 @@ import {
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  Download as DownloadIcon,
+  Queue as QueueIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { BatchImportProgress, BatchImportStatus } from '@app-types';
+import { BatchImportRequest } from '@app-types';
 import { batchImportService } from '@services/batchImport';
-import BatchImportProgressComponent from './BatchImportProgress';
+import { getExistingRecipeUrls } from '@services/recipeStorage';
+import { useAppDispatch } from '@store';
+import { addToQueue } from '@store/slices/importQueueSlice';
+import { importQueueService } from '@services/importQueue';
 
 interface BatchImportDialogProps {
   open: boolean;
   onClose: () => void;
-  onImportComplete?: (result: { successCount: number; failureCount: number }) => void;
+  onTaskAdded?: (taskId: string) => void;
 }
 
 const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   open,
   onClose,
-  onImportComplete,
+  onTaskAdded,
 }) => {
+  const dispatch = useAppDispatch();
   const [url, setUrl] = useState('');
-
-  const [isImporting, setIsImporting] = useState(false);
-  const [progress, setProgress] = useState<BatchImportProgress | null>(null);
+  const [maxRecipes, setMaxRecipes] = useState<number | ''>('');
+  const [maxDepth, setMaxDepth] = useState<number | ''>('');
+  const [isAddingToQueue, setIsAddingToQueue] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const suggestedUrls = batchImportService.getSuggestedCategoryUrls();
@@ -50,57 +54,14 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   useEffect(() => {
     if (!open) {
       setUrl('');
-      setIsImporting(false);
-      setProgress(null);
+      setMaxRecipes('');
+      setMaxDepth('');
+      setIsAddingToQueue(false);
       setError(null);
     }
   }, [open]);
 
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      batchImportService.cleanup();
-    };
-  }, []);
-
-  // Poll for progress when importing
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | undefined;
-    if (isImporting) {
-      const fetchProgress = async () => {
-        try {
-          const newProgress = await batchImportService.getProgress();
-          if (newProgress) {
-            setProgress(newProgress);
-            if (
-              newProgress.status === BatchImportStatus.COMPLETED ||
-              newProgress.status === BatchImportStatus.CANCELLED ||
-              newProgress.status === BatchImportStatus.ERROR
-            ) {
-              setIsImporting(false);
-              if (newProgress.status === BatchImportStatus.COMPLETED && onImportComplete) {
-                onImportComplete({
-                  successCount: newProgress.successfulImports,
-                  failureCount: newProgress.failedImports,
-                });
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Failed to fetch progress:', error);
-        }
-      };
-
-      fetchProgress(); // Initial fetch
-
-      intervalId = setInterval(fetchProgress, 2000);
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [isImporting, onImportComplete]);
-
-  const handleStartImport = async () => {
+  const handleAddToQueue = async () => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
       setError('Please enter a valid URL');
@@ -108,23 +69,38 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     }
 
     setError(null);
-    setIsImporting(true);
+    setIsAddingToQueue(true);
 
     try {
-      await batchImportService.startBatchImport(trimmedUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start batch import');
-      setIsImporting(false);
-    }
-  };
+      // Get existing recipe URLs for deduplication
+      const existingUrls = await getExistingRecipeUrls();
 
-  const handleCancelImport = async () => {
-    try {
-      await batchImportService.cancelBatchImport();
-      setIsImporting(false);
-      setProgress(null);
+      // Create the batch import request
+      const request: BatchImportRequest = {
+        startUrl: trimmedUrl,
+        maxRecipes: maxRecipes ? Number(maxRecipes) : undefined,
+        maxDepth: maxDepth ? Number(maxDepth) : undefined,
+        existingUrls,
+      };
+
+      // Generate description for the task
+      const description = importQueueService.getTaskDescription(request);
+
+      // Add to queue using Redux
+      const result = await dispatch(addToQueue({ description, request })).unwrap();
+
+      // Notify parent component
+      if (onTaskAdded) {
+        onTaskAdded(result);
+      }
+
+      // Close dialog immediately on success
+      onClose();
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel import');
+      setError(err instanceof Error ? err.message : 'Failed to add task to queue');
+    } finally {
+      setIsAddingToQueue(false);
     }
   };
 
@@ -133,10 +109,9 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   };
 
   const handleClose = () => {
-    if (isImporting) {
-      handleCancelImport();
+    if (!isAddingToQueue) {
+      onClose();
     }
-    onClose();
   };
 
   const isValidUrl = (urlString: string) => {
@@ -163,14 +138,13 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <DownloadIcon />
-          Batch Recipe Import
+          <QueueIcon />
+          Add Batch Import to Queue
         </Box>
       </DialogTitle>
 
       <DialogContent>
-        {!isImporting ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* URL Input */}
             <Box>
               <Typography variant="h6" gutterBottom>
@@ -190,6 +164,37 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                     : 'Enter the URL of an AllRecipes category page to import all recipes from that category and its subcategories'
                 }
               />
+            </Box>
+
+            {/* Import Options */}
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Import Options (Optional)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <TextField
+                  label="Max Recipes"
+                  type="number"
+                  value={maxRecipes}
+                  onChange={(e) => setMaxRecipes(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="No limit"
+                  inputProps={{ min: 1, max: 10000 }}
+                  data-testid="batch-import-max-recipes-input"
+                  helperText="Limit the number of recipes to import"
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  label="Max Depth"
+                  type="number"
+                  value={maxDepth}
+                  onChange={(e) => setMaxDepth(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="No limit"
+                  inputProps={{ min: 1, max: 10 }}
+                  data-testid="batch-import-max-depth-input"
+                  helperText="Limit category crawling depth"
+                  sx={{ flex: 1 }}
+                />
+              </Box>
             </Box>
 
 
@@ -218,47 +223,41 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
               </AccordionDetails>
             </Accordion>
 
-            {/* Warning */}
-            <Alert severity="warning" icon={<InfoIcon />}>
+            {/* Info */}
+            <Alert severity="info" icon={<InfoIcon />}>
               <Typography variant="body2">
-                <strong>Important:</strong> Batch importing can take a long time and will import many recipes.
-                The import will respect rate limits to avoid overwhelming the server.
-                You can cancel the import at any time if needed.
+                <strong>Queue System:</strong> This task will be added to the import queue and processed in the background.
+                You can monitor progress and manage the queue using the queue status button in the top-right corner.
+                Multiple tasks can be queued and will be processed sequentially.
               </Typography>
             </Alert>
 
+            {/* Error Message */}
             {error && (
               <Alert severity="error">
                 {error}
               </Alert>
             )}
           </Box>
-        ) : (
-          <BatchImportProgressComponent progress={progress} />
-        )}
       </DialogContent>
 
       <DialogActions>
-        {!isImporting ? (
-          <>
-            <Button onClick={handleClose} data-testid="batch-import-cancel-button">Cancel</Button>
-            <Button
-              variant="contained"
-              onClick={handleStartImport}
-              disabled={!url.trim() || !isValidUrl(url)}
-              startIcon={<DownloadIcon />}
-              data-testid="batch-import-start-button"
-            >
-              Start Import
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button onClick={handleCancelImport} color="error" data-testid="batch-import-cancel-import-button">
-              Cancel Import
-            </Button>
-          </>
-        )}
+        <Button
+          onClick={handleClose}
+          disabled={isAddingToQueue}
+          data-testid="batch-import-cancel-button"
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleAddToQueue}
+          disabled={!url.trim() || !isValidUrl(url) || isAddingToQueue}
+          startIcon={<QueueIcon />}
+          data-testid="batch-import-add-to-queue-button"
+        >
+          {isAddingToQueue ? 'Adding to Queue...' : 'Add to Queue'}
+        </Button>
       </DialogActions>
     </Dialog>
   );

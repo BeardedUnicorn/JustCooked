@@ -1,19 +1,48 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 import BatchImportDialog from '@components/BatchImportDialog';
 import { batchImportService } from '@services/batchImport';
-import { BatchImportStatus } from '@app-types';
+import { getExistingRecipeUrls } from '@services/recipeStorage';
+import importQueueReducer from '@store/slices/importQueueSlice';
 
 // Mock the batch import service
 jest.mock('@services/batchImport');
 const mockBatchImportService = batchImportService as jest.Mocked<typeof batchImportService>;
 
+// Mock recipe storage
+jest.mock('@services/recipeStorage');
+const mockGetExistingRecipeUrls = getExistingRecipeUrls as jest.MockedFunction<typeof getExistingRecipeUrls>;
+
+// Mock Tauri API
+jest.mock('@tauri-apps/api/core', () => ({
+  invoke: jest.fn(),
+}));
+
+const createTestStore = () => {
+  return configureStore({
+    reducer: {
+      importQueue: importQueueReducer,
+    },
+  });
+};
+
 describe('BatchImportDialog', () => {
   const defaultProps = {
     open: true,
     onClose: jest.fn(),
-    onImportComplete: jest.fn(),
+    onTaskAdded: jest.fn(),
+  };
+
+  const renderWithRedux = (props = defaultProps) => {
+    const store = createTestStore();
+    return render(
+      <Provider store={store}>
+        <BatchImportDialog {...props} />
+      </Provider>
+    );
   };
 
   beforeEach(() => {
@@ -35,52 +64,73 @@ describe('BatchImportDialog', () => {
       maxMinutes: 10,
       description: 'Medium import',
     });
+    mockGetExistingRecipeUrls.mockResolvedValue([]);
+
+    // Set up default mock responses for Tauri commands
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockImplementation((command: string) => {
+      switch (command) {
+        case 'get_import_queue_status':
+          return Promise.resolve({
+            tasks: [],
+            currentTaskId: null,
+            isProcessing: false,
+            totalPending: 0,
+            totalCompleted: 0,
+            totalFailed: 0,
+          });
+        case 'add_to_import_queue':
+          return Promise.resolve('task-123');
+        default:
+          return Promise.resolve();
+      }
+    });
   });
 
   test('renders dialog with initial state', () => {
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
-    expect(screen.getByText('Batch Recipe Import')).toBeInTheDocument();
+    expect(screen.getByText('Add Batch Import to Queue')).toBeInTheDocument();
     expect(screen.getByLabelText('Category URL')).toBeInTheDocument();
-    expect(screen.getByText('Start Import')).toBeDisabled();
+    expect(screen.getByText('Add to Queue')).toBeDisabled();
     expect(screen.getByText('Suggested Categories')).toBeInTheDocument();
   });
 
   test('does not render when closed', () => {
-    render(<BatchImportDialog {...defaultProps} open={false} />);
+    renderWithRedux({ ...defaultProps, open: false });
 
-    expect(screen.queryByText('Batch Recipe Import')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add Batch Import to Queue')).not.toBeInTheDocument();
   });
 
-  test('enables start button when valid URL is entered', async () => {
+  test('enables add to queue button when valid URL is entered', async () => {
     const user = userEvent.setup();
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const addButton = screen.getByText('Add to Queue');
 
-    expect(startButton).toBeDisabled();
+    expect(addButton).toBeDisabled();
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
 
-    expect(startButton).toBeEnabled();
+    expect(addButton).toBeEnabled();
   });
 
   test('shows error for invalid URL', async () => {
     const user = userEvent.setup();
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
 
     await user.type(urlInput, 'https://example.com/invalid');
 
     expect(screen.getByText('Please enter a valid AllRecipes category URL')).toBeInTheDocument();
-    expect(screen.getByText('Start Import')).toBeDisabled();
+    expect(screen.getByText('Add to Queue')).toBeDisabled();
   });
 
   test('allows selecting suggested URLs', async () => {
     const user = userEvent.setup();
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     // Expand suggested categories
     const suggestedAccordion = screen.getByText('Suggested Categories');
@@ -94,211 +144,132 @@ describe('BatchImportDialog', () => {
     expect(urlInput.value).toBe('https://www.allrecipes.com/recipes/79/desserts');
   });
 
-  test('shows warning about batch import duration', () => {
-    render(<BatchImportDialog {...defaultProps} />);
+  test('shows info about queue system', () => {
+    renderWithRedux();
 
-    expect(screen.getByText(/batch importing can take a long time/i)).toBeInTheDocument();
-    expect(screen.getByText(/you can cancel the import at any time/i)).toBeInTheDocument();
+    expect(screen.getByText(/queue system/i)).toBeInTheDocument();
+    expect(screen.getByText(/processed in the background/i)).toBeInTheDocument();
   });
 
-  test('starts batch import when form is submitted', async () => {
+  test('adds task to queue when form is submitted', async () => {
     const user = userEvent.setup();
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockResolvedValue('task-123');
 
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const addButton = screen.getByText('Add to Queue');
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
-
-    expect(mockBatchImportService.startBatchImport).toHaveBeenCalledWith(
-      'https://www.allrecipes.com/recipes/79/desserts'
-    );
-  });
-
-
-
-  test('handles import start error', async () => {
-    const user = userEvent.setup();
-    mockBatchImportService.startBatchImport.mockRejectedValue(new Error('Import failed'));
-
-    render(<BatchImportDialog {...defaultProps} />);
-
-    const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
+    await user.click(addButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Import failed')).toBeInTheDocument();
+      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
+        description: expect.stringContaining('AllRecipes'),
+        request: expect.objectContaining({
+          startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+        }),
+      }));
     });
   });
 
-  test('shows progress component during import', async () => {
+
+
+  test('handles queue add error', async () => {
     const user = userEvent.setup();
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockRejectedValue(new Error('Queue failed'));
 
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
-    mockBatchImportService.getProgress.mockResolvedValue({
-      status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
-      processedRecipes: 5,
-      totalRecipes: 20,
-      processedCategories: 2,
-      totalCategories: 5,
-      successfulImports: 3,
-      failedImports: 2,
-      skippedRecipes: 0,
-      errors: [],
-      startTime: new Date().toISOString(),
-      estimatedTimeRemaining: 300,
-    });
-
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const addButton = screen.getByText('Add to Queue');
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
+    await user.click(addButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Importing Recipes')).toBeInTheDocument();
-      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+      expect(screen.getByText(/failed to add task to queue/i)).toBeInTheDocument();
     });
   });
 
-  test('calls onImportComplete when import finishes', async () => {
+  test('closes modal when task is added successfully', async () => {
     const user = userEvent.setup();
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockResolvedValue('task-123');
 
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
-    mockBatchImportService.getProgress.mockResolvedValue({
-      status: BatchImportStatus.COMPLETED,
-      currentUrl: undefined,
-      processedRecipes: 20,
-      totalRecipes: 20,
-      processedCategories: 5,
-      totalCategories: 5,
-      successfulImports: 18,
-      failedImports: 2,
-      skippedRecipes: 0,
-      errors: [],
-      startTime: new Date().toISOString(),
-      estimatedTimeRemaining: 0,
-    });
-
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const addButton = screen.getByText('Add to Queue');
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
+    await user.click(addButton);
 
     await waitFor(() => {
-      expect(defaultProps.onImportComplete).toHaveBeenCalledWith({
-        successCount: 18,
-        failureCount: 2,
-      });
+      expect(defaultProps.onClose).toHaveBeenCalled();
     });
   });
 
-  test('cancels import when cancel button is clicked', async () => {
+  test('calls onTaskAdded when task is successfully added', async () => {
     const user = userEvent.setup();
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
-    mockBatchImportService.cancelBatchImport.mockResolvedValue();
-    mockBatchImportService.getProgress.mockResolvedValue({
-      status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
-      processedRecipes: 5,
-      totalRecipes: 20,
-      processedCategories: 2,
-      totalCategories: 5,
-      successfulImports: 3,
-      failedImports: 2,
-      skippedRecipes: 0,
-      errors: [],
-      startTime: new Date().toISOString(),
-      estimatedTimeRemaining: 300,
-    });
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockResolvedValue('task-123');
 
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const addButton = screen.getByText('Add to Queue');
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
+    await user.click(addButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+      expect(defaultProps.onTaskAdded).toHaveBeenCalledWith('task-123');
     });
-
-    const cancelButton = screen.getByText('Cancel Import');
-    await user.click(cancelButton);
-
-    expect(mockBatchImportService.cancelBatchImport).toHaveBeenCalled();
   });
 
-  test('cancels import when dialog is closed during import', async () => {
+  test('includes optional fields in queue request', async () => {
     const user = userEvent.setup();
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockResolvedValue('task-123');
 
-    mockBatchImportService.startBatchImport.mockResolvedValue('import-123');
-    mockBatchImportService.cancelBatchImport.mockResolvedValue();
-
-    render(<BatchImportDialog {...defaultProps} />);
+    renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const startButton = screen.getByText('Start Import');
+    const maxRecipesInput = screen.getByLabelText('Max Recipes');
+    const maxDepthInput = screen.getByLabelText('Max Depth');
+    const addButton = screen.getByText('Add to Queue');
 
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(startButton);
+    await user.type(maxRecipesInput, '100');
+    await user.type(maxDepthInput, '3');
+    await user.click(addButton);
 
-    mockBatchImportService.getProgress.mockResolvedValue({
-      status: BatchImportStatus.IMPORTING_RECIPES,
-      currentUrl: 'https://www.allrecipes.com/recipe/123/test-recipe',
-      processedRecipes: 5,
-      totalRecipes: 20,
-      processedCategories: 2,
-      totalCategories: 5,
-      successfulImports: 3,
-      failedImports: 2,
-      skippedRecipes: 0,
-      errors: [],
-      startTime: new Date().toISOString(),
-      estimatedTimeRemaining: 300,
-    });
-
-    // Wait for import to start and cancel button to appear
     await waitFor(() => {
-      expect(screen.getByText('Cancel Import')).toBeInTheDocument();
+      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
+        request: expect.objectContaining({
+          startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+          maxRecipes: 100,
+          maxDepth: 3,
+        }),
+      }));
     });
-
-    // Click the cancel button to trigger the cancel
-    const cancelButton = screen.getByText('Cancel Import');
-    await user.click(cancelButton);
-
-    expect(mockBatchImportService.cancelBatchImport).toHaveBeenCalled();
   });
 
   test('resets state when dialog reopens', () => {
-    const { rerender } = render(<BatchImportDialog {...defaultProps} open={false} />);
+    const { rerender } = renderWithRedux({ ...defaultProps, open: false });
 
     // Open dialog
-    rerender(<BatchImportDialog {...defaultProps} open={true} />);
+    rerender(
+      <Provider store={createTestStore()}>
+        <BatchImportDialog {...defaultProps} open={true} />
+      </Provider>
+    );
 
     const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
     expect(urlInput.value).toBe('');
-    expect(screen.getByText('Start Import')).toBeDisabled();
-  });
-
-  test('cleans up on unmount', () => {
-    const { unmount } = render(<BatchImportDialog {...defaultProps} />);
-
-    unmount();
-
-    expect(mockBatchImportService.cleanup).toHaveBeenCalled();
+    expect(screen.getByText('Add to Queue')).toBeDisabled();
   });
 });

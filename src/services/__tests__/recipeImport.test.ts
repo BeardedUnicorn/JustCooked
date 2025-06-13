@@ -40,6 +40,18 @@ jest.mock('@utils/urlUtils', () => ({
 // Don't mock ingredientUtils since we want to test formatIngredientForDisplay
 // jest.mock('@utils/ingredientUtils');
 
+// Mock logging service
+jest.mock('@services/loggingService', () => ({
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    debug: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    logError: jest.fn(),
+    logPerformance: jest.fn(),
+  })),
+}));
+
 const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
 const mockSaveRecipe = saveRecipe as jest.MockedFunction<typeof saveRecipe>;
 const mockAutoDetectIngredients = autoDetectIngredients as jest.MockedFunction<typeof autoDetectIngredients>;

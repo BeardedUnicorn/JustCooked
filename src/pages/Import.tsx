@@ -61,11 +61,11 @@ const Import: React.FC = () => {
     }
   };
 
-  const handleBatchImportComplete = (result: { successCount: number; failureCount: number }) => {
+  const handleTaskAdded = (taskId: string) => {
     setBatchImportOpen(false);
     setSuccess(true);
     // You could show a more detailed success message here
-    console.log('Batch import completed:', result);
+    console.log('Task added to queue:', taskId);
   };
 
   return (
@@ -97,10 +97,10 @@ const Import: React.FC = () => {
                 <Typography variant="h6">Batch Recipe Import</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" paragraph>
-                Import multiple recipes at once from AllRecipes category pages. Perfect for building your recipe collection quickly.
+                Import multiple recipes at once from AllRecipes category pages. Tasks are added to a queue and processed in the background.
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                <strong>Features:</strong> Automatic category crawling, progress tracking, error handling, and rate limiting.
+                <strong>Features:</strong> Background processing, queue management, progress tracking, error handling, and rate limiting.
               </Typography>
             </CardContent>
             <CardActions>
@@ -111,7 +111,7 @@ const Import: React.FC = () => {
                 fullWidth
                 data-testid="import-batch-import-button"
               >
-                Start Batch Import
+                Add Batch Import to Queue
               </Button>
             </CardActions>
           </Card>
@@ -212,7 +212,7 @@ const Import: React.FC = () => {
       <BatchImportDialog
         open={batchImportOpen}
         onClose={() => setBatchImportOpen(false)}
-        onImportComplete={handleBatchImportComplete}
+        onTaskAdded={handleTaskAdded}
       />
     </Box>
   );
