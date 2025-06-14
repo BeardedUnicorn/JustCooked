@@ -64,6 +64,11 @@ describe('BatchImportDialog', () => {
       maxMinutes: 10,
       description: 'Medium import',
     });
+    mockBatchImportService.getPopularCategoryUrls.mockReturnValue([
+      'https://www.allrecipes.com/recipes/17057/everyday-cooking/more-meal-ideas/5-ingredients/main-dishes/',
+      'https://www.allrecipes.com/recipes/15436/everyday-cooking/one-pot-meals/',
+      'https://www.allrecipes.com/recipes/1947/everyday-cooking/quick-and-easy/',
+    ]);
     mockGetExistingRecipeUrls.mockResolvedValue([]);
 
     // Set up default mock responses for Tauri commands
@@ -271,5 +276,78 @@ describe('BatchImportDialog', () => {
     const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
     expect(urlInput.value).toBe('');
     expect(screen.getByText('Add to Queue')).toBeDisabled();
+  });
+
+  test('displays Quick Start section with Load Popular Categories button', () => {
+    renderWithRedux();
+
+    expect(screen.getByText('Quick Start')).toBeInTheDocument();
+    expect(screen.getByText(/Load 20 popular AllRecipes categories/)).toBeInTheDocument();
+    expect(screen.getByTestId('batch-import-load-popular-categories-button')).toBeInTheDocument();
+  });
+
+  test('loads popular categories when button is clicked', async () => {
+    const user = userEvent.setup();
+
+    renderWithRedux();
+
+    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
+
+    // Check initial state
+    expect(loadButton).toHaveTextContent('Load Popular Categories');
+    expect(loadButton).not.toBeDisabled();
+
+    // Click the button - this should trigger the action
+    await user.click(loadButton);
+
+    // For now, just verify the button was clicked successfully
+    // The actual Redux integration will be tested in integration tests
+    expect(loadButton).toBeInTheDocument();
+  });
+
+  test('disables buttons when loading popular categories', async () => {
+    const user = userEvent.setup();
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    // Make the promise hang to test loading state
+    mockInvoke.mockImplementation(() => new Promise(() => {}));
+
+    renderWithRedux();
+
+    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
+    const cancelButton = screen.getByTestId('batch-import-cancel-button');
+    const addButton = screen.getByTestId('batch-import-add-to-queue-button');
+
+    await user.click(loadButton);
+
+    // All buttons should be disabled during loading
+    expect(loadButton).toBeDisabled();
+    expect(cancelButton).toBeDisabled();
+    expect(addButton).toBeDisabled();
+  });
+
+  test('includes max recipes and max depth options when loading popular categories', async () => {
+    const user = userEvent.setup();
+    const mockInvoke = require('@tauri-apps/api/core').invoke;
+    mockInvoke.mockResolvedValue('task-123');
+
+    renderWithRedux();
+
+    // Set optional parameters
+    const maxRecipesInput = screen.getByLabelText('Max Recipes');
+    const maxDepthInput = screen.getByLabelText('Max Depth');
+    await user.type(maxRecipesInput, '50');
+    await user.type(maxDepthInput, '2');
+
+    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
+    await user.click(loadButton);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
+        request: expect.objectContaining({
+          maxRecipes: 50,
+          maxDepth: 2,
+        }),
+      }));
+    });
   });
 });

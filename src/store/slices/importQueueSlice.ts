@@ -45,6 +45,25 @@ export const addToQueue = createAsyncThunk(
   }
 );
 
+export const addMultipleToQueue = createAsyncThunk(
+  'importQueue/addMultipleToQueue',
+  async ({
+    urls,
+    options
+  }: {
+    urls: string[];
+    options?: { maxRecipes?: number; maxDepth?: number }
+  }, { rejectWithValue }) => {
+    try {
+      const result = await importQueueService.addMultipleToQueue(urls, options);
+      return result;
+    } catch (error) {
+      console.error('Failed to add multiple tasks to queue:', error);
+      return rejectWithValue(error instanceof Error ? error.message : String(error));
+    }
+  }
+);
+
 export const getQueueStatus = createAsyncThunk(
   'importQueue/getQueueStatus',
   async (_, { rejectWithValue }) => {
@@ -127,7 +146,21 @@ const importQueueSlice = createSlice({
         state.loading = false;
         state.error = action.error.message || 'Failed to add task to queue';
       })
-      
+
+      // Add multiple to queue
+      .addCase(addMultipleToQueue.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(addMultipleToQueue.fulfilled, (state) => {
+        state.loading = false;
+        // The actual tasks will be updated via monitoring
+      })
+      .addCase(addMultipleToQueue.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to add multiple tasks to queue';
+      })
+
       // Get queue status
       .addCase(getQueueStatus.pending, (state) => {
         state.loading = true;

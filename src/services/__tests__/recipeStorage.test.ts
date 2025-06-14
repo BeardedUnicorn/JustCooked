@@ -235,7 +235,7 @@ describe('recipeStorage', () => {
     });
   });
 
-  describe('getExistingRecipeUrls', () => {
+  describe('getExistingRecipeUrls - Duplicate Prevention', () => {
     it('should return existing recipe URLs', async () => {
       const urls = ['https://example.com/recipe1', 'https://example.com/recipe2'];
       mockInvoke.mockResolvedValue(urls);
@@ -253,9 +253,65 @@ describe('recipeStorage', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('should detect exact URL duplicates', async () => {
+      const existingUrls = [
+        'https://allrecipes.com/recipe/123/chocolate-cookies',
+        'https://foodnetwork.com/recipe/456/pasta-dish',
+      ];
+      mockInvoke.mockResolvedValue(existingUrls);
+
+      const urls = await recipeStorage.getExistingRecipeUrls();
+
+      // Check if new recipe URL already exists
+      const duplicateUrl = 'https://allrecipes.com/recipe/123/chocolate-cookies';
+      const isDuplicate = urls.includes(duplicateUrl);
+      expect(isDuplicate).toBe(true);
+    });
+
+    it('should handle URL variations correctly', async () => {
+      const existingUrls = [
+        'https://allrecipes.com/recipe/123/cookies',
+        'https://allrecipes.com/recipe/123/cookies/',
+        'http://allrecipes.com/recipe/123/cookies',
+        'https://www.allrecipes.com/recipe/123/cookies',
+      ];
+      mockInvoke.mockResolvedValue(existingUrls);
+
+      const urls = await recipeStorage.getExistingRecipeUrls();
+
+      // All these variations should be present
+      expect(urls).toContain('https://allrecipes.com/recipe/123/cookies');
+      expect(urls).toContain('https://allrecipes.com/recipe/123/cookies/');
+      expect(urls).toContain('http://allrecipes.com/recipe/123/cookies');
+      expect(urls).toContain('https://www.allrecipes.com/recipe/123/cookies');
+    });
+
+    it('should handle empty URL list', async () => {
+      mockInvoke.mockResolvedValue([]);
+
+      const result = await recipeStorage.getExistingRecipeUrls();
+
+      expect(result).toEqual([]);
+    });
+
+    it('should handle malformed URLs in database', async () => {
+      const urlsWithMalformed = [
+        'https://valid-url.com/recipe/123',
+        'not-a-url',
+        '',
+        'ftp://weird-protocol.com/recipe',
+      ];
+      mockInvoke.mockResolvedValue(urlsWithMalformed);
+
+      const result = await recipeStorage.getExistingRecipeUrls();
+
+      // Should return all URLs as-is (backend handles validation)
+      expect(result).toEqual(urlsWithMalformed);
+    });
   });
 
-  describe('searchRecipes', () => {
+  describe('searchRecipes - Title-based Duplicate Detection', () => {
     it('should search recipes by query', async () => {
       mockInvoke.mockResolvedValue([mockTauriRecipe]);
 
@@ -266,12 +322,73 @@ describe('recipeStorage', () => {
       expect(recipes[0]).toEqual(mockRecipe);
     });
 
+    it('should find recipes with exact title match', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
+
+      const recipes = await recipeStorage.searchRecipes('Chocolate Chip Cookies');
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_search_recipes', { query: 'Chocolate Chip Cookies' });
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0].title).toBe('Chocolate Chip Cookies');
+    });
+
+    it('should find recipes with partial title match', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
+
+      const recipes = await recipeStorage.searchRecipes('Chocolate Chip');
+
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0].title).toContain('Chocolate Chip');
+    });
+
+    it('should handle case-insensitive title searches', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
+
+      const recipes = await recipeStorage.searchRecipes('chocolate chip cookies');
+
+      expect(recipes).toHaveLength(1);
+      expect(recipes[0].title).toBe('Chocolate Chip Cookies');
+    });
+
+    it('should detect similar titles for duplicate prevention', async () => {
+      const similarRecipes = [
+        { ...mockTauriRecipe, id: '1', title: 'Chocolate Chip Cookies' },
+        { ...mockTauriRecipe, id: '2', title: 'Chocolate Chip Cookie Recipe' },
+        { ...mockTauriRecipe, id: '3', title: 'Best Chocolate Chip Cookies' },
+      ];
+      mockInvoke.mockResolvedValue(similarRecipes);
+
+      const recipes = await recipeStorage.searchRecipes('Chocolate Chip Cookies');
+
+      expect(recipes).toHaveLength(3);
+      recipes.forEach(recipe => {
+        expect(recipe.title.toLowerCase()).toContain('chocolate chip cookie');
+      });
+    });
+
     it('should handle database errors gracefully', async () => {
       mockInvoke.mockRejectedValue(new Error('Database error'));
 
       const recipes = await recipeStorage.searchRecipes('chocolate');
 
       expect(recipes).toEqual([]);
+    });
+
+    it('should handle empty search results', async () => {
+      mockInvoke.mockResolvedValue([]);
+
+      const recipes = await recipeStorage.searchRecipes('nonexistent recipe');
+
+      expect(recipes).toEqual([]);
+    });
+
+    it('should handle special characters in search query', async () => {
+      mockInvoke.mockResolvedValue([mockTauriRecipe]);
+
+      const recipes = await recipeStorage.searchRecipes("Mom's Chocolate Chip Cookies");
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_search_recipes', { query: "Mom's Chocolate Chip Cookies" });
+      expect(recipes).toHaveLength(1);
     });
   });
 

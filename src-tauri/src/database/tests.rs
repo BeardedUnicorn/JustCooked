@@ -540,4 +540,170 @@ mod tests {
             assert_eq!(oil.category, "oils");
         }
     }
+
+    // Additional comprehensive duplicate detection tests
+    #[tokio::test]
+    async fn test_duplicate_url_detection_comprehensive() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Insert first recipe
+        let mut recipe1 = create_test_recipe();
+        recipe1.id = "recipe-1".to_string();
+        recipe1.source_url = "https://allrecipes.com/recipe/123/cookies".to_string();
+        db.save_recipe(&recipe1).await.unwrap();
+
+        // Get existing URLs
+        let existing_urls = db.get_existing_recipe_urls().await.unwrap();
+
+        // Check if duplicate URL would be detected
+        let duplicate_url = "https://allrecipes.com/recipe/123/cookies";
+        let is_duplicate = existing_urls.contains(&duplicate_url.to_string());
+
+        assert!(is_duplicate, "Expected duplicate URL to be detected");
+        assert_eq!(existing_urls.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_url_variations_comprehensive() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Insert recipes with URL variations
+        let url_variations = vec![
+            ("recipe-1", "https://allrecipes.com/recipe/123/cookies"),
+            ("recipe-2", "https://allrecipes.com/recipe/123/cookies/"),
+            ("recipe-3", "http://allrecipes.com/recipe/123/cookies"),
+            ("recipe-4", "https://www.allrecipes.com/recipe/123/cookies"),
+        ];
+
+        for (id, url) in &url_variations {
+            let mut recipe = create_test_recipe();
+            recipe.id = id.to_string();
+            recipe.source_url = url.to_string();
+            db.save_recipe(&recipe).await.unwrap();
+        }
+
+        let urls = db.get_existing_recipe_urls().await.unwrap();
+
+        assert_eq!(urls.len(), 4, "Expected all URL variations to be stored");
+
+        // All variations should be present
+        for (_, url) in &url_variations {
+            assert!(urls.contains(&url.to_string()),
+                   "Expected URL variation {} to be present", url);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_title_based_duplicate_detection() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Insert recipes with similar titles
+        let recipes = vec![
+            ("recipe-1", "Chocolate Chip Cookies", "https://example.com/1"),
+            ("recipe-2", "Chocolate Chip Cookie Recipe", "https://example.com/2"),
+            ("recipe-3", "Best Chocolate Chip Cookies", "https://example.com/3"),
+            ("recipe-4", "Vanilla Cookies", "https://example.com/4"),
+        ];
+
+        for (id, title, url) in &recipes {
+            let mut recipe = create_test_recipe();
+            recipe.id = id.to_string();
+            recipe.title = title.to_string();
+            recipe.source_url = url.to_string();
+            db.save_recipe(&recipe).await.unwrap();
+        }
+
+        // Search for chocolate chip cookies
+        let search_results = db.search_recipes("Chocolate Chip Cookies").await.unwrap();
+
+        // Should find recipes with similar titles (at least the exact match)
+        assert!(search_results.len() >= 1, "Expected at least 1 matching recipe, found {}", search_results.len());
+
+        let titles: Vec<String> = search_results.iter().map(|r| r.title.clone()).collect();
+
+        // Check that we find the exact match
+        assert!(titles.contains(&"Chocolate Chip Cookies".to_string()),
+               "Expected to find 'Chocolate Chip Cookies', found: {:?}", titles);
+
+        // Search for a broader term to find more matches
+        let broad_search = db.search_recipes("Chocolate").await.unwrap();
+        assert!(broad_search.len() >= 3, "Expected at least 3 recipes containing 'Chocolate', found {}", broad_search.len());
+    }
+
+    #[tokio::test]
+    async fn test_case_insensitive_duplicate_search() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        let mut recipe = create_test_recipe();
+        recipe.title = "Chocolate Chip Cookies".to_string();
+        recipe.source_url = "https://example.com/cookies".to_string();
+        db.save_recipe(&recipe).await.unwrap();
+
+        // Search with different cases
+        let search_queries = vec![
+            "chocolate chip cookies",
+            "CHOCOLATE CHIP COOKIES",
+            "Chocolate Chip Cookies",
+            "ChOcOlAtE cHiP cOoKiEs",
+        ];
+
+        for query in search_queries {
+            let results = db.search_recipes(query).await.unwrap();
+            assert_eq!(results.len(), 1, "Expected 1 result for query: {}", query);
+            assert_eq!(results[0].title, "Chocolate Chip Cookies");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_malformed_urls_handling() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Insert recipes with various URL formats
+        let test_urls = vec![
+            ("recipe-1", "https://valid-url.com/recipe/123"),
+            ("recipe-2", "not-a-valid-url"),
+            ("recipe-3", "ftp://weird-protocol.com/recipe"),
+            ("recipe-4", "//protocol-relative-url.com/recipe"),
+            ("recipe-5", "mailto:test@example.com"),
+        ];
+
+        for (id, url) in &test_urls {
+            let mut recipe = create_test_recipe();
+            recipe.id = id.to_string();
+            recipe.source_url = url.to_string();
+            // Should not fail even with malformed URLs
+            db.save_recipe(&recipe).await.unwrap();
+        }
+
+        let urls = db.get_existing_recipe_urls().await.unwrap();
+
+        // All URLs should be stored as-is (validation happens at application level)
+        assert_eq!(urls.len(), 5, "Expected all URLs to be stored");
+        for (_, test_url) in &test_urls {
+            assert!(urls.contains(&test_url.to_string()),
+                   "Expected URL {} to be present", test_url);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_empty_url_exclusion() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        // Insert recipes with and without URLs
+        let mut recipe_with_url = create_test_recipe();
+        recipe_with_url.id = "recipe-1".to_string();
+        recipe_with_url.source_url = "https://example.com/recipe/123".to_string();
+
+        let mut recipe_without_url = create_test_recipe();
+        recipe_without_url.id = "recipe-2".to_string();
+        recipe_without_url.source_url = "".to_string();
+
+        db.save_recipe(&recipe_with_url).await.unwrap();
+        db.save_recipe(&recipe_without_url).await.unwrap();
+
+        let urls = db.get_existing_recipe_urls().await.unwrap();
+
+        assert_eq!(urls.len(), 1, "Expected only 1 URL (empty URLs should be excluded)");
+        assert_eq!(urls[0], "https://example.com/recipe/123");
+    }
 }

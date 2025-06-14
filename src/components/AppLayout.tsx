@@ -14,6 +14,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import KitchenIcon from '@mui/icons-material/Kitchen';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import CollectionsIcon from '@mui/icons-material/Collections';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import BookIcon from '@mui/icons-material/Book';
 import MenuIcon from '@mui/icons-material/Menu';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -58,6 +59,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     { text: 'Search Recipes', icon: <SearchIcon />, path: '/search', label: 'Search' },
     { text: 'Smart Cookbook', icon: <BookIcon />, path: '/smart-cookbook', label: 'Smart' },
     { text: 'Collections', icon: <CollectionsIcon />, path: '/collections', label: 'Collections' },
+    { text: 'Meal Plans', icon: <CalendarMonthIcon />, path: '/meal-plans', label: 'Meal Plans' },
     { text: 'Pantry', icon: <KitchenIcon />, path: '/pantry', label: 'Pantry' },
     { text: 'Ingredients', icon: <InventoryIcon />, path: '/ingredients', label: 'Ingredients' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', label: 'Settings' },

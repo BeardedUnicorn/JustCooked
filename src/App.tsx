@@ -13,6 +13,9 @@ import Search from '@pages/Search';
 import SmartCookbook from '@pages/SmartCookbook';
 import Collections from '@pages/Collections';
 import CollectionView from '@pages/CollectionView';
+import MealPlans from '@pages/MealPlans';
+import MealPlanView from '@pages/MealPlanView';
+import ShoppingListPage from '@pages/ShoppingListPage';
 import Pantry from '@pages/Pantry';
 import Ingredients from '@pages/Ingredients';
 import RecipeView from '@pages/RecipeView';
@@ -55,6 +58,9 @@ function App() {
                   <Route path="/smart-cookbook" element={<SmartCookbook />} />
                   <Route path="/collections" element={<Collections />} />
                   <Route path="/collections/:id" element={<CollectionView />} />
+                  <Route path="/meal-plans" element={<MealPlans />} />
+                  <Route path="/meal-plans/:id" element={<MealPlanView />} />
+                  <Route path="/shopping-lists/:id" element={<ShoppingListPage />} />
                   <Route path="/pantry" element={<Pantry />} />
                   <Route path="/ingredients" element={<Ingredients />} />
                   <Route path="/settings" element={<Settings />} />

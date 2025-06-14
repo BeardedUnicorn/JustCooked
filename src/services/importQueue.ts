@@ -7,6 +7,7 @@ import {
   BatchImportProgress
 } from '@app-types';
 import { createLogger } from '@services/loggingService';
+import { getExistingRecipeUrls } from '@services/recipeStorage';
 
 const logger = createLogger('ImportQueue');
 
@@ -22,7 +23,7 @@ export class ImportQueueService {
   ): Promise<string> {
     try {
       await logger.info('Adding task to import queue', { description, startUrl: request.startUrl });
-      
+
       const taskId: string = await invoke('add_to_import_queue', {
         description,
         request,
@@ -33,6 +34,62 @@ export class ImportQueueService {
     } catch (error) {
       await logger.logError(error, 'Failed to add task to import queue', { description });
       throw new Error(`Failed to add task to queue: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Add multiple batch import tasks to the queue
+   */
+  async addMultipleToQueue(
+    urls: string[],
+    options?: {
+      maxRecipes?: number;
+      maxDepth?: number;
+    }
+  ): Promise<{ taskIds: string[]; totalAdded: number; errors: Array<{ url: string; error: string }> }> {
+    const taskIds: string[] = [];
+    const errors: Array<{ url: string; error: string }> = [];
+
+    try {
+      await logger.info('Adding multiple tasks to import queue', { urlCount: urls.length });
+
+      // Get existing recipe URLs once for all tasks
+      const existingUrls = await getExistingRecipeUrls();
+
+      // Process each URL
+      for (const url of urls) {
+        try {
+          const request: BatchImportRequest = {
+            startUrl: url,
+            maxRecipes: options?.maxRecipes,
+            maxDepth: options?.maxDepth,
+            existingUrls,
+          };
+
+          const description = this.getTaskDescription(request);
+          const taskId = await this.addToQueue(description, request);
+          taskIds.push(taskId);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          errors.push({ url, error: errorMessage });
+          await logger.logError(error, 'Failed to add individual task to queue', { url });
+        }
+      }
+
+      await logger.info('Completed adding multiple tasks to queue', {
+        totalRequested: urls.length,
+        totalAdded: taskIds.length,
+        totalErrors: errors.length
+      });
+
+      return {
+        taskIds,
+        totalAdded: taskIds.length,
+        errors
+      };
+    } catch (error) {
+      await logger.logError(error, 'Failed to add multiple tasks to queue');
+      throw new Error(`Failed to add multiple tasks to queue: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

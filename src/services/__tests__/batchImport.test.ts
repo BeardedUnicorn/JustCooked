@@ -230,19 +230,37 @@ describe('BatchImportService', () => {
 
     test('getSuggestedCategoryUrls should return valid suggestions', () => {
       const suggestions = service.getSuggestedCategoryUrls();
-      
+
       expect(suggestions).toHaveLength(6);
       expect(suggestions[0]).toEqual({
         name: 'Desserts',
         url: 'https://www.allrecipes.com/recipes/79/desserts',
         description: 'All dessert recipes including cakes, cookies, pies, and more',
       });
-      
+
       // Verify all URLs are valid AllRecipes category URLs
       suggestions.forEach(suggestion => {
         expect(suggestion.url).toMatch(/^https:\/\/www\.allrecipes\.com\/recipes\//);
         expect(suggestion.url).not.toMatch(/\/recipe\//);
       });
+    });
+
+    test('getPopularCategoryUrls should return 20 popular category URLs', () => {
+      const popularUrls = service.getPopularCategoryUrls();
+
+      expect(popularUrls).toHaveLength(20);
+
+      // Verify all URLs are valid AllRecipes category URLs
+      popularUrls.forEach(url => {
+        expect(url).toMatch(/^https:\/\/www\.allrecipes\.com\/recipes\//);
+        expect(url).not.toMatch(/\/recipe\//);
+      });
+
+      // Verify specific URLs from the requirements
+      expect(popularUrls).toContain('https://www.allrecipes.com/recipes/17057/everyday-cooking/more-meal-ideas/5-ingredients/main-dishes/');
+      expect(popularUrls).toContain('https://www.allrecipes.com/recipes/15436/everyday-cooking/one-pot-meals/');
+      expect(popularUrls).toContain('https://www.allrecipes.com/recipes/79/desserts/');
+      expect(popularUrls).toContain('https://www.allrecipes.com/recipes/85/holidays-and-events/');
     });
 
     test('estimateImportTime should provide reasonable estimates', () => {

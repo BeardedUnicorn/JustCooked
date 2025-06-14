@@ -272,6 +272,34 @@ export class BatchImportService {
   }
 
   /**
+   * Get popular category URLs for quick start batch import
+   */
+  getPopularCategoryUrls(): string[] {
+    return [
+      'https://www.allrecipes.com/recipes/17057/everyday-cooking/more-meal-ideas/5-ingredients/main-dishes/',
+      'https://www.allrecipes.com/recipes/15436/everyday-cooking/one-pot-meals/',
+      'https://www.allrecipes.com/recipes/1947/everyday-cooking/quick-and-easy/',
+      'https://www.allrecipes.com/recipes/455/everyday-cooking/more-meal-ideas/30-minute-meals/',
+      'https://www.allrecipes.com/recipes/17889/everyday-cooking/family-friendly/family-dinners/',
+      'https://www.allrecipes.com/recipes/94/soups-stews-and-chili/',
+      'https://www.allrecipes.com/recipes/16099/everyday-cooking/comfort-food/',
+      'https://www.allrecipes.com/recipes/80/main-dish/',
+      'https://www.allrecipes.com/recipes/22992/everyday-cooking/sheet-pan-dinners/',
+      'https://www.allrecipes.com/recipes/78/breakfast-and-brunch/',
+      'https://www.allrecipes.com/recipes/17561/lunch/',
+      'https://www.allrecipes.com/recipes/84/healthy-recipes/',
+      'https://www.allrecipes.com/recipes/76/appetizers-and-snacks/',
+      'https://www.allrecipes.com/recipes/96/salad/',
+      'https://www.allrecipes.com/recipes/81/side-dish/',
+      'https://www.allrecipes.com/recipes/16369/soups-stews-and-chili/soup/',
+      'https://www.allrecipes.com/recipes/156/bread/',
+      'https://www.allrecipes.com/recipes/77/drinks/',
+      'https://www.allrecipes.com/recipes/79/desserts/',
+      'https://www.allrecipes.com/recipes/85/holidays-and-events/',
+    ];
+  }
+
+  /**
    * Estimate import time based on number of recipes
    */
   estimateImportTime(estimatedRecipes: number): {

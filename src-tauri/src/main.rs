@@ -17,7 +17,7 @@ use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
 use import_queue::{ImportQueue, ImportQueueStatus};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -56,6 +56,65 @@ struct FrontendIngredient {
     amount: f64,
     unit: String,
     section: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendMealPlan {
+    id: String,
+    name: String,
+    description: Option<String>,
+    start_date: String,
+    end_date: String,
+    settings: FrontendMealPlanSettings,
+    date_created: String,
+    date_modified: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendMealPlanSettings {
+    enabled_meal_types: Vec<String>,
+    default_servings: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendMealPlanRecipe {
+    id: String,
+    meal_plan_id: String,
+    recipe_id: String,
+    date: String,
+    meal_type: String,
+    serving_multiplier: f64,
+    notes: Option<String>,
+    date_created: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendShoppingList {
+    id: String,
+    meal_plan_id: String,
+    name: String,
+    date_range_start: String,
+    date_range_end: String,
+    date_created: String,
+    date_modified: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendShoppingListItem {
+    id: String,
+    shopping_list_id: String,
+    ingredient_name: String,
+    quantity: f64,
+    unit: String,
+    category: Option<String>,
+    is_checked: bool,
+    notes: Option<String>,
+    date_created: String,
 }
 
 #[tauri::command]
@@ -1177,6 +1236,290 @@ async fn get_queue_task_progress(
     Ok(queue_state.get_task_progress(&task_id))
 }
 
+// Meal Planning Commands
+#[tauri::command]
+async fn db_save_meal_plan(
+    app: tauri::AppHandle,
+    meal_plan: FrontendMealPlan,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let db_meal_plan = convert_frontend_to_db_meal_plan(meal_plan);
+    db.save_meal_plan(&db_meal_plan).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_all_meal_plans(app: tauri::AppHandle) -> Result<Vec<FrontendMealPlan>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let meal_plans = db.get_all_meal_plans().await.map_err(|e| e.to_string())?;
+    let frontend_meal_plans = meal_plans.into_iter().map(convert_db_to_frontend_meal_plan).collect();
+    Ok(frontend_meal_plans)
+}
+
+#[tauri::command]
+async fn db_get_meal_plan_by_id(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Option<FrontendMealPlan>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let meal_plan = db.get_meal_plan_by_id(&id).await.map_err(|e| e.to_string())?;
+    let frontend_meal_plan = meal_plan.map(convert_db_to_frontend_meal_plan);
+    Ok(frontend_meal_plan)
+}
+
+#[tauri::command]
+async fn db_delete_meal_plan(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_meal_plan(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_save_meal_plan_recipe(
+    app: tauri::AppHandle,
+    meal_plan_recipe: FrontendMealPlanRecipe,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let db_meal_plan_recipe = convert_frontend_to_db_meal_plan_recipe(meal_plan_recipe);
+    db.save_meal_plan_recipe(&db_meal_plan_recipe).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_meal_plan_recipes(
+    app: tauri::AppHandle,
+    meal_plan_id: String,
+) -> Result<Vec<FrontendMealPlanRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let meal_plan_recipes = db.get_meal_plan_recipes(&meal_plan_id).await.map_err(|e| e.to_string())?;
+    let frontend_meal_plan_recipes = meal_plan_recipes.into_iter().map(convert_db_to_frontend_meal_plan_recipe).collect();
+    Ok(frontend_meal_plan_recipes)
+}
+
+#[tauri::command]
+async fn db_delete_meal_plan_recipe(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_meal_plan_recipe(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_save_shopping_list(
+    app: tauri::AppHandle,
+    shopping_list: FrontendShoppingList,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let db_shopping_list = convert_frontend_to_db_shopping_list(shopping_list);
+    db.save_shopping_list(&db_shopping_list).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_shopping_lists_by_meal_plan(
+    app: tauri::AppHandle,
+    meal_plan_id: String,
+) -> Result<Vec<FrontendShoppingList>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let shopping_lists = db.get_shopping_lists_by_meal_plan(&meal_plan_id).await.map_err(|e| e.to_string())?;
+    let frontend_shopping_lists = shopping_lists.into_iter().map(convert_db_to_frontend_shopping_list).collect();
+    Ok(frontend_shopping_lists)
+}
+
+#[tauri::command]
+async fn db_get_shopping_list_by_id(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Option<FrontendShoppingList>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let shopping_list = db.get_shopping_list_by_id(&id).await.map_err(|e| e.to_string())?;
+    let frontend_shopping_list = shopping_list.map(convert_db_to_frontend_shopping_list);
+    Ok(frontend_shopping_list)
+}
+
+#[tauri::command]
+async fn db_delete_shopping_list(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_shopping_list(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_save_shopping_list_item(
+    app: tauri::AppHandle,
+    item: FrontendShoppingListItem,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let db_item = convert_frontend_to_db_shopping_list_item(item);
+    db.save_shopping_list_item(&db_item).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_get_shopping_list_items(
+    app: tauri::AppHandle,
+    shopping_list_id: String,
+) -> Result<Vec<FrontendShoppingListItem>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let items = db.get_shopping_list_items(&shopping_list_id).await.map_err(|e| e.to_string())?;
+    let frontend_items = items.into_iter().map(convert_db_to_frontend_shopping_list_item).collect();
+    Ok(frontend_items)
+}
+
+#[tauri::command]
+async fn db_update_shopping_list_item_checked(
+    app: tauri::AppHandle,
+    id: String,
+    is_checked: bool,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.update_shopping_list_item_checked(&id, is_checked).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn db_delete_shopping_list_item(
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_shopping_list_item(&id).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+// Conversion functions for meal planning types
+fn convert_frontend_to_db_meal_plan(frontend: FrontendMealPlan) -> MealPlan {
+    use database::MealPlanSettings;
+
+    MealPlan {
+        id: frontend.id,
+        name: frontend.name,
+        description: frontend.description,
+        start_date: frontend.start_date,
+        end_date: frontend.end_date,
+        settings: MealPlanSettings {
+            enabled_meal_types: frontend.settings.enabled_meal_types,
+            default_servings: frontend.settings.default_servings,
+        },
+        date_created: chrono::DateTime::parse_from_rfc3339(&frontend.date_created)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+        date_modified: chrono::DateTime::parse_from_rfc3339(&frontend.date_modified)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+    }
+}
+
+fn convert_db_to_frontend_meal_plan(db: MealPlan) -> FrontendMealPlan {
+    FrontendMealPlan {
+        id: db.id,
+        name: db.name,
+        description: db.description,
+        start_date: db.start_date,
+        end_date: db.end_date,
+        settings: FrontendMealPlanSettings {
+            enabled_meal_types: db.settings.enabled_meal_types,
+            default_servings: db.settings.default_servings,
+        },
+        date_created: db.date_created.to_rfc3339(),
+        date_modified: db.date_modified.to_rfc3339(),
+    }
+}
+
+fn convert_frontend_to_db_meal_plan_recipe(frontend: FrontendMealPlanRecipe) -> MealPlanRecipe {
+    MealPlanRecipe {
+        id: frontend.id,
+        meal_plan_id: frontend.meal_plan_id,
+        recipe_id: frontend.recipe_id,
+        date: frontend.date,
+        meal_type: frontend.meal_type,
+        serving_multiplier: frontend.serving_multiplier,
+        notes: frontend.notes,
+        date_created: chrono::DateTime::parse_from_rfc3339(&frontend.date_created)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+    }
+}
+
+fn convert_db_to_frontend_meal_plan_recipe(db: MealPlanRecipe) -> FrontendMealPlanRecipe {
+    FrontendMealPlanRecipe {
+        id: db.id,
+        meal_plan_id: db.meal_plan_id,
+        recipe_id: db.recipe_id,
+        date: db.date,
+        meal_type: db.meal_type,
+        serving_multiplier: db.serving_multiplier,
+        notes: db.notes,
+        date_created: db.date_created.to_rfc3339(),
+    }
+}
+
+fn convert_frontend_to_db_shopping_list(frontend: FrontendShoppingList) -> ShoppingList {
+    ShoppingList {
+        id: frontend.id,
+        meal_plan_id: frontend.meal_plan_id,
+        name: frontend.name,
+        date_range_start: frontend.date_range_start,
+        date_range_end: frontend.date_range_end,
+        date_created: chrono::DateTime::parse_from_rfc3339(&frontend.date_created)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+        date_modified: chrono::DateTime::parse_from_rfc3339(&frontend.date_modified)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+    }
+}
+
+fn convert_db_to_frontend_shopping_list(db: ShoppingList) -> FrontendShoppingList {
+    FrontendShoppingList {
+        id: db.id,
+        meal_plan_id: db.meal_plan_id,
+        name: db.name,
+        date_range_start: db.date_range_start,
+        date_range_end: db.date_range_end,
+        date_created: db.date_created.to_rfc3339(),
+        date_modified: db.date_modified.to_rfc3339(),
+    }
+}
+
+fn convert_frontend_to_db_shopping_list_item(frontend: FrontendShoppingListItem) -> ShoppingListItem {
+    ShoppingListItem {
+        id: frontend.id,
+        shopping_list_id: frontend.shopping_list_id,
+        ingredient_name: frontend.ingredient_name,
+        quantity: frontend.quantity,
+        unit: frontend.unit,
+        category: frontend.category,
+        is_checked: frontend.is_checked,
+        notes: frontend.notes,
+        date_created: chrono::DateTime::parse_from_rfc3339(&frontend.date_created)
+            .unwrap_or_else(|_| chrono::Utc::now().into())
+            .with_timezone(&chrono::Utc),
+    }
+}
+
+fn convert_db_to_frontend_shopping_list_item(db: ShoppingListItem) -> FrontendShoppingListItem {
+    FrontendShoppingListItem {
+        id: db.id,
+        shopping_list_id: db.shopping_list_id,
+        ingredient_name: db.ingredient_name,
+        quantity: db.quantity,
+        unit: db.unit,
+        category: db.category,
+        is_checked: db.is_checked,
+        notes: db.notes,
+        date_created: db.date_created.to_rfc3339(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let batch_importers: BatchImporterMap = Arc::new(Mutex::new(HashMap::new()));
@@ -1255,6 +1598,21 @@ pub fn run() {
             db_export_database,
             db_import_database,
             db_reset_database,
+            db_save_meal_plan,
+            db_get_all_meal_plans,
+            db_get_meal_plan_by_id,
+            db_delete_meal_plan,
+            db_save_meal_plan_recipe,
+            db_get_meal_plan_recipes,
+            db_delete_meal_plan_recipe,
+            db_save_shopping_list,
+            db_get_shopping_lists_by_meal_plan,
+            db_get_shopping_list_by_id,
+            db_delete_shopping_list,
+            db_save_shopping_list_item,
+            db_get_shopping_list_items,
+            db_update_shopping_list_item_checked,
+            db_delete_shopping_list_item,
             log_info,
             log_warn,
             log_error,

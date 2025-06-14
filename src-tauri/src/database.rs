@@ -92,6 +92,60 @@ pub struct RawIngredient {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MealPlan {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub start_date: String, // ISO date string (YYYY-MM-DD)
+    pub end_date: String,   // ISO date string (YYYY-MM-DD)
+    pub settings: MealPlanSettings,
+    pub date_created: DateTime<Utc>,
+    pub date_modified: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MealPlanSettings {
+    pub enabled_meal_types: Vec<String>, // ["breakfast", "lunch", "dinner", "snacks"]
+    pub default_servings: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MealPlanRecipe {
+    pub id: String,
+    pub meal_plan_id: String,
+    pub recipe_id: String,
+    pub date: String,      // ISO date string (YYYY-MM-DD)
+    pub meal_type: String, // "breakfast", "lunch", "dinner", "snacks"
+    pub serving_multiplier: f64, // 1.0 = original servings, 2.0 = double, etc.
+    pub notes: Option<String>,
+    pub date_created: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShoppingList {
+    pub id: String,
+    pub meal_plan_id: String,
+    pub name: String,
+    pub date_range_start: String, // ISO date string (YYYY-MM-DD)
+    pub date_range_end: String,   // ISO date string (YYYY-MM-DD)
+    pub date_created: DateTime<Utc>,
+    pub date_modified: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShoppingListItem {
+    pub id: String,
+    pub shopping_list_id: String,
+    pub ingredient_name: String,
+    pub quantity: f64,
+    pub unit: String,
+    pub category: Option<String>,
+    pub is_checked: bool,
+    pub notes: Option<String>,
+    pub date_created: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentSearch {
     pub id: String,
     pub query: String,
@@ -292,11 +346,107 @@ impl Database {
         .await
         .context("Failed to create raw_ingredients table")?;
 
+        // Create meal plans table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS meal_plans (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                settings TEXT NOT NULL, -- JSON object
+                date_created TEXT NOT NULL,
+                date_modified TEXT NOT NULL
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create meal_plans table")?;
+
+        // Create meal plan recipes table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS meal_plan_recipes (
+                id TEXT PRIMARY KEY,
+                meal_plan_id TEXT NOT NULL,
+                recipe_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                meal_type TEXT NOT NULL,
+                serving_multiplier REAL NOT NULL DEFAULT 1.0,
+                notes TEXT,
+                date_created TEXT NOT NULL,
+                FOREIGN KEY (meal_plan_id) REFERENCES meal_plans(id) ON DELETE CASCADE,
+                FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create meal_plan_recipes table")?;
+
+        // Create shopping lists table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS shopping_lists (
+                id TEXT PRIMARY KEY,
+                meal_plan_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                date_range_start TEXT NOT NULL,
+                date_range_end TEXT NOT NULL,
+                date_created TEXT NOT NULL,
+                date_modified TEXT NOT NULL,
+                FOREIGN KEY (meal_plan_id) REFERENCES meal_plans(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create shopping_lists table")?;
+
+        // Create shopping list items table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS shopping_list_items (
+                id TEXT PRIMARY KEY,
+                shopping_list_id TEXT NOT NULL,
+                ingredient_name TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                unit TEXT NOT NULL,
+                category TEXT,
+                is_checked BOOLEAN NOT NULL DEFAULT FALSE,
+                notes TEXT,
+                date_created TEXT NOT NULL,
+                FOREIGN KEY (shopping_list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create shopping_list_items table")?;
+
         // Create indexes for better performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title)")
             .execute(&self.pool)
             .await
             .context("Failed to create title index")?;
+
+        // Create indexes for meal planning tables
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_meal_plan_recipes_meal_plan_id ON meal_plan_recipes(meal_plan_id)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create meal_plan_recipes meal_plan_id index")?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_meal_plan_recipes_date ON meal_plan_recipes(date)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create meal_plan_recipes date index")?;
+
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_shopping_list_items_shopping_list_id ON shopping_list_items(shopping_list_id)")
+            .execute(&self.pool)
+            .await
+            .context("Failed to create shopping_list_items shopping_list_id index")?;
 
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_recipes_date_added ON recipes(date_added)")
             .execute(&self.pool)
@@ -1727,7 +1877,11 @@ impl Database {
     pub async fn reset_all_data(&self) -> Result<()> {
         let mut tx = self.pool.begin().await.context("Failed to start transaction")?;
 
-        // Clear all tables
+        // Clear all tables (order matters due to foreign key constraints)
+        sqlx::query("DELETE FROM shopping_list_items").execute(&mut *tx).await.context("Failed to clear shopping_list_items")?;
+        sqlx::query("DELETE FROM shopping_lists").execute(&mut *tx).await.context("Failed to clear shopping_lists")?;
+        sqlx::query("DELETE FROM meal_plan_recipes").execute(&mut *tx).await.context("Failed to clear meal_plan_recipes")?;
+        sqlx::query("DELETE FROM meal_plans").execute(&mut *tx).await.context("Failed to clear meal_plans")?;
         sqlx::query("DELETE FROM recipes").execute(&mut *tx).await.context("Failed to clear recipes")?;
         sqlx::query("DELETE FROM ingredients").execute(&mut *tx).await.context("Failed to clear ingredients")?;
         sqlx::query("DELETE FROM pantry_items").execute(&mut *tx).await.context("Failed to clear pantry_items")?;
@@ -1930,6 +2084,324 @@ impl Database {
         .context("Failed to save raw ingredient")?;
 
         Ok(())
+    }
+
+    // Meal Plan methods
+    pub async fn save_meal_plan(&self, meal_plan: &MealPlan) -> Result<()> {
+        let settings_json = serde_json::to_string(&meal_plan.settings)
+            .context("Failed to serialize meal plan settings")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO meal_plans (
+                id, name, description, start_date, end_date, settings, date_created, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&meal_plan.id)
+        .bind(&meal_plan.name)
+        .bind(&meal_plan.description)
+        .bind(&meal_plan.start_date)
+        .bind(&meal_plan.end_date)
+        .bind(&settings_json)
+        .bind(meal_plan.date_created.to_rfc3339())
+        .bind(meal_plan.date_modified.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save meal plan")?;
+
+        Ok(())
+    }
+
+    pub async fn get_all_meal_plans(&self) -> Result<Vec<MealPlan>> {
+        let rows = sqlx::query("SELECT * FROM meal_plans ORDER BY date_created DESC")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch meal plans")?;
+
+        let mut meal_plans = Vec::new();
+        for row in rows {
+            let settings_json: String = row.get("settings");
+            let settings: MealPlanSettings = serde_json::from_str(&settings_json)
+                .context("Failed to deserialize meal plan settings")?;
+
+            meal_plans.push(MealPlan {
+                id: row.get("id"),
+                name: row.get("name"),
+                description: row.get("description"),
+                start_date: row.get("start_date"),
+                end_date: row.get("end_date"),
+                settings,
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+                date_modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_modified"))
+                    .context("Failed to parse date_modified")?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(meal_plans)
+    }
+
+    pub async fn get_meal_plan_by_id(&self, id: &str) -> Result<Option<MealPlan>> {
+        let row = sqlx::query("SELECT * FROM meal_plans WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to fetch meal plan")?;
+
+        if let Some(row) = row {
+            let settings_json: String = row.get("settings");
+            let settings: MealPlanSettings = serde_json::from_str(&settings_json)
+                .context("Failed to deserialize meal plan settings")?;
+
+            Ok(Some(MealPlan {
+                id: row.get("id"),
+                name: row.get("name"),
+                description: row.get("description"),
+                start_date: row.get("start_date"),
+                end_date: row.get("end_date"),
+                settings,
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+                date_modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_modified"))
+                    .context("Failed to parse date_modified")?
+                    .with_timezone(&Utc),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn delete_meal_plan(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM meal_plans WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete meal plan")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    // Meal Plan Recipe methods
+    pub async fn save_meal_plan_recipe(&self, meal_plan_recipe: &MealPlanRecipe) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO meal_plan_recipes (
+                id, meal_plan_id, recipe_id, date, meal_type, serving_multiplier, notes, date_created
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&meal_plan_recipe.id)
+        .bind(&meal_plan_recipe.meal_plan_id)
+        .bind(&meal_plan_recipe.recipe_id)
+        .bind(&meal_plan_recipe.date)
+        .bind(&meal_plan_recipe.meal_type)
+        .bind(meal_plan_recipe.serving_multiplier)
+        .bind(&meal_plan_recipe.notes)
+        .bind(meal_plan_recipe.date_created.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save meal plan recipe")?;
+
+        Ok(())
+    }
+
+    pub async fn get_meal_plan_recipes(&self, meal_plan_id: &str) -> Result<Vec<MealPlanRecipe>> {
+        let rows = sqlx::query("SELECT * FROM meal_plan_recipes WHERE meal_plan_id = ? ORDER BY date, meal_type")
+            .bind(meal_plan_id)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch meal plan recipes")?;
+
+        let mut meal_plan_recipes = Vec::new();
+        for row in rows {
+            meal_plan_recipes.push(MealPlanRecipe {
+                id: row.get("id"),
+                meal_plan_id: row.get("meal_plan_id"),
+                recipe_id: row.get("recipe_id"),
+                date: row.get("date"),
+                meal_type: row.get("meal_type"),
+                serving_multiplier: row.get("serving_multiplier"),
+                notes: row.get("notes"),
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(meal_plan_recipes)
+    }
+
+    pub async fn delete_meal_plan_recipe(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM meal_plan_recipes WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete meal plan recipe")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    // Shopping List methods
+    pub async fn save_shopping_list(&self, shopping_list: &ShoppingList) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO shopping_lists (
+                id, meal_plan_id, name, date_range_start, date_range_end, date_created, date_modified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&shopping_list.id)
+        .bind(&shopping_list.meal_plan_id)
+        .bind(&shopping_list.name)
+        .bind(&shopping_list.date_range_start)
+        .bind(&shopping_list.date_range_end)
+        .bind(shopping_list.date_created.to_rfc3339())
+        .bind(shopping_list.date_modified.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save shopping list")?;
+
+        Ok(())
+    }
+
+    pub async fn get_shopping_lists_by_meal_plan(&self, meal_plan_id: &str) -> Result<Vec<ShoppingList>> {
+        let rows = sqlx::query("SELECT * FROM shopping_lists WHERE meal_plan_id = ? ORDER BY date_created DESC")
+            .bind(meal_plan_id)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch shopping lists")?;
+
+        let mut shopping_lists = Vec::new();
+        for row in rows {
+            shopping_lists.push(ShoppingList {
+                id: row.get("id"),
+                meal_plan_id: row.get("meal_plan_id"),
+                name: row.get("name"),
+                date_range_start: row.get("date_range_start"),
+                date_range_end: row.get("date_range_end"),
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+                date_modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_modified"))
+                    .context("Failed to parse date_modified")?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(shopping_lists)
+    }
+
+    pub async fn get_shopping_list_by_id(&self, id: &str) -> Result<Option<ShoppingList>> {
+        let row = sqlx::query("SELECT * FROM shopping_lists WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to fetch shopping list")?;
+
+        if let Some(row) = row {
+            Ok(Some(ShoppingList {
+                id: row.get("id"),
+                meal_plan_id: row.get("meal_plan_id"),
+                name: row.get("name"),
+                date_range_start: row.get("date_range_start"),
+                date_range_end: row.get("date_range_end"),
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+                date_modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_modified"))
+                    .context("Failed to parse date_modified")?
+                    .with_timezone(&Utc),
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn delete_shopping_list(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM shopping_lists WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete shopping list")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    // Shopping List Item methods
+    pub async fn save_shopping_list_item(&self, item: &ShoppingListItem) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO shopping_list_items (
+                id, shopping_list_id, ingredient_name, quantity, unit, category, is_checked, notes, date_created
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&item.id)
+        .bind(&item.shopping_list_id)
+        .bind(&item.ingredient_name)
+        .bind(item.quantity)
+        .bind(&item.unit)
+        .bind(&item.category)
+        .bind(item.is_checked)
+        .bind(&item.notes)
+        .bind(item.date_created.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to save shopping list item")?;
+
+        Ok(())
+    }
+
+    pub async fn get_shopping_list_items(&self, shopping_list_id: &str) -> Result<Vec<ShoppingListItem>> {
+        let rows = sqlx::query("SELECT * FROM shopping_list_items WHERE shopping_list_id = ? ORDER BY category, ingredient_name")
+            .bind(shopping_list_id)
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch shopping list items")?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(ShoppingListItem {
+                id: row.get("id"),
+                shopping_list_id: row.get("shopping_list_id"),
+                ingredient_name: row.get("ingredient_name"),
+                quantity: row.get("quantity"),
+                unit: row.get("unit"),
+                category: row.get("category"),
+                is_checked: row.get("is_checked"),
+                notes: row.get("notes"),
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+            });
+        }
+
+        Ok(items)
+    }
+
+    pub async fn update_shopping_list_item_checked(&self, id: &str, is_checked: bool) -> Result<()> {
+        sqlx::query("UPDATE shopping_list_items SET is_checked = ? WHERE id = ?")
+            .bind(is_checked)
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to update shopping list item checked status")?;
+
+        Ok(())
+    }
+
+    pub async fn delete_shopping_list_item(&self, id: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM shopping_list_items WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete shopping list item")?;
+
+        Ok(result.rows_affected() > 0)
     }
 }
 

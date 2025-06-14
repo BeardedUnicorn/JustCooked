@@ -22,12 +22,13 @@ import {
   ExpandMore as ExpandMoreIcon,
   Queue as QueueIcon,
   Info as InfoIcon,
+  PlaylistAdd as PlaylistAddIcon,
 } from '@mui/icons-material';
 import { BatchImportRequest } from '@app-types';
 import { batchImportService } from '@services/batchImport';
 import { getExistingRecipeUrls } from '@services/recipeStorage';
 import { useAppDispatch } from '@store';
-import { addToQueue } from '@store/slices/importQueueSlice';
+import { addToQueue, addMultipleToQueue } from '@store/slices/importQueueSlice';
 import { importQueueService } from '@services/importQueue';
 
 interface BatchImportDialogProps {
@@ -46,7 +47,9 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   const [maxRecipes, setMaxRecipes] = useState<number | ''>('');
   const [maxDepth, setMaxDepth] = useState<number | ''>('');
   const [isAddingToQueue, setIsAddingToQueue] = useState(false);
+  const [isLoadingPopularCategories, setIsLoadingPopularCategories] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const suggestedUrls = batchImportService.getSuggestedCategoryUrls();
 
@@ -57,7 +60,9 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       setMaxRecipes('');
       setMaxDepth('');
       setIsAddingToQueue(false);
+      setIsLoadingPopularCategories(false);
       setError(null);
+      setSuccessMessage(null);
     }
   }, [open]);
 
@@ -108,8 +113,48 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     setUrl(selectedUrl);
   };
 
+  const handleLoadPopularCategories = async () => {
+    setError(null);
+    setSuccessMessage(null);
+    setIsLoadingPopularCategories(true);
+
+    try {
+      const popularUrls = batchImportService.getPopularCategoryUrls();
+
+      const options = {
+        maxRecipes: maxRecipes ? Number(maxRecipes) : undefined,
+        maxDepth: maxDepth ? Number(maxDepth) : undefined,
+      };
+
+      const result = await dispatch(addMultipleToQueue({ urls: popularUrls, options })).unwrap();
+
+      // Show success message
+      const successMsg = `Successfully added ${result.totalAdded} popular categories to the queue!`;
+      if (result.errors.length > 0) {
+        setSuccessMessage(`${successMsg} (${result.errors.length} failed)`);
+      } else {
+        setSuccessMessage(successMsg);
+      }
+
+      // Notify parent component about the tasks added
+      if (onTaskAdded) {
+        result.taskIds.forEach(taskId => onTaskAdded(taskId));
+      }
+
+      // Close dialog after a short delay to show success message
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add popular categories to queue');
+    } finally {
+      setIsLoadingPopularCategories(false);
+    }
+  };
+
   const handleClose = () => {
-    if (!isAddingToQueue) {
+    if (!isAddingToQueue && !isLoadingPopularCategories) {
       onClose();
     }
   };
@@ -197,7 +242,25 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
               </Box>
             </Box>
 
-
+            {/* Quick Start - Popular Categories */}
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Quick Start
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Load 20 popular AllRecipes categories to get started quickly. This will add all categories to the import queue using your current settings.
+              </Typography>
+              <Button
+                variant="outlined"
+                onClick={handleLoadPopularCategories}
+                disabled={isLoadingPopularCategories || isAddingToQueue}
+                startIcon={<PlaylistAddIcon />}
+                data-testid="batch-import-load-popular-categories-button"
+                sx={{ mb: 1 }}
+              >
+                {isLoadingPopularCategories ? 'Adding Popular Categories...' : 'Load Popular Categories'}
+              </Button>
+            </Box>
 
             {/* Suggested URLs */}
             <Accordion>
@@ -232,6 +295,13 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
               </Typography>
             </Alert>
 
+            {/* Success Message */}
+            {successMessage && (
+              <Alert severity="success">
+                {successMessage}
+              </Alert>
+            )}
+
             {/* Error Message */}
             {error && (
               <Alert severity="error">
@@ -244,7 +314,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       <DialogActions>
         <Button
           onClick={handleClose}
-          disabled={isAddingToQueue}
+          disabled={isAddingToQueue || isLoadingPopularCategories}
           data-testid="batch-import-cancel-button"
         >
           Cancel
@@ -252,7 +322,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
         <Button
           variant="contained"
           onClick={handleAddToQueue}
-          disabled={!url.trim() || !isValidUrl(url) || isAddingToQueue}
+          disabled={!url.trim() || !isValidUrl(url) || isAddingToQueue || isLoadingPopularCategories}
           startIcon={<QueueIcon />}
           data-testid="batch-import-add-to-queue-button"
         >

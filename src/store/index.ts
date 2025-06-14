@@ -6,6 +6,8 @@ import recipesReducer from './slices/recipesSlice';
 import searchHistoryReducer from './slices/searchHistorySlice';
 import recipeCollectionsReducer from './slices/recipeCollectionsSlice';
 import importQueueReducer from './slices/importQueueSlice';
+import mealPlansReducer from './slices/mealPlansSlice';
+import shoppingListsReducer from './slices/shoppingListsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -15,6 +17,8 @@ export const store = configureStore({
     searchHistory: searchHistoryReducer,
     recipeCollections: recipeCollectionsReducer,
     importQueue: importQueueReducer,
+    mealPlans: mealPlansReducer,
+    shoppingLists: shoppingListsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

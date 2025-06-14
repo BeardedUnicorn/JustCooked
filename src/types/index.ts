@@ -14,6 +14,21 @@ export type { StorageInfo } from './storageInfo';
 export type { PantryItem } from './pantryItem';
 export type { RecipeCollection } from './recipeCollection';
 
+// Meal planning types
+export type { MealPlan, MealPlanRecipe, MealPlanSettings, MealType } from './mealPlan';
+export { MEAL_TYPES, DEFAULT_MEAL_PLAN_SETTINGS, getMealTypeDisplayName, getMealTypeOrder } from './mealPlan';
+
+// Meal planning utility functions (re-exported from services)
+export {
+  isMealPlanActive,
+  isMealPlanUpcoming,
+  isMealPlanPast,
+  getMealPlanDuration,
+  getMealPlanDates
+} from '../services/mealPlanStorage';
+export type { ShoppingList, ShoppingListItem, ShoppingCategory } from './shoppingList';
+export { SHOPPING_CATEGORIES, getCategoryDisplayName, getCategoryOrder, categorizeIngredient } from './shoppingList';
+
 // Batch import types
 export type {
   BatchImportRequest,
