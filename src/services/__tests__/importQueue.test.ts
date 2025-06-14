@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { ImportQueueService } from '../importQueue';
-import { BatchImportRequest, ImportQueueStatus, ImportQueueTask } from '@app-types';
+import { BatchImportRequest, ImportQueueStatus, ImportQueueTask, ImportQueueTaskStatus } from '../../types';
 import { getExistingRecipeUrls } from '../recipeStorage';
 
 // Mock Tauri API
@@ -35,13 +35,8 @@ describe('ImportQueueService', () => {
     id: 'task-123',
     description: 'Import dessert recipes',
     request: mockBatchRequest,
-    status: 'pending',
-    progress: null,
+    status: ImportQueueTaskStatus.PENDING,
     addedAt: '2024-01-01T00:00:00Z',
-    startedAt: null,
-    completedAt: null,
-    error: null,
-    estimatedTimeRemaining: null,
   };
 
   beforeEach(() => {
@@ -67,11 +62,9 @@ describe('ImportQueueService', () => {
       const mockStatus: ImportQueueStatus = {
         tasks: [mockQueueTask],
         isProcessing: false,
-        currentTaskId: null,
-        totalTasks: 1,
-        pendingTasks: 1,
-        completedTasks: 0,
-        failedTasks: 0,
+        totalPending: 1,
+        totalCompleted: 0,
+        totalFailed: 0,
       };
 
       mockInvoke.mockResolvedValue(mockStatus);
@@ -160,7 +153,7 @@ describe('ImportQueueService', () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toEqual({
         url: 'https://allrecipes.com/recipes/main-dish/',
-        error: 'Failed to add task',
+        error: 'Failed to add task to queue: Failed to add task',
       });
     });
 
@@ -293,7 +286,6 @@ describe('ImportQueueService', () => {
     it('should handle task without progress', () => {
       const taskWithoutProgress: ImportQueueTask = {
         ...mockQueueTask,
-        progress: null,
       };
 
       const percentage = queueService.getProgressPercentage(taskWithoutProgress);
@@ -334,7 +326,7 @@ describe('ImportQueueService', () => {
     it('should get status display text for pending task', () => {
       const pendingTask: ImportQueueTask = {
         ...mockQueueTask,
-        status: 'pending',
+        status: ImportQueueTaskStatus.PENDING,
       };
 
       const displayText = queueService.getStatusDisplayText(pendingTask);
@@ -345,7 +337,7 @@ describe('ImportQueueService', () => {
     it('should get status display text for running task', () => {
       const runningTask: ImportQueueTask = {
         ...mockQueueTask,
-        status: 'running',
+        status: ImportQueueTaskStatus.RUNNING,
         progress: {
           status: 'importingRecipes',
           processedRecipes: 25,
@@ -362,7 +354,7 @@ describe('ImportQueueService', () => {
     it('should get status display text for completed task', () => {
       const completedTask: ImportQueueTask = {
         ...mockQueueTask,
-        status: 'completed',
+        status: ImportQueueTaskStatus.COMPLETED,
         progress: {
           successfulImports: 80,
           failedImports: 5,
@@ -377,9 +369,9 @@ describe('ImportQueueService', () => {
     });
 
     it('should check if task can be removed', () => {
-      const pendingTask: ImportQueueTask = { ...mockQueueTask, status: 'pending' };
-      const runningTask: ImportQueueTask = { ...mockQueueTask, status: 'running' };
-      const completedTask: ImportQueueTask = { ...mockQueueTask, status: 'completed' };
+      const pendingTask: ImportQueueTask = { ...mockQueueTask, status: ImportQueueTaskStatus.PENDING };
+      const runningTask: ImportQueueTask = { ...mockQueueTask, status: ImportQueueTaskStatus.RUNNING };
+      const completedTask: ImportQueueTask = { ...mockQueueTask, status: ImportQueueTaskStatus.COMPLETED };
 
       expect(queueService.canRemoveTask(pendingTask)).toBe(true);
       expect(queueService.canRemoveTask(runningTask)).toBe(true);

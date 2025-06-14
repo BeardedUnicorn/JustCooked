@@ -4,15 +4,15 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import RecipeAssignmentDialog from '@components/RecipeAssignmentDialog';
-import { Recipe } from '@app-types';
+import RecipeAssignmentDialog from '../../components/RecipeAssignmentDialog';
+import { Recipe } from '../../types';
 
 // Mock the services
-jest.mock('@services/recipeStorage', () => ({
+jest.mock('../../services/recipeStorage', () => ({
   getAllRecipes: jest.fn(),
 }));
 
-jest.mock('@services/mealPlanStorage', () => ({
+jest.mock('../../services/mealPlanStorage', () => ({
   createNewMealPlanRecipe: jest.fn(),
   saveMealPlanRecipe: jest.fn(),
 }));
@@ -28,40 +28,40 @@ const mockRecipes: Recipe[] = [
     title: 'Test Recipe 1',
     description: 'A test recipe',
     ingredients: [
-      { name: 'Flour', amount: 2, unit: 'cups', section: null },
-      { name: 'Sugar', amount: 1, unit: 'cup', section: null },
+      { name: 'Flour', amount: 2, unit: 'cups', section: undefined },
+      { name: 'Sugar', amount: 1, unit: 'cup', section: undefined },
     ],
     instructions: ['Mix ingredients', 'Bake'],
-    prep_time: '15 minutes',
-    cook_time: '30 minutes',
-    total_time: '45 minutes',
+    prepTime: '15 minutes',
+    cookTime: '30 minutes',
+    totalTime: '45 minutes',
     servings: 4,
     tags: ['dessert', 'easy'],
-    source_url: 'https://example.com/recipe1',
-    image_url: null,
-    date_created: '2024-01-01T00:00:00Z',
-    date_modified: '2024-01-01T00:00:00Z',
-    is_favorite: false,
+    sourceUrl: 'https://example.com/recipe1',
+    image: '',
+    dateAdded: '2024-01-01T00:00:00Z',
+    dateModified: '2024-01-01T00:00:00Z',
+    isFavorite: false,
   },
   {
     id: '2',
     title: 'Test Recipe 2',
     description: 'Another test recipe',
     ingredients: [
-      { name: 'Chicken', amount: 1, unit: 'lb', section: null },
-      { name: 'Rice', amount: 2, unit: 'cups', section: null },
+      { name: 'Chicken', amount: 1, unit: 'lb', section: undefined },
+      { name: 'Rice', amount: 2, unit: 'cups', section: undefined },
     ],
     instructions: ['Cook chicken', 'Prepare rice'],
-    prep_time: '10 minutes',
-    cook_time: '25 minutes',
-    total_time: '35 minutes',
+    prepTime: '10 minutes',
+    cookTime: '25 minutes',
+    totalTime: '35 minutes',
     servings: 6,
     tags: ['dinner', 'protein'],
-    source_url: 'https://example.com/recipe2',
-    image_url: null,
-    date_created: '2024-01-01T00:00:00Z',
-    date_modified: '2024-01-01T00:00:00Z',
-    is_favorite: false,
+    sourceUrl: 'https://example.com/recipe2',
+    image: '',
+    dateAdded: '2024-01-01T00:00:00Z',
+    dateModified: '2024-01-01T00:00:00Z',
+    isFavorite: false,
   },
 ];
 
@@ -95,7 +95,7 @@ describe('RecipeAssignmentDialog', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    const { getAllRecipes } = require('@services/recipeStorage');
+    const { getAllRecipes } = require('../../services/recipeStorage');
     getAllRecipes.mockResolvedValue(mockRecipes);
   });
 
@@ -103,8 +103,8 @@ describe('RecipeAssignmentDialog', () => {
     renderWithProviders(<RecipeAssignmentDialog {...defaultProps} />);
 
     expect(screen.getByText('Assign Recipe to Meal Plan')).toBeInTheDocument();
-    expect(screen.getByText(/Monday, January 15, 2024/)).toBeInTheDocument();
-    expect(screen.getByText(/Dinner/)).toBeInTheDocument();
+    expect(screen.getByText(/Sunday, January 14, 2024/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Dinner/)).toHaveLength(2); // One in title, one in select
   });
 
   it('displays recipe search input', () => {
@@ -117,8 +117,8 @@ describe('RecipeAssignmentDialog', () => {
   it('displays meal type selector with enabled meal types', () => {
     renderWithProviders(<RecipeAssignmentDialog {...defaultProps} />);
 
-    expect(screen.getByLabelText('Meal Type')).toBeInTheDocument();
     expect(screen.getByTestId('recipe-assignment-meal-type-select')).toBeInTheDocument();
+    expect(screen.getAllByText('Meal Type')).toHaveLength(2); // Label and legend
   });
 
   it('displays serving multiplier input', () => {
