@@ -57,4 +57,9 @@ export default {
   testTimeout: 10000,
   clearMocks: true,
   restoreMocks: true,
+  bail: true,
+  reporters: [
+    'jest-silent-reporter',
+    'summary',
+  ],
 };
