@@ -12,12 +12,12 @@ import {
   TextField,
   Divider,
 } from '@mui/material';
+import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import {
-  BrowserMultiFormatReader,
   NotFoundException,
   DecodeHintType,
   BarcodeFormat
-} from '@zxing/browser';
+} from '@zxing/library';
 import { createLogger } from '@services/loggingService';
 
 interface BarcodeScannerProps {
@@ -33,6 +33,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReader = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<IScannerControls | null>(null);
   const scanningRef = useRef<boolean>(false);
   const scanStartTime = useRef<number>(0);
   const [isScanning, setIsScanning] = useState(false);
@@ -125,7 +126,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       await logger.current.debug('ZXing BrowserMultiFormatReader initialized with enhanced hints');
 
       // Get available video devices
-      const videoInputDevices = await codeReader.current.listVideoInputDevices();
+      const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
 
       await logger.current.debug('Video input devices detected', {
         deviceCount: videoInputDevices.length,
@@ -297,12 +298,11 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         await logger.current.info('Video element ready for scanning');
         await logger.current.debug('Video mirroring disabled for barcode scanning accuracy');
 
-        // Start optimized continuous scanning with adaptive timing
+        // Start continuous scanning
         let scanAttempts = 0;
         let consecutiveFailures = 0;
-        const maxScanAttempts = 2000; // Increased for better detection
-        const maxConsecutiveFailures = 50; // Reset if too many failures
-        let scanInterval = 150; // Start with slower interval for better accuracy
+        const maxConsecutiveFailures = 50;
+        let scanInterval = 150; // Not used but kept for consistency
 
         // Show scanning tip after a few seconds if no success
         const tipTimeout = setTimeout(() => {
@@ -311,119 +311,72 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           }
         }, 5000);
 
-        const scanBarcode = async () => {
-          if (videoRef.current && codeReader.current && scanningRef.current) {
-            scanAttempts++;
+        controlsRef.current = await codeReader.current.decodeFromVideoElement(videoRef.current, async (result, error, controls) => {
+          scanAttempts++;
 
-            // Update debug info periodically with more detailed information
-            if (scanAttempts % 10 === 0) {
-              const successRate = scanAttempts > 0 ? ((scanAttempts - consecutiveFailures) / scanAttempts * 100).toFixed(1) : '0';
-              const scanDuration = Date.now() - scanStartTime.current;
-              setDebugInfo(`Scanning... Attempts: ${scanAttempts}, Success Rate: ${successRate}%, Duration: ${Math.round(scanDuration/1000)}s`);
+          // Update debug info periodically with more detailed information
+          if (scanAttempts % 10 === 0) {
+            const successRate = scanAttempts > 0 ? ((scanAttempts - consecutiveFailures) / scanAttempts * 100).toFixed(1) : '0';
+            const scanDuration = Date.now() - scanStartTime.current;
+            setDebugInfo(`Scanning... Attempts: ${scanAttempts}, Success Rate: ${successRate}%, Duration: ${Math.round(scanDuration/1000)}s`);
 
-              // Log progress every 50 attempts
-              if (scanAttempts % 50 === 0) {
-                await logger.current.debug('Scanning progress update', {
-                  scanAttempts,
-                  consecutiveFailures,
-                  successRate: `${successRate}%`,
-                  scanDuration: `${Math.round(scanDuration/1000)}s`,
-                  currentInterval: scanInterval
-                });
-              }
-            }
-
-            try {
-              // Ensure video is still playing and ready
-              if (videoRef.current.paused || videoRef.current.ended) {
-                await logger.current.debug('Video paused/ended, attempting to restart');
-                await videoRef.current.play();
-              }
-
-              // Check video dimensions for better debugging
-              const videoWidth = videoRef.current.videoWidth;
-              const videoHeight = videoRef.current.videoHeight;
-
-              if (videoWidth === 0 || videoHeight === 0) {
-                throw new Error('Video dimensions not available yet');
-              }
-
-              const result = await codeReader.current.decodeFromVideoElement(videoRef.current);
-
-              if (result && scanningRef.current) {
-                const scannedCode = result.getText();
-                const scanDuration = Date.now() - scanStartTime.current;
-
-                await logger.current.info('Barcode successfully detected', {
-                  code: scannedCode,
-                  format: result.getBarcodeFormat()?.toString(),
-                  scanDuration,
-                  scanAttempts,
-                  consecutiveFailures,
-                  resultPoints: result.getResultPoints()?.length || 0,
-                  videoWidth,
-                  videoHeight
-                });
-
-                scanningRef.current = false;
-                clearTimeout(tipTimeout);
-                setShowScanningTip(false);
-                onScan(scannedCode);
-                stopScanning();
-                onClose();
-                return;
-              }
-            } catch (error) {
-              if (!(error instanceof NotFoundException)) {
-                consecutiveFailures++;
-                await logger.current.warn('Barcode scanning error', {
-                  error: error instanceof Error ? error.message : String(error),
-                  scanAttempts,
-                  consecutiveFailures,
-                  scanDuration: Date.now() - scanStartTime.current,
-                  videoReady: videoRef.current ? !videoRef.current.paused && !videoRef.current.ended : false
-                });
-
-                // Reset if too many consecutive failures
-                if (consecutiveFailures >= maxConsecutiveFailures) {
-                  await logger.current.warn('Too many consecutive failures, resetting scanner');
-                  consecutiveFailures = 0;
-                  scanInterval = Math.min(scanInterval + 50, 500); // Slow down scanning
-                }
-              } else {
-                // NotFoundException is normal, reset consecutive failures
-                consecutiveFailures = 0;
-              }
-            }
-
-            // Adaptive timing based on performance
-            if (scanAttempts % 100 === 0) {
-              // Adjust scan interval based on success rate
-              const successRate = (scanAttempts - consecutiveFailures) / scanAttempts;
-              if (successRate > 0.8) {
-                scanInterval = Math.max(scanInterval - 10, 100); // Speed up if doing well
-              } else if (successRate < 0.5) {
-                scanInterval = Math.min(scanInterval + 20, 300); // Slow down if struggling
-              }
-            }
-
-            // Continue scanning if no result and still active
-            if (scanningRef.current && scanAttempts < maxScanAttempts) {
-              setTimeout(scanBarcode, scanInterval);
-            } else if (scanAttempts >= maxScanAttempts) {
-              await logger.current.warn('Maximum scan attempts reached', {
-                maxScanAttempts,
+            // Log progress every 50 attempts
+            if (scanAttempts % 50 === 0) {
+              await logger.current.debug('Scanning progress update', {
+                scanAttempts,
                 consecutiveFailures,
-                finalScanInterval: scanInterval
+                successRate: `${successRate}%`,
+                scanDuration: `${Math.round(scanDuration/1000)}s`
               });
-              scanningRef.current = false;
             }
           }
-        };
 
-        // Start scanning loop
-        await logger.current.debug('Starting barcode scanning loop');
-        scanBarcode();
+          if (result && scanningRef.current) {
+            const scannedCode = result.getText();
+            const scanDuration = Date.now() - scanStartTime.current;
+
+            await logger.current.info('Barcode successfully detected', {
+              code: scannedCode,
+              format: result.getBarcodeFormat()?.toString(),
+              scanDuration,
+              scanAttempts,
+              consecutiveFailures,
+              resultPoints: result.getResultPoints()?.length || 0,
+              videoWidth: videoRef.current ? videoRef.current.videoWidth : 0,
+              videoHeight: videoRef.current ? videoRef.current.videoHeight : 0
+            });
+
+            scanningRef.current = false;
+            clearTimeout(tipTimeout);
+            setShowScanningTip(false);
+            onScan(scannedCode);
+            stopScanning();
+            onClose();
+            return;
+          }
+
+          if (error) {
+            if (!(error instanceof NotFoundException)) {
+              consecutiveFailures++;
+              await logger.current.warn('Barcode scanning error', {
+                error: error instanceof Error ? error.message : String(error),
+                scanAttempts,
+                consecutiveFailures,
+                scanDuration: Date.now() - scanStartTime.current,
+                videoReady: videoRef.current ? !videoRef.current.paused && !videoRef.current.ended : false
+              });
+
+              // Reset if too many consecutive failures
+              if (consecutiveFailures >= maxConsecutiveFailures) {
+                await logger.current.warn('Too many consecutive failures, resetting scanner');
+                consecutiveFailures = 0;
+              }
+            } else {
+              // NotFoundException is normal, reset consecutive failures
+              consecutiveFailures = 0;
+            }
+          }
+        });
       }
     } catch (err) {
       const scanDuration = Date.now() - scanStartTime.current;
@@ -481,16 +434,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
     scanningRef.current = false;
 
+    // Clean up controls
+    if (controlsRef.current) {
+      controlsRef.current.stop();
+      controlsRef.current = null;
+    }
+
     // Clean up code reader
     if (codeReader.current) {
-      try {
-        codeReader.current.reset();
-        await logger.current.debug('ZXing code reader reset successfully');
-      } catch (error) {
-        await logger.current.warn('Error resetting code reader', {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
       codeReader.current = null;
     }
 

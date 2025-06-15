@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
@@ -81,7 +81,6 @@ const renderCookingMode = (isMobile = false) => {
 describe('CookingMode Component', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
     
     // Reset the mock params
     mockParams.id = 'test-recipe-123';
@@ -92,7 +91,7 @@ describe('CookingMode Component', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    vi.clearAllTimers();
   });
 
   describe('Loading and Recipe Display', () => {
@@ -106,15 +105,21 @@ describe('CookingMode Component', () => {
     });
 
     test('should display recipe after loading', async () => {
+      const { getRecipeById } = await import('@services/recipeStorage');
+      vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
+      
       renderCookingMode();
 
+      // Wait for recipe content to be displayed
       await waitFor(() => {
         expect(screen.getByText('Chocolate Chip Cookies')).toBeInTheDocument();
       }, { timeout: 10000 });
 
+      // Verify other elements are present
       expect(screen.getByText('Step 1')).toBeInTheDocument();
       expect(screen.getByText('Preheat oven to 375°F')).toBeInTheDocument();
-    }, 15000);
+      expect(screen.getByText('Ingredients')).toBeInTheDocument();
+    });
 
     test('should navigate to home if recipe not found', async () => {
       const { getRecipeById } = await import('@services/recipeStorage');
@@ -163,7 +168,6 @@ describe('CookingMode Component', () => {
       const { getRecipeById } = await import('@services/recipeStorage');
       vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
       
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -173,7 +177,7 @@ describe('CookingMode Component', () => {
       const checkboxes = screen.getAllByRole('checkbox');
       expect(checkboxes[0]).not.toBeChecked();
 
-      await user.click(checkboxes[0]);
+      fireEvent.click(checkboxes[0]);
       expect(checkboxes[0]).toBeChecked();
     });
 
@@ -181,7 +185,6 @@ describe('CookingMode Component', () => {
       const { getRecipeById } = await import('@services/recipeStorage');
       vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
       
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -195,7 +198,7 @@ describe('CookingMode Component', () => {
       expect(firstIngredientText).not.toHaveStyle({ textDecoration: 'line-through' });
 
       // Check ingredient
-      await user.click(checkboxes[0]);
+      fireEvent.click(checkboxes[0]);
 
       // Should have strikethrough
       expect(firstIngredientText).toHaveStyle({ textDecoration: 'line-through' });
@@ -222,7 +225,6 @@ describe('CookingMode Component', () => {
       const { getRecipeById } = await import('@services/recipeStorage');
       vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
       
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -230,7 +232,7 @@ describe('CookingMode Component', () => {
       });
 
       const nextButton = screen.getByRole('button', { name: /next/i });
-      await user.click(nextButton);
+      fireEvent.click(nextButton);
 
       expect(screen.getByText('Step 2')).toBeInTheDocument();
       expect(screen.getByText('Mix dry ingredients in a bowl')).toBeInTheDocument();
@@ -240,7 +242,6 @@ describe('CookingMode Component', () => {
       const { getRecipeById } = await import('@services/recipeStorage');
       vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
       
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -249,12 +250,12 @@ describe('CookingMode Component', () => {
 
       // Go to step 2 first
       const nextButton = screen.getByRole('button', { name: /next/i });
-      await user.click(nextButton);
+      fireEvent.click(nextButton);
       expect(screen.getByText('Step 2')).toBeInTheDocument();
 
       // Go back to step 1
       const prevButton = screen.getByRole('button', { name: /previous/i });
-      await user.click(prevButton);
+      fireEvent.click(prevButton);
       expect(screen.getByText('Step 1')).toBeInTheDocument();
     });
 
@@ -276,7 +277,6 @@ describe('CookingMode Component', () => {
       const { getRecipeById } = await import('@services/recipeStorage');
       vi.mocked(getRecipeById).mockResolvedValue(mockRecipe);
       
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderCookingMode();
 
       await waitFor(() => {
@@ -288,7 +288,7 @@ describe('CookingMode Component', () => {
       
       // Click next until we reach the last step
       for (let i = 0; i < mockRecipe.instructions.length - 1; i++) {
-        await user.click(nextButton);
+        fireEvent.click(nextButton);
       }
 
       expect(nextButton).toBeDisabled();

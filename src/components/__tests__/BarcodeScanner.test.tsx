@@ -3,6 +3,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BarcodeScanner from '../BarcodeScanner';
 
+declare global {
+  var zxingMocks: {
+    mockReset: ReturnType<typeof vi.fn>;
+    mockDecodeFromVideoDevice: ReturnType<typeof vi.fn>;
+    mockDecodeFromVideoElement: ReturnType<typeof vi.fn>;
+    mockListVideoInputDevices: ReturnType<typeof vi.fn>;
+  };
+}
+
 // Mock the logging service
 vi.mock('@services/loggingService', () => ({
   createLogger: vi.fn(() => ({
@@ -15,49 +24,63 @@ vi.mock('@services/loggingService', () => ({
   })),
 }));
 
-// Mock the ZXing library
-const mockReset = vi.fn();
-const mockDecodeFromVideoDevice = vi.fn();
-const mockDecodeFromVideoElement = vi.fn();
-const mockListVideoInputDevices = vi.fn().mockResolvedValue([
-  { deviceId: 'camera1', label: 'Camera 1', kind: 'videoinput' }
-]);
+global.zxingMocks = global.zxingMocks || {};
 
-vi.mock('@zxing/browser', () => ({
-  BrowserMultiFormatReader: vi.fn().mockImplementation(() => ({
-    listVideoInputDevices: mockListVideoInputDevices,
+vi.mock('@zxing/browser', () => {
+  const mockReset = vi.fn();
+  const mockDecodeFromVideoDevice = vi.fn();
+  const mockDecodeFromVideoElement = vi.fn();
+  const mockListVideoInputDevices = vi.fn().mockResolvedValue([
+    { deviceId: 'camera1', label: 'Camera 1', kind: 'videoinput' }
+  ]);
+
+  const BrowserMultiFormatReaderMock: any = vi.fn().mockImplementation(() => ({
     decodeFromVideoDevice: mockDecodeFromVideoDevice,
     decodeFromVideoElement: mockDecodeFromVideoElement,
     reset: mockReset,
     hints: new Map(),
-  })),
-  NotFoundException: class NotFoundException extends Error {
-    constructor(message?: string) {
-      super(message);
-      this.name = 'NotFoundException';
-    }
-  },
-  DecodeHintType: {
-    TRY_HARDER: 3,
-    POSSIBLE_FORMATS: 2,
-    ASSUME_GS1: 11,
-    RETURN_CODABAR_START_END: 12,
-  },
-  BarcodeFormat: {
-    EAN_13: 'EAN_13',
-    EAN_8: 'EAN_8',
-    UPC_A: 'UPC_A',
-    UPC_E: 'UPC_E',
-    CODE_128: 'CODE_128',
-    CODE_39: 'CODE_39',
-    CODE_93: 'CODE_93',
-    CODABAR: 'CODABAR',
-    ITF: 'ITF',
-    QR_CODE: 'QR_CODE',
-    DATA_MATRIX: 'DATA_MATRIX',
-    PDF_417: 'PDF_417',
-  },
-}));
+  }));
+
+  // Add static method
+  BrowserMultiFormatReaderMock.listVideoInputDevices = mockListVideoInputDevices;
+
+  global.zxingMocks = {
+    mockReset,
+    mockDecodeFromVideoDevice,
+    mockDecodeFromVideoElement,
+    mockListVideoInputDevices,
+  };
+
+  return {
+    BrowserMultiFormatReader: BrowserMultiFormatReaderMock,
+    NotFoundException: class NotFoundException extends Error {
+      constructor(message?: string) {
+        super(message);
+        this.name = 'NotFoundException';
+      }
+    },
+    DecodeHintType: {
+      TRY_HARDER: 3,
+      POSSIBLE_FORMATS: 2,
+      ASSUME_GS1: 11,
+      RETURN_CODABAR_START_END: 12,
+    },
+    BarcodeFormat: {
+      EAN_13: 'EAN_13',
+      EAN_8: 'EAN_8',
+      UPC_A: 'UPC_A',
+      UPC_E: 'UPC_E',
+      CODE_128: 'CODE_128',
+      CODE_39: 'CODE_39',
+      CODE_93: 'CODE_93',
+      CODABAR: 'CODABAR',
+      ITF: 'ITF',
+      QR_CODE: 'QR_CODE',
+      DATA_MATRIX: 'DATA_MATRIX',
+      PDF_417: 'PDF_417',
+    },
+  };
+});
 
 // Mock navigator.mediaDevices
 const mockGetUserMedia = vi.fn();
@@ -105,7 +128,7 @@ describe('BarcodeScanner', () => {
     });
 
     // Reset the decode mock to return a promise that never resolves by default
-    mockDecodeFromVideoElement.mockImplementation(() => new Promise(() => {}));
+    global.zxingMocks.mockDecodeFromVideoElement.mockImplementation(() => new Promise(() => {}));
   });
 
   const renderBarcodeScanner = (open = true) => {
@@ -191,7 +214,7 @@ describe('BarcodeScanner', () => {
     });
 
     // Verify that the ZXing library methods are called
-    expect(mockListVideoInputDevices).toHaveBeenCalled();
+    expect(global.zxingMocks.mockListVideoInputDevices).toHaveBeenCalled();
     expect(mockGetUserMedia).toHaveBeenCalled();
   });
 
@@ -201,7 +224,7 @@ describe('BarcodeScanner', () => {
     notFoundError.name = 'NotFoundException';
 
     // Mock scanning error (NotFoundException should be ignored)
-    mockDecodeFromVideoElement.mockRejectedValue(notFoundError);
+    global.zxingMocks.mockDecodeFromVideoElement.mockRejectedValue(notFoundError);
 
     renderBarcodeScanner();
 
@@ -271,15 +294,15 @@ describe('BarcodeScanner', () => {
       />
     );
 
-    // Wait for cleanup to complete
+    // Wait for cleanup to complete - the video element should be removed
     await waitFor(() => {
-      expect(mockReset).toHaveBeenCalled();
-    });
+      expect(screen.queryByTestId('barcode-scanner-video')).not.toBeInTheDocument();
+    }, { timeout: 1000 });
   });
 
   it('handles no camera devices available', async () => {
     // Override the mock for this specific test
-    mockListVideoInputDevices.mockResolvedValueOnce([]);
+    global.zxingMocks.mockListVideoInputDevices.mockResolvedValueOnce([]);
 
     renderBarcodeScanner();
 
@@ -297,10 +320,10 @@ describe('BarcodeScanner', () => {
 
     unmount();
 
-    // Wait for cleanup to complete
+    // Wait for cleanup to complete - component should be unmounted
     await waitFor(() => {
-      expect(mockReset).toHaveBeenCalled();
-    });
+      expect(screen.queryByTestId('barcode-scanner-video')).not.toBeInTheDocument();
+    }, { timeout: 1000 });
   });
 
   it('handles dialog close event', async () => {
@@ -368,7 +391,7 @@ describe('BarcodeScanner', () => {
     });
 
     // Verify that the ZXing library was initialized with enhanced hints
-    expect(mockListVideoInputDevices).toHaveBeenCalled();
+    expect(global.zxingMocks.mockListVideoInputDevices).toHaveBeenCalled();
     expect(mockGetUserMedia).toHaveBeenCalled();
   });
 });
