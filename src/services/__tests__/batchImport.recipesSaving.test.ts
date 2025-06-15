@@ -1,24 +1,24 @@
-import { describe, it, expect, beforeEach, jest } from '@jest/globals';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { batchImportService } from '../batchImport';
 import { getExistingRecipeUrls } from '../recipeStorage';
 
 // Mock the Tauri invoke function
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
 // Mock the recipe storage
-jest.mock('../recipeStorage', () => ({
-  getExistingRecipeUrls: jest.fn(),
+vi.mock('../recipeStorage', () => ({
+  getExistingRecipeUrls: vi.fn(),
 }));
 
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
-const mockGetExistingUrls = getExistingRecipeUrls as jest.MockedFunction<typeof getExistingRecipeUrls>;
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockGetExistingUrls = getExistingRecipeUrls as vi.MockedFunction<typeof getExistingRecipeUrls>;
 
 describe('BatchImport Recipe Saving', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetExistingUrls.mockResolvedValue([]);
   });
 
@@ -49,7 +49,7 @@ describe('BatchImport Recipe Saving', () => {
       return Promise.reject(new Error(`Unknown command: ${command}`));
     });
 
-    const progressCallback = jest.fn();
+    const progressCallback = vi.fn();
     const startUrl = 'https://www.allrecipes.com/recipes/79/desserts';
     
     const importId = await batchImportService.startBatchImport(startUrl, {
@@ -151,7 +151,7 @@ describe('BatchImport Recipe Saving', () => {
       return Promise.reject(new Error(`Unknown command: ${command}`));
     });
 
-    const progressCallback = jest.fn();
+    const progressCallback = vi.fn();
     const startUrl = 'https://www.allrecipes.com/recipes/79/desserts';
     
     await batchImportService.startBatchImport(startUrl, {
@@ -254,7 +254,7 @@ describe('BatchImport Recipe Saving', () => {
 
 describe('BatchImport Recipe Saving Integration', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetExistingUrls.mockResolvedValue([]);
   });
 
@@ -347,7 +347,7 @@ describe('BatchImport Recipe Saving Integration', () => {
       return Promise.resolve(undefined as any);
     });
 
-    const progressCallback = jest.fn();
+    const progressCallback = vi.fn();
     const startUrl = 'https://www.allrecipes.com/recipes/79/desserts';
     
     await batchImportService.startBatchImport(startUrl, {

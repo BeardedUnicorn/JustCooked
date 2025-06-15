@@ -8,18 +8,18 @@ import RecipeAssignmentDialog from '../../components/RecipeAssignmentDialog';
 import { Recipe } from '../../types';
 
 // Mock the services
-jest.mock('../../services/recipeStorage', () => ({
-  getAllRecipes: jest.fn(),
+vi.mock('@services/recipeStorage', () => ({
+  getAllRecipes: vi.fn(),
 }));
 
-jest.mock('../../services/mealPlanStorage', () => ({
-  createNewMealPlanRecipe: jest.fn(),
-  saveMealPlanRecipe: jest.fn(),
+vi.mock('../../services/mealPlanStorage', () => ({
+  createNewMealPlanRecipe: vi.fn(),
+  saveMealPlanRecipe: vi.fn(),
 }));
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
 const mockRecipes: Recipe[] = [
@@ -85,18 +85,18 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('RecipeAssignmentDialog', () => {
   const defaultProps = {
     open: true,
-    onClose: jest.fn(),
+    onClose: vi.fn(),
     mealPlanId: 'test-meal-plan',
     selectedDate: '2024-01-15',
     selectedMealType: 'dinner',
     enabledMealTypes: ['breakfast', 'lunch', 'dinner'],
-    onRecipeAssigned: jest.fn(),
+    onRecipeAssigned: vi.fn(),
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    const { getAllRecipes } = require('../../services/recipeStorage');
-    getAllRecipes.mockResolvedValue(mockRecipes);
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { getAllRecipes } = await import('@services/recipeStorage');
+    (getAllRecipes as any).mockResolvedValue(mockRecipes);
   });
 
   it('renders dialog with correct title and date', async () => {
@@ -187,7 +187,7 @@ describe('RecipeAssignmentDialog', () => {
   });
 
   it('calls onClose when cancel button is clicked', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     renderWithProviders(<RecipeAssignmentDialog {...defaultProps} onClose={onClose} />);
 
     const cancelButton = screen.getByTestId('recipe-assignment-cancel-button');

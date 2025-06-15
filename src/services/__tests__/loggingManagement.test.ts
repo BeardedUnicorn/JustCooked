@@ -2,16 +2,16 @@ import { LoggingManagementService } from '../loggingManagement';
 import { invoke } from '@tauri-apps/api/core';
 
 // Mock Tauri APIs
-jest.mock('@tauri-apps/api/core');
+vi.mock('@tauri-apps/api/core');
 
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
 
 describe('LoggingManagementService', () => {
   let service: LoggingManagementService;
 
   beforeEach(() => {
     service = new LoggingManagementService();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getLogDirectoryPath', () => {

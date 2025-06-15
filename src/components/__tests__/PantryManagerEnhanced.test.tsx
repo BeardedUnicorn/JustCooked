@@ -8,23 +8,27 @@ import { mockPantryItems } from '../../__tests__/fixtures/recipes';
 import darkTheme from '../../theme';
 
 // Mock the formatAmountForDisplay function
-jest.mock('@services/recipeImport', () => ({
-  formatAmountForDisplay: jest.fn((amount: number) => amount.toString()),
+vi.mock('@services/recipeImport', () => ({
+  formatAmountForDisplay: vi.fn((amount: number) => amount.toString()),
 }));
 
 // Mock the ProductIngredientMappingService
-jest.mock('@services/productIngredientMappingService', () => ({
+vi.mock('@services/productIngredientMappingService', () => ({
   ProductIngredientMappingService: {
-    getAllMappings: jest.fn(),
-    getMapping: jest.fn(),
-    createMapping: jest.fn(),
-    deleteMapping: jest.fn(),
+    getAllMappings: vi.fn(),
+    getMapping: vi.fn(),
+    createMapping: vi.fn(),
+    deleteMapping: vi.fn(),
   },
 }));
 
+// Import the mocked service
+import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
+const mockProductIngredientMappingService = vi.mocked(ProductIngredientMappingService);
+
 // Mock ProductSearchModal
-jest.mock('@components/ProductSearchModal', () => {
-  return function MockProductSearchModal({
+vi.mock('@components/ProductSearchModal', () => ({
+  default: function MockProductSearchModal({
     open,
     onClose,
     onAddProduct
@@ -43,12 +47,12 @@ jest.mock('@components/ProductSearchModal', () => {
         </button>
       </div>
     );
-  };
-});
+  }
+}));
 
 // Mock IngredientAssociationModal
-jest.mock('@components/IngredientAssociationModal', () => {
-  return function MockIngredientAssociationModal({
+vi.mock('@components/IngredientAssociationModal', () => ({
+  default: function MockIngredientAssociationModal({
     open,
     onClose,
     onAssociate
@@ -82,17 +86,17 @@ jest.mock('@components/IngredientAssociationModal', () => {
         </button>
       </div>
     );
-  };
-});
+  }
+}));
 
 // Mock the ZXing library
-jest.mock('@zxing/browser', () => ({
-  BrowserMultiFormatReader: jest.fn().mockImplementation(() => ({
-    listVideoInputDevices: jest.fn().mockResolvedValue([
+vi.mock('@zxing/browser', () => ({
+  BrowserMultiFormatReader: vi.fn().mockImplementation(() => ({
+    listVideoInputDevices: vi.fn().mockResolvedValue([
       { deviceId: 'camera1', label: 'Camera 1' }
     ]),
-    decodeFromVideoDevice: jest.fn(),
-    reset: jest.fn(),
+    decodeFromVideoDevice: vi.fn(),
+    reset: vi.fn(),
   })),
   NotFoundException: class NotFoundException extends Error {
     constructor(message?: string) {
@@ -103,8 +107,8 @@ jest.mock('@zxing/browser', () => ({
 }));
 
 // Mock the Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
 // Mock crypto.randomUUID
@@ -114,9 +118,9 @@ Object.defineProperty(global, 'crypto', {
   }
 });
 
-const mockOnAddItem = jest.fn();
-const mockOnUpdateItem = jest.fn();
-const mockOnDeleteItem = jest.fn();
+const mockOnAddItem = vi.fn();
+const mockOnUpdateItem = vi.fn();
+const mockOnDeleteItem = vi.fn();
 
 const renderPantryManager = (items: PantryItem[] = mockPantryItems) => {
   return render(
@@ -144,19 +148,13 @@ const mockIngredientMappings: ProductIngredientMapping[] = [
 ];
 
 describe('PantryManager - Enhanced Functionality', () => {
-  let mockProductIngredientMappingService: any;
-
   beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Get the mocked service
-    const { ProductIngredientMappingService } = require('@services/productIngredientMappingService');
-    mockProductIngredientMappingService = ProductIngredientMappingService;
+    vi.clearAllMocks();
     
     // Set up default mock for ingredient mappings
     mockProductIngredientMappingService.getAllMappings.mockResolvedValue(mockIngredientMappings);
     mockProductIngredientMappingService.getMapping.mockResolvedValue(null);
-    mockProductIngredientMappingService.createMapping.mockResolvedValue(undefined);
+    mockProductIngredientMappingService.createMapping.mockResolvedValue(null);
   });
 
   describe('Ingredient Mapping Integration', () => {

@@ -1,31 +1,30 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import '@testing-library/jest-dom';
 import BarcodeScanner from '../BarcodeScanner';
 
 // Mock the logging service
-jest.mock('@services/loggingService', () => ({
-  createLogger: jest.fn(() => ({
-    info: jest.fn().mockResolvedValue(undefined),
-    debug: jest.fn().mockResolvedValue(undefined),
-    warn: jest.fn().mockResolvedValue(undefined),
-    error: jest.fn().mockResolvedValue(undefined),
-    logError: jest.fn().mockResolvedValue(undefined),
-    logUserAction: jest.fn().mockResolvedValue(undefined),
+vi.mock('@services/loggingService', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn().mockResolvedValue(undefined),
+    debug: vi.fn().mockResolvedValue(undefined),
+    warn: vi.fn().mockResolvedValue(undefined),
+    error: vi.fn().mockResolvedValue(undefined),
+    logError: vi.fn().mockResolvedValue(undefined),
+    logUserAction: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
 // Mock the ZXing library
-const mockReset = jest.fn();
-const mockDecodeFromVideoDevice = jest.fn();
-const mockDecodeFromVideoElement = jest.fn();
-const mockListVideoInputDevices = jest.fn().mockResolvedValue([
+const mockReset = vi.fn();
+const mockDecodeFromVideoDevice = vi.fn();
+const mockDecodeFromVideoElement = vi.fn();
+const mockListVideoInputDevices = vi.fn().mockResolvedValue([
   { deviceId: 'camera1', label: 'Camera 1', kind: 'videoinput' }
 ]);
 
-jest.mock('@zxing/browser', () => ({
-  BrowserMultiFormatReader: jest.fn().mockImplementation(() => ({
+vi.mock('@zxing/browser', () => ({
+  BrowserMultiFormatReader: vi.fn().mockImplementation(() => ({
     listVideoInputDevices: mockListVideoInputDevices,
     decodeFromVideoDevice: mockDecodeFromVideoDevice,
     decodeFromVideoElement: mockDecodeFromVideoElement,
@@ -61,7 +60,7 @@ jest.mock('@zxing/browser', () => ({
 }));
 
 // Mock navigator.mediaDevices
-const mockGetUserMedia = jest.fn();
+const mockGetUserMedia = vi.fn();
 Object.defineProperty(navigator, 'mediaDevices', {
   value: {
     getUserMedia: mockGetUserMedia,
@@ -71,8 +70,8 @@ Object.defineProperty(navigator, 'mediaDevices', {
 
 // Mock MediaStreamTrack
 const mockTrack = {
-  stop: jest.fn(),
-  getSettings: jest.fn(() => ({
+  stop: vi.fn(),
+  getSettings: vi.fn(() => ({
     width: 1280,
     height: 720,
     frameRate: 30,
@@ -82,22 +81,22 @@ const mockTrack = {
 };
 
 const mockStream = {
-  getTracks: jest.fn(() => [mockTrack]),
-  getVideoTracks: jest.fn(() => [mockTrack]),
+  getTracks: vi.fn(() => [mockTrack]),
+  getVideoTracks: vi.fn(() => [mockTrack]),
 };
 
 describe('BarcodeScanner', () => {
-  const mockOnClose = jest.fn();
-  const mockOnScan = jest.fn();
+  const mockOnClose = vi.fn();
+  const mockOnScan = vi.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockGetUserMedia.mockResolvedValue(mockStream);
 
     // Mock video element methods
     Object.defineProperty(HTMLVideoElement.prototype, 'play', {
       writable: true,
-      value: jest.fn().mockResolvedValue(undefined),
+      value: vi.fn().mockResolvedValue(undefined),
     });
 
     Object.defineProperty(HTMLVideoElement.prototype, 'onloadedmetadata', {
@@ -197,10 +196,12 @@ describe('BarcodeScanner', () => {
   });
 
   it('handles scanning errors gracefully', async () => {
-    const { NotFoundException } = require('@zxing/browser');
+    // Create a NotFoundException-like error
+    const notFoundError = new Error('No barcode found');
+    notFoundError.name = 'NotFoundException';
 
     // Mock scanning error (NotFoundException should be ignored)
-    mockDecodeFromVideoElement.mockRejectedValue(new NotFoundException('No barcode found'));
+    mockDecodeFromVideoElement.mockRejectedValue(notFoundError);
 
     renderBarcodeScanner();
 

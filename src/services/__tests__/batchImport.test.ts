@@ -1,25 +1,25 @@
-import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { BatchImportService, batchImportService } from '@services/batchImport';
 import { BatchImportStatus, BatchImportProgress } from '@app-types';
 
 // Mock Tauri invoke
-jest.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
+vi.mock('@tauri-apps/api/core');
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
 
 // Mock recipe storage
-jest.mock('@services/recipeStorage', () => ({
-  getExistingRecipeUrls: jest.fn(() => Promise.resolve([])),
+vi.mock('@services/recipeStorage', () => ({
+  getExistingRecipeUrls: vi.fn(() => Promise.resolve([])),
 }));
 
 // Mock logging service
-jest.mock('@services/loggingService', () => ({
-  createLogger: jest.fn(() => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    logError: jest.fn(),
+vi.mock('@services/loggingService', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    logError: vi.fn(),
   })),
 }));
 
@@ -28,7 +28,7 @@ describe('BatchImportService', () => {
 
   beforeEach(() => {
     service = new BatchImportService();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -282,7 +282,7 @@ describe('BatchImportService', () => {
   describe('progress tracking', () => {
     test('should set up progress tracking when onProgress callback is provided', async () => {
       const mockImportId = 'test-import-123';
-      const onProgress = jest.fn();
+      const onProgress = vi.fn();
 
       mockInvoke.mockResolvedValueOnce(mockImportId);
 

@@ -5,9 +5,9 @@ import * as ingredientStorage from '@services/ingredientStorage';
 import { IngredientDatabase } from '@app-types';
 
 // Mock the ingredient storage service
-jest.mock('@services/ingredientStorage');
-const mockLoadIngredients = ingredientStorage.loadIngredients as jest.MockedFunction<typeof ingredientStorage.loadIngredients>;
-const mockSearchIngredients = ingredientStorage.searchIngredients as jest.MockedFunction<typeof ingredientStorage.searchIngredients>;
+vi.mock('@services/ingredientStorage');
+const mockLoadIngredients = ingredientStorage.loadIngredients as vi.MockedFunction<typeof ingredientStorage.loadIngredients>;
+const mockSearchIngredients = ingredientStorage.searchIngredients as vi.MockedFunction<typeof ingredientStorage.searchIngredients>;
 
 const renderIngredients = () => {
   return render(
@@ -47,7 +47,7 @@ const mockIngredients: IngredientDatabase[] = [
 
 describe('Ingredients Page', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockLoadIngredients.mockResolvedValue(mockIngredients);
     mockSearchIngredients.mockResolvedValue([]);
   });
@@ -179,7 +179,7 @@ describe('Ingredients Page', () => {
 
     it('should handle loading error gracefully', async () => {
       // Mock console.error to avoid noise in test output
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // Mock the rejected promise to return empty array instead of throwing
       mockLoadIngredients.mockResolvedValue([]);

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, test, expect } from '@jest/globals';
+import { vi, describe, test, expect } from 'vitest';
 import BatchImportProgress from '@components/BatchImportProgress';
 import { BatchImportProgress as BatchImportProgressType, BatchImportStatus } from '@app-types';
 
@@ -205,13 +205,13 @@ describe('BatchImportProgress', () => {
     const mockNow = new Date('2024-01-01T10:05:30Z');
 
     const OriginalDate = global.Date;
-    global.Date = jest.fn((dateString?: string | number | Date) => {
+    global.Date = vi.fn((dateString?: string | number | Date) => {
       if (dateString) {
         return new OriginalDate(dateString);
       }
       return mockNow;
     }) as any;
-    global.Date.now = jest.fn(() => mockNow.getTime());
+    global.Date.now = vi.fn(() => mockNow.getTime());
 
     const progress = createMockProgress({ startTime });
     render(<BatchImportProgress progress={progress} />);

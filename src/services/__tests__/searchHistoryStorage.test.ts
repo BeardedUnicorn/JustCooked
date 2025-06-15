@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import {
   getRecentSearches,
   saveSearch,
@@ -8,8 +8,8 @@ import {
 } from '../searchHistoryStorage';
 
 // Mock Tauri invoke
-const mockInvoke = jest.fn() as jest.MockedFunction<any>;
-jest.mock('@tauri-apps/api/core', () => ({
+const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));
 
@@ -40,7 +40,7 @@ const mockSearches = [
 
 describe('searchHistoryStorage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset crypto.randomUUID mock
     (global.crypto.randomUUID as jest.Mock).mockReturnValue('test-uuid-123');
   });

@@ -11,7 +11,7 @@ import recipesReducer, {
 import { Recipe } from '@app-types';
 
 // Mock the fs plugin
-jest.mock('@tauri-apps/plugin-fs');
+vi.mock('@tauri-apps/plugin-fs');
 
 const mockRecipe1: Recipe = {
   id: '1',

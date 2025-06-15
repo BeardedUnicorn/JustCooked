@@ -2,25 +2,29 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
+import { vi, beforeEach, describe, it, expect } from 'vitest';
 import CollectionView from '../CollectionView';
 import darkTheme from '@styles/theme';
 import * as recipeCollectionStorage from '@services/recipeCollectionStorage';
 import * as recipeStorage from '@services/recipeStorage';
 
 // Mock the navigation
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-  useParams: () => ({ id: 'collection1' }),
-}));
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useParams: () => ({ id: 'collection1' }),
+  };
+});
 
 // Mock the storage services
-jest.mock('@services/recipeCollectionStorage');
-jest.mock('@services/recipeStorage');
+vi.mock('@services/recipeCollectionStorage');
+vi.mock('@services/recipeStorage');
 
 // Mock RecipeCard component
-jest.mock('@components/RecipeCard', () => ({
+vi.mock('@components/RecipeCard', () => ({
   __esModule: true,
   default: ({ recipe }: { recipe: any }) => (
     <div data-testid={`recipe-card-${recipe.id}`}>{recipe.title}</div>
@@ -90,9 +94,9 @@ const renderWithProviders = (component: React.ReactElement) => {
 
 describe('CollectionView', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    (recipeCollectionStorage.getCollectionById as jest.Mock).mockReturnValue(mockCollection);
-    (recipeStorage.getAllRecipes as jest.Mock).mockResolvedValue(mockRecipes);
+    vi.clearAllMocks();
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(mockCollection);
+    vi.mocked(recipeStorage.getAllRecipes).mockResolvedValue(mockRecipes);
   });
 
   it('renders collection view with collection details', async () => {
@@ -121,7 +125,7 @@ describe('CollectionView', () => {
 
   it('displays empty state when collection has no recipes', async () => {
     const emptyCollection = { ...mockCollection, recipeIds: [] };
-    (recipeCollectionStorage.getCollectionById as jest.Mock).mockReturnValue(emptyCollection);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(emptyCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -134,7 +138,7 @@ describe('CollectionView', () => {
   });
 
   it('shows error when collection is not found', async () => {
-    (recipeCollectionStorage.getCollectionById as jest.Mock).mockReturnValue(null);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(null);
     
     renderWithProviders(<CollectionView />);
     
@@ -163,8 +167,8 @@ describe('CollectionView', () => {
   });
 
   it('updates collection when edit form is submitted', async () => {
-    const mockSaveCollection = jest.fn();
-    (recipeCollectionStorage.saveCollection as jest.Mock).mockImplementation(mockSaveCollection);
+    const mockSaveCollection = vi.fn();
+    vi.mocked(recipeCollectionStorage.saveCollection).mockImplementation(mockSaveCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -211,8 +215,8 @@ describe('CollectionView', () => {
   });
 
   it('deletes collection and navigates back when delete is confirmed', async () => {
-    const mockDeleteCollection = jest.fn();
-    (recipeCollectionStorage.deleteCollection as jest.Mock).mockImplementation(mockDeleteCollection);
+    const mockDeleteCollection = vi.fn();
+    vi.mocked(recipeCollectionStorage.deleteCollection).mockImplementation(mockDeleteCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -274,8 +278,8 @@ describe('CollectionView', () => {
   });
 
   it('adds recipe to collection when selected and confirmed', async () => {
-    const mockAddRecipeToCollection = jest.fn();
-    (recipeCollectionStorage.addRecipeToCollection as jest.Mock).mockImplementation(mockAddRecipeToCollection);
+    const mockAddRecipeToCollection = vi.fn();
+    vi.mocked(recipeCollectionStorage.addRecipeToCollection).mockImplementation(mockAddRecipeToCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -304,8 +308,8 @@ describe('CollectionView', () => {
   });
 
   it('removes recipe from collection when remove button is clicked', async () => {
-    const mockRemoveRecipeFromCollection = jest.fn();
-    (recipeCollectionStorage.removeRecipeFromCollection as jest.Mock).mockImplementation(mockRemoveRecipeFromCollection);
+    const mockRemoveRecipeFromCollection = vi.fn();
+    vi.mocked(recipeCollectionStorage.removeRecipeFromCollection).mockImplementation(mockRemoveRecipeFromCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -329,7 +333,7 @@ describe('CollectionView', () => {
   });
 
   it('handles error when loading collection fails', async () => {
-    (recipeCollectionStorage.getCollectionById as jest.Mock).mockImplementation(() => {
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockImplementation(() => {
       throw new Error('Failed to load');
     });
     
@@ -363,7 +367,7 @@ describe('CollectionView', () => {
   });
 
   it('navigates back to collections when back button is clicked', async () => {
-    (recipeCollectionStorage.getCollectionById as jest.Mock).mockReturnValue(null);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(null);
     
     renderWithProviders(<CollectionView />);
     

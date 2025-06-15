@@ -6,28 +6,28 @@ import DatabaseManagementSection from '../DatabaseManagementSection';
 import { databaseManagementService } from '@services/databaseManagement';
 
 // Mock the database management service
-jest.mock('@services/databaseManagement', () => ({
+vi.mock('@services/databaseManagement', () => ({
   databaseManagementService: {
-    exportDatabase: jest.fn(),
-    importDatabase: jest.fn(),
-    resetDatabase: jest.fn(),
-    formatImportResult: jest.fn(),
+    exportDatabase: vi.fn(),
+    importDatabase: vi.fn(),
+    resetDatabase: vi.fn(),
+    formatImportResult: vi.fn(),
   },
 }));
 
 // Mock Tauri APIs
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
-jest.mock('@tauri-apps/plugin-dialog', () => ({
-  save: jest.fn(),
-  open: jest.fn(),
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: vi.fn(),
+  open: vi.fn(),
 }));
 
-jest.mock('@tauri-apps/plugin-fs', () => ({
-  writeTextFile: jest.fn(),
-  readTextFile: jest.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  writeTextFile: vi.fn(),
+  readTextFile: vi.fn(),
 }));
 
 const mockDatabaseManagementService = databaseManagementService as jest.Mocked<typeof databaseManagementService>;
@@ -44,7 +44,7 @@ const renderWithTheme = (component: React.ReactElement) => {
 
 describe('DatabaseManagementSection', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders database management section with all buttons', () => {

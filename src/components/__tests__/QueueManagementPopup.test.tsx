@@ -7,21 +7,23 @@ import importQueueReducer from '@store/slices/importQueueSlice';
 import { ImportQueueTaskStatus, BatchImportStatus } from '@app-types';
 
 // Mock the importQueueService
-jest.mock('@services/importQueue', () => ({
+vi.mock('@services/importQueue', () => ({
   importQueueService: {
-    getEstimatedTimeRemaining: jest.fn(),
-    canRemoveTask: jest.fn(),
-    getStatusDisplayText: jest.fn(),
-    getCategoryProgress: jest.fn(),
-    getRecipeProgress: jest.fn(),
-    getCurrentPhaseDescription: jest.fn(),
-    getProgressPercentage: jest.fn(),
+    getEstimatedTimeRemaining: vi.fn(),
+    canRemoveTask: vi.fn(),
+    getStatusDisplayText: vi.fn(),
+    getCategoryProgress: vi.fn(),
+    getRecipeProgress: vi.fn(),
+    getCurrentPhaseDescription: vi.fn(),
+    getProgressPercentage: vi.fn(),
   },
 }));
 
-const mockImportQueueService = require('@services/importQueue').importQueueService;
+// Import the mocked service
+import { importQueueService } from '@services/importQueue';
+const mockImportQueueService = vi.mocked(importQueueService);
 
-const createMockStore = (initialState = {}) => {
+const createMockStore = (initialState: any = {}) => {
   return configureStore({
     reducer: {
       importQueue: importQueueReducer,
@@ -29,7 +31,7 @@ const createMockStore = (initialState = {}) => {
     preloadedState: {
       importQueue: {
         tasks: [],
-        currentTaskId: null,
+        currentTaskId: undefined,
         isProcessing: false,
         totalPending: 0,
         totalCompleted: 0,
@@ -71,7 +73,7 @@ const mockTask = {
 
 describe('QueueManagementPopup', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     
     // Setup default mock implementations
     mockImportQueueService.getEstimatedTimeRemaining.mockReturnValue('5 minutes');
@@ -98,7 +100,7 @@ describe('QueueManagementPopup', () => {
     
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -115,7 +117,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -170,7 +172,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -192,7 +194,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -222,7 +224,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -233,7 +235,7 @@ describe('QueueManagementPopup', () => {
   });
 
   test('closes popup when close button is clicked', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     const store = createMockStore();
 
     render(
@@ -257,7 +259,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -293,7 +295,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 
@@ -342,7 +344,7 @@ describe('QueueManagementPopup', () => {
 
     render(
       <Provider store={store}>
-        <QueueManagementPopup open={true} onClose={jest.fn()} />
+        <QueueManagementPopup open={true} onClose={vi.fn()} />
       </Provider>
     );
 

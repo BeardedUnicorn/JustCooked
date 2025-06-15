@@ -1,25 +1,30 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
 import Pantry from '../Pantry';
 import { PantryItem } from '@app-types';
 
 // Mock pantryStorage service
-jest.mock('@services/pantryStorage', () => ({
-  getPantryItems: jest.fn(),
-  addPantryItem: jest.fn(),
-  updatePantryItem: jest.fn(),
-  deletePantryItem: jest.fn(),
+vi.mock('@services/pantryStorage', () => ({
+  getPantryItems: vi.fn(),
+  addPantryItem: vi.fn(),
+  updatePantryItem: vi.fn(),
+  deletePantryItem: vi.fn(),
 }));
 
+import { getPantryItems, addPantryItem, updatePantryItem, deletePantryItem } from '@services/pantryStorage';
+const mockGetPantryItems = vi.mocked(getPantryItems);
+const mockAddPantryItem = vi.mocked(addPantryItem);
+const mockUpdatePantryItem = vi.mocked(updatePantryItem);
+const mockDeletePantryItem = vi.mocked(deletePantryItem);
+
 // Mock time utils
-jest.mock('@utils/timeUtils', () => ({
+vi.mock('@utils/timeUtils', () => ({
   getCurrentTimestamp: () => '2024-01-01T00:00:00.000Z',
 }));
 
 // Mock ProductSearchModal component
-jest.mock('@components/ProductSearchModal', () => {
-  return function MockProductSearchModal({
+vi.mock('@components/ProductSearchModal', () => ({
+  default: function MockProductSearchModal({
     open,
     onClose,
     onAddProduct
@@ -37,25 +42,25 @@ jest.mock('@components/ProductSearchModal', () => {
         </button>
       </div>
     );
-  };
-});
+  }
+}));
 
 // Mock formatAmountForDisplay function
-jest.mock('@services/recipeImport', () => ({
+vi.mock('@services/recipeImport', () => ({
   formatAmountForDisplay: (amount: number) => amount.toString(),
 }));
 
 // Mock ProductIngredientMappingService
-jest.mock('@services/productIngredientMappingService', () => ({
+vi.mock('@services/productIngredientMappingService', () => ({
   ProductIngredientMappingService: {
-    getAllMappings: jest.fn(() => Promise.resolve([])),
-    createMapping: jest.fn(() => Promise.resolve()),
+    getAllMappings: vi.fn(() => Promise.resolve([])),
+    createMapping: vi.fn(() => Promise.resolve()),
   },
 }));
 
 // Mock IngredientAssociationModal
-jest.mock('@components/IngredientAssociationModal', () => {
-  return function MockIngredientAssociationModal({
+vi.mock('@components/IngredientAssociationModal', () => ({
+  default: function MockIngredientAssociationModal({
     open,
     onClose,
     onAssociate
@@ -73,24 +78,12 @@ jest.mock('@components/IngredientAssociationModal', () => {
         </button>
       </div>
     );
-  };
-});
+  }
+}));
 
 describe('Pantry Integration Tests - Bug Fix Verification', () => {
-  let mockGetPantryItems: jest.MockedFunction<any>;
-  let mockAddPantryItem: jest.MockedFunction<any>;
-  let mockUpdatePantryItem: jest.MockedFunction<any>;
-  let mockDeletePantryItem: jest.MockedFunction<any>;
-
   beforeEach(() => {
-    // Get the mocked functions
-    const pantryStorage = require('@services/pantryStorage');
-    mockGetPantryItems = pantryStorage.getPantryItems as jest.MockedFunction<any>;
-    mockAddPantryItem = pantryStorage.addPantryItem as jest.MockedFunction<any>;
-    mockUpdatePantryItem = pantryStorage.updatePantryItem as jest.MockedFunction<any>;
-    mockDeletePantryItem = pantryStorage.deletePantryItem as jest.MockedFunction<any>;
-    
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should call backend with correct data structure when adding pantry item', async () => {

@@ -2,24 +2,28 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import BatchImportDialog from '@components/BatchImportDialog';
 import { batchImportService } from '@services/batchImport';
 import { getExistingRecipeUrls } from '@services/recipeStorage';
 import importQueueReducer from '@store/slices/importQueueSlice';
 
 // Mock the batch import service
-jest.mock('@services/batchImport');
-const mockBatchImportService = batchImportService as jest.Mocked<typeof batchImportService>;
+vi.mock('@services/batchImport');
+const mockBatchImportService = vi.mocked(batchImportService);
 
 // Mock recipe storage
-jest.mock('@services/recipeStorage');
-const mockGetExistingRecipeUrls = getExistingRecipeUrls as jest.MockedFunction<typeof getExistingRecipeUrls>;
+vi.mock('@services/recipeStorage');
+const mockGetExistingRecipeUrls = vi.mocked(getExistingRecipeUrls);
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
+
+// Import the mocked invoke function
+import { invoke } from '@tauri-apps/api/core';
+const mockInvoke = vi.mocked(invoke);
 
 const createTestStore = () => {
   return configureStore({
@@ -32,8 +36,8 @@ const createTestStore = () => {
 describe('BatchImportDialog', () => {
   const defaultProps = {
     open: true,
-    onClose: jest.fn(),
-    onTaskAdded: jest.fn(),
+    onClose: vi.fn(),
+    onTaskAdded: vi.fn(),
   };
 
   const renderWithRedux = (props = defaultProps) => {
@@ -46,7 +50,7 @@ describe('BatchImportDialog', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockBatchImportService.getSuggestedCategoryUrls.mockReturnValue([
       {
         name: 'Desserts',
@@ -72,7 +76,6 @@ describe('BatchImportDialog', () => {
     mockGetExistingRecipeUrls.mockResolvedValue([]);
 
     // Set up default mock responses for Tauri commands
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
         case 'get_import_queue_status':
@@ -158,7 +161,6 @@ describe('BatchImportDialog', () => {
 
   test('adds task to queue when form is submitted', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockResolvedValue('task-123');
 
     renderWithRedux();
@@ -179,11 +181,8 @@ describe('BatchImportDialog', () => {
     });
   });
 
-
-
   test('handles queue add error', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockRejectedValue(new Error('Queue failed'));
 
     renderWithRedux();
@@ -201,7 +200,6 @@ describe('BatchImportDialog', () => {
 
   test('closes modal when task is added successfully', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockResolvedValue('task-123');
 
     renderWithRedux();
@@ -219,7 +217,6 @@ describe('BatchImportDialog', () => {
 
   test('calls onTaskAdded when task is successfully added', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockResolvedValue('task-123');
 
     renderWithRedux();
@@ -237,7 +234,6 @@ describe('BatchImportDialog', () => {
 
   test('includes optional fields in queue request', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockResolvedValue('task-123');
 
     renderWithRedux();
@@ -307,7 +303,6 @@ describe('BatchImportDialog', () => {
 
   test('disables buttons when loading popular categories', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     // Make the promise hang to test loading state
     mockInvoke.mockImplementation(() => new Promise(() => {}));
 
@@ -327,7 +322,6 @@ describe('BatchImportDialog', () => {
 
   test('includes max recipes and max depth options when loading popular categories', async () => {
     const user = userEvent.setup();
-    const mockInvoke = require('@tauri-apps/api/core').invoke;
     mockInvoke.mockResolvedValue('task-123');
 
     renderWithRedux();

@@ -10,18 +10,23 @@ import searchHistoryReducer from '../../store/slices/searchHistorySlice';
 import recipeCollectionsReducer from '../../store/slices/recipeCollectionsSlice';
 
 // Mock useNavigate
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-}));
-
-// Mock the loadAllRecipes thunk to prevent it from overriding our test data
-jest.mock('../../store/slices/recipesSlice', () => {
-  const actual = jest.requireActual('../../store/slices/recipesSlice');
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    loadAllRecipes: jest.fn(() => ({ type: 'recipes/loadAllRecipes/fulfilled', payload: [] })),
+    useNavigate: () => mockNavigate,
+    BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  };
+});
+
+// Mock the loadAllRecipes thunk to prevent it from overriding our test data
+vi.mock('../../store/slices/recipesSlice', async () => {
+  const actual = await vi.importActual('../../store/slices/recipesSlice');
+  return {
+    ...actual,
+    default: (actual as any).default,
+    loadAllRecipes: vi.fn(() => ({ type: 'recipes/loadAllRecipes/fulfilled', payload: [] })),
   };
 });
 
@@ -80,7 +85,7 @@ const renderHome = (recipes = [], loading = false, error: string | null = null) 
 
 describe('Home Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
 

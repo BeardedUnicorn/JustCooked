@@ -7,12 +7,17 @@ import { getRecipeById } from '@services/recipeStorage';
 import darkTheme from '@styles/theme';
 
 // Mock the services
-jest.mock('@services/recipeStorage');
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useParams: () => ({ id: 'test-recipe-id' }),
-  useNavigate: () => jest.fn(),
-}));
+vi.mock('@services/recipeStorage');
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useParams: () => ({ id: 'test-recipe-id' }),
+    useNavigate: () => mockNavigate,
+  };
+});
 
 const mockRecipe = {
   id: 'test-recipe-id',
@@ -48,11 +53,12 @@ const renderWithProviders = (component: React.ReactElement) => {
 
 describe('RecipeView', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    mockNavigate.mockClear();
   });
 
   it('should render start cooking button when recipe is loaded', async () => {
-    (getRecipeById as jest.Mock).mockResolvedValue(mockRecipe);
+    (getRecipeById as any).mockResolvedValue(mockRecipe);
 
     renderWithProviders(<RecipeView />);
 
@@ -66,13 +72,7 @@ describe('RecipeView', () => {
   });
 
   it('should navigate to cooking mode when start cooking button is clicked', async () => {
-    const mockNavigate = jest.fn();
-
-    // Mock useNavigate before rendering
-    const useNavigateSpy = jest.spyOn(require('react-router-dom'), 'useNavigate');
-    useNavigateSpy.mockReturnValue(mockNavigate);
-
-    (getRecipeById as jest.Mock).mockResolvedValue(mockRecipe);
+    (getRecipeById as any).mockResolvedValue(mockRecipe);
 
     renderWithProviders(<RecipeView />);
 
@@ -84,12 +84,10 @@ describe('RecipeView', () => {
     fireEvent.click(startCookingButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/recipe/test-recipe-id/cook');
-
-    useNavigateSpy.mockRestore();
   });
 
   it('should not render start cooking button when recipe is not loaded', () => {
-    (getRecipeById as jest.Mock).mockResolvedValue(null);
+    (getRecipeById as any).mockResolvedValue(null);
 
     renderWithProviders(<RecipeView />);
 

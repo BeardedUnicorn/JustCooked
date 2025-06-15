@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { importRecipeFromUrl } from '@services/recipeImport';
 import { formatIngredientForDisplay } from '@utils/ingredientUtils';
@@ -8,19 +8,19 @@ import { processRecipeImage } from '@services/imageService';
 import { mockImportedRecipe } from '@/__tests__/fixtures/recipes';
 
 // Mock the dependencies
-jest.mock('@tauri-apps/api/core');
-jest.mock('@services/recipeStorage');
-jest.mock('@services/ingredientStorage');
-jest.mock('@services/imageService');
-jest.mock('@utils/stringUtils', () => ({
-  parseTags: jest.fn((keywords: string) => keywords ? keywords.split(',').map(tag => tag.trim()) : []),
-  decodeAllHtmlEntities: jest.fn((str: string) => str || ''),
+vi.mock('@tauri-apps/api/core');
+vi.mock('@services/recipeStorage');
+vi.mock('@services/ingredientStorage');
+vi.mock('@services/imageService');
+vi.mock('@utils/stringUtils', () => ({
+  parseTags: vi.fn((keywords: string) => keywords ? keywords.split(',').map(tag => tag.trim()) : []),
+  decodeAllHtmlEntities: vi.fn((str: string) => str || ''),
 }));
-jest.mock('@utils/timeUtils');
+vi.mock('@utils/timeUtils');
 
 // Mock urlUtils with specific implementation for isSupportedUrl
-jest.mock('@utils/urlUtils', () => ({
-  isSupportedUrl: jest.fn((url: string) => {
+vi.mock('@utils/urlUtils', () => ({
+  isSupportedUrl: vi.fn((url: string) => {
     // Allow supported sites for testing
     return url.includes('allrecipes.com') ||
            url.includes('foodnetwork.com') ||
@@ -33,33 +33,33 @@ jest.mock('@utils/urlUtils', () => ({
            url.includes('bonappetit.com') ||
            url.includes('simplyrecipes.com');
   }),
-  shouldDownloadImage: jest.fn(() => true),
-  isValidImageUrl: jest.fn(() => true),
+  shouldDownloadImage: vi.fn(() => true),
+  isValidImageUrl: vi.fn(() => true),
 }));
 
 // Don't mock ingredientUtils since we want to test formatIngredientForDisplay
-// jest.mock('@utils/ingredientUtils');
+// vi.mock('@utils/ingredientUtils');
 
 // Mock logging service
-jest.mock('@services/loggingService', () => ({
-  createLogger: jest.fn(() => ({
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    logError: jest.fn(),
-    logPerformance: jest.fn(),
+vi.mock('@services/loggingService', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    logError: vi.fn(),
+    logPerformance: vi.fn(),
   })),
 }));
 
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
-const mockSaveRecipe = saveRecipe as jest.MockedFunction<typeof saveRecipe>;
-const mockAutoDetectIngredients = autoDetectIngredients as jest.MockedFunction<typeof autoDetectIngredients>;
-const mockProcessRecipeImage = processRecipeImage as jest.MockedFunction<typeof processRecipeImage>;
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockSaveRecipe = saveRecipe as vi.MockedFunction<typeof saveRecipe>;
+const mockAutoDetectIngredients = autoDetectIngredients as vi.MockedFunction<typeof autoDetectIngredients>;
+const mockProcessRecipeImage = processRecipeImage as vi.MockedFunction<typeof processRecipeImage>;
 
 describe('recipeImport', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('formatIngredientForDisplay', () => {

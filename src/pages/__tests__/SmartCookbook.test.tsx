@@ -6,11 +6,11 @@ import * as pantryStorage from '@services/pantryStorage';
 import { mockRecipe } from '../../__tests__/fixtures/recipes';
 
 // Mock the services
-jest.mock('@services/recipeStorage');
-jest.mock('@services/pantryStorage');
+vi.mock('@services/recipeStorage');
+vi.mock('@services/pantryStorage');
 
-const mockGetAllRecipes = recipeStorage.getAllRecipes as jest.MockedFunction<typeof recipeStorage.getAllRecipes>;
-const mockGetPantryItems = pantryStorage.getPantryItems as jest.MockedFunction<typeof pantryStorage.getPantryItems>;
+const mockGetAllRecipes = recipeStorage.getAllRecipes as vi.MockedFunction<typeof recipeStorage.getAllRecipes>;
+const mockGetPantryItems = pantryStorage.getPantryItems as vi.MockedFunction<typeof pantryStorage.getPantryItems>;
 
 const renderSmartCookbook = () => {
   return render(

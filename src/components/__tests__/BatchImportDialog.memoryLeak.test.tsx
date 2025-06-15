@@ -1,18 +1,19 @@
 import React from 'react';
 import { render, waitFor, act } from '@testing-library/react';
+import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
 import BatchImportDialog from '../BatchImportDialog';
 import { batchImportService } from '@services/batchImport';
 import { BatchImportStatus } from '@app-types/batchImport';
 
 // Mock the batch import service
-jest.mock('@services/batchImport', () => ({
+vi.mock('@services/batchImport', () => ({
   batchImportService: {
-    startBatchImport: jest.fn(),
-    getProgress: jest.fn(),
-    cancelBatchImport: jest.fn(),
-    setProgressCallback: jest.fn(),
-    cleanup: jest.fn(),
-    getSuggestedCategoryUrls: jest.fn(() => [
+    startBatchImport: vi.fn(),
+    getProgress: vi.fn(),
+    cancelBatchImport: vi.fn(),
+    setProgressCallback: vi.fn(),
+    cleanup: vi.fn(),
+    getSuggestedCategoryUrls: vi.fn(() => [
       {
         name: 'Desserts',
         url: 'https://www.allrecipes.com/recipes/79/desserts',
@@ -23,15 +24,15 @@ jest.mock('@services/batchImport', () => ({
 }));
 
 // Mock logger
-jest.mock('@services/loggingService', () => ({
+vi.mock('@services/loggingService', () => ({
   logger: {
-    error: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
-const mockBatchImportService = batchImportService as jest.Mocked<typeof batchImportService>;
+const mockBatchImportService = batchImportService as any;
 
 // Test component that simulates the memory leak scenario
 const TestComponent: React.FC<{ isImporting: boolean }> = ({ isImporting }) => {
@@ -79,13 +80,13 @@ const TestComponent: React.FC<{ isImporting: boolean }> = ({ isImporting }) => {
 
 describe('BatchImportDialog Memory Leak Prevention', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
   });
 
   it('should cleanup progress polling interval when component unmounts during import', async () => {
@@ -94,37 +95,43 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
     mockBatchImportService.getProgress.mockImplementation(() => {
       progressCallCount++;
       return Promise.resolve({
-        status: BatchImportStatus.IN_PROGRESS,
+        status: BatchImportStatus.IMPORTING_RECIPES,
         totalRecipes: 100,
         processedRecipes: progressCallCount * 10,
+        processedCategories: 1,
+        totalCategories: 1,
         successfulImports: progressCallCount * 8,
         failedImports: progressCallCount * 2,
+        skippedRecipes: 0,
         estimatedTimeRemaining: 60,
         currentUrl: 'https://example.com/recipe',
         errors: [],
+        startTime: '2024-01-15T12:00:00Z',
       });
     });
 
     const { unmount } = render(<TestComponent isImporting={true} />);
 
-    // Advance timers to trigger progress polling
+    // Advance timers to trigger initial progress polling
     act(() => {
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(100); // Small delay for initial fetch
     });
 
-    // Verify progress was fetched
-    await waitFor(() => {
-      expect(mockBatchImportService.getProgress).toHaveBeenCalled();
+    // Wait for initial progress fetch - simplified approach
+    act(() => {
+      vi.advanceTimersByTime(1000); // Allow time for initial fetch
     });
 
+    // Verify initial call was made
+    expect(mockBatchImportService.getProgress).toHaveBeenCalled();
     const initialCallCount = progressCallCount;
 
     // Unmount component while import is in progress
     unmount();
 
-    // Advance timers further
+    // Advance timers further to see if interval continues
     act(() => {
-      jest.advanceTimersByTime(10000); // 10 seconds
+      vi.advanceTimersByTime(6000); // 6 seconds (3 intervals worth)
     });
 
     // Progress should not be fetched after unmount (due to isMounted check)
@@ -145,7 +152,7 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
 
     // Advance timers to trigger progress polling
     act(() => {
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
     });
 
     // Unmount component before progress resolves
@@ -167,7 +174,7 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
 
     // Advance timers to let any state updates process
     act(() => {
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
     });
 
     // Test passes if no errors are thrown (state updates are prevented by isMounted check)
@@ -185,7 +192,7 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
 
     // Advance timers to trigger progress polling (which will fail)
     act(() => {
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
     });
 
     // Should not throw errors or cause issues
@@ -199,7 +206,7 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
       progressCallCount++;
       if (progressCallCount <= 3) {
         return Promise.resolve({
-          status: BatchImportStatus.IN_PROGRESS,
+          status: BatchImportStatus.IMPORTING_RECIPES,
           totalRecipes: 100,
           processedRecipes: progressCallCount * 10,
           successfulImports: progressCallCount * 8,
@@ -226,13 +233,11 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
 
     // Advance timers to trigger multiple progress polls
     act(() => {
-      jest.advanceTimersByTime(8000); // 4 polls at 2-second intervals
+      vi.advanceTimersByTime(8000); // 4 polls at 2-second intervals
     });
 
     // Wait for progress calls
-    await waitFor(() => {
-      expect(progressCallCount).toBeGreaterThan(0);
-    });
+    expect(progressCallCount).toBeGreaterThan(0);
 
     const callCountBeforeStop = progressCallCount;
 
@@ -241,7 +246,7 @@ describe('BatchImportDialog Memory Leak Prevention', () => {
 
     // Advance timers further - no more progress calls should happen
     act(() => {
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
     });
 
     expect(progressCallCount).toBe(callCountBeforeStop);

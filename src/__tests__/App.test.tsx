@@ -6,12 +6,12 @@ import * as recipeStorage from '@services/recipeStorage';
 import importQueueReducer from '@store/slices/importQueueSlice';
 
 // Mock the recipe storage for Home page
-jest.mock('@services/recipeStorage');
-const mockGetAllRecipes = recipeStorage.getAllRecipes as jest.MockedFunction<typeof recipeStorage.getAllRecipes>;
+vi.mock('@services/recipeStorage');
+const mockGetAllRecipes = vi.mocked(recipeStorage.getAllRecipes);
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn().mockResolvedValue({
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn().mockResolvedValue({
     tasks: [],
     currentTaskId: null,
     isProcessing: false,

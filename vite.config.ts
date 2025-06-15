@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -42,5 +43,38 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_DEBUG,
+  },
+
+  // Vitest configuration
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/vitest-setup.ts'],
+    include: [
+      'src/**/__tests__/**/*.(test|spec).(ts|tsx|js)',
+      'src/**/*.(test|spec).(ts|tsx|js)',
+    ],
+    coverage: {
+      provider: 'v8',
+      include: [
+        'src/services/**/*.{ts,tsx}',
+        'src/utils/**/*.{ts,tsx}',
+        'src/hooks/**/*.{ts,tsx}',
+        'src/components/**/*.{ts,tsx}',
+        'src/pages/**/*.{ts,tsx}',
+      ],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/__tests__/**',
+        'src/vitest-setup.ts',
+        'src/main.tsx',
+        'src/App.tsx',
+        'src/vite-env.d.ts',
+      ],
+      reporter: ['text', 'lcov', 'html'],
+      reportsDirectory: 'coverage',
+    },
+    globals: true,
+    bail: 1,
+    watch: false,
   },
 });

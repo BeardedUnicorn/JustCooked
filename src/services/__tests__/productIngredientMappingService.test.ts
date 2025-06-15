@@ -1,12 +1,14 @@
+import { vi, beforeEach, describe, it, expect } from 'vitest';
 import { ProductIngredientMappingService } from '../productIngredientMappingService';
 import { ProductIngredientMapping, CreateProductIngredientMappingRequest } from '@app-types';
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
-const mockInvoke = require('@tauri-apps/api/core').invoke;
+import { invoke } from '@tauri-apps/api/core';
+const mockInvoke = vi.mocked(invoke);
 
 const mockMapping: ProductIngredientMapping = {
   id: 'mapping-1',
@@ -31,7 +33,7 @@ const mockMappings: ProductIngredientMapping[] = [
 
 describe('ProductIngredientMappingService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getMapping', () => {

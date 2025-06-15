@@ -6,18 +6,18 @@ import LoggingSection from '../LoggingSection';
 import { loggingManagementService } from '@services/loggingManagement';
 
 // Mock the logging management service
-jest.mock('@services/loggingManagement', () => ({
+vi.mock('@services/loggingManagement', () => ({
   loggingManagementService: {
-    getLogDirectoryPath: jest.fn(),
-    openLogDirectory: jest.fn(),
-    getLogFilePath: jest.fn(),
+    getLogDirectoryPath: vi.fn(),
+    openLogDirectory: vi.fn(),
+    getLogFilePath: vi.fn(),
   },
 }));
 
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
-    writeText: jest.fn(),
+    writeText: vi.fn(),
   },
 });
 
@@ -35,7 +35,7 @@ const renderWithTheme = (component: React.ReactElement) => {
 
 describe('LoggingSection', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset clipboard mock
     (navigator.clipboard.writeText as jest.Mock).mockResolvedValue(undefined);
   });

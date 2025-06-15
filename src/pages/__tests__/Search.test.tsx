@@ -8,23 +8,23 @@ import * as recipeStorage from '../../services/recipeStorage';
 import * as searchHistoryStorage from '../../services/searchHistoryStorage';
 
 // Mock the services
-jest.mock('../../services/recipeStorage');
-jest.mock('../../services/searchHistoryStorage');
+vi.mock('../../services/recipeStorage');
+vi.mock('../../services/searchHistoryStorage');
 
 // Mock RecipeCard to simplify testing
-jest.mock('../../components/RecipeCard', () => ({
+vi.mock('../../components/RecipeCard', () => ({
   __esModule: true,
   default: ({ recipe }: { recipe: any }) => (
     <div data-testid="recipe-card">{recipe.title}</div>
   ),
 }));
 
-const mockGetRecipesPaginated = recipeStorage.getRecipesPaginated as jest.MockedFunction<typeof recipeStorage.getRecipesPaginated>;
-const mockGetRecipeCount = recipeStorage.getRecipeCount as jest.MockedFunction<typeof recipeStorage.getRecipeCount>;
-const mockSearchRecipesPaginated = recipeStorage.searchRecipesPaginated as jest.MockedFunction<typeof recipeStorage.searchRecipesPaginated>;
-const mockGetSearchRecipesCount = recipeStorage.getSearchRecipesCount as jest.MockedFunction<typeof recipeStorage.getSearchRecipesCount>;
-const mockGetRecentSearches = searchHistoryStorage.getRecentSearches as jest.MockedFunction<typeof searchHistoryStorage.getRecentSearches>;
-const mockSaveSearch = searchHistoryStorage.saveSearch as jest.MockedFunction<typeof searchHistoryStorage.saveSearch>;
+const mockGetRecipesPaginated = recipeStorage.getRecipesPaginated as vi.MockedFunction<typeof recipeStorage.getRecipesPaginated>;
+const mockGetRecipeCount = recipeStorage.getRecipeCount as vi.MockedFunction<typeof recipeStorage.getRecipeCount>;
+const mockSearchRecipesPaginated = recipeStorage.searchRecipesPaginated as vi.MockedFunction<typeof recipeStorage.searchRecipesPaginated>;
+const mockGetSearchRecipesCount = recipeStorage.getSearchRecipesCount as vi.MockedFunction<typeof recipeStorage.getSearchRecipesCount>;
+const mockGetRecentSearches = searchHistoryStorage.getRecentSearches as vi.MockedFunction<typeof searchHistoryStorage.getRecentSearches>;
+const mockSaveSearch = searchHistoryStorage.saveSearch as vi.MockedFunction<typeof searchHistoryStorage.saveSearch>;
 
 const mockRecipes = [
   { id: '1', title: 'Chocolate Cake', description: 'A rich chocolate cake', tags: ['dessert', 'chocolate'], dateAdded: '2024-01-02T10:00:00Z', rating: 4.5, difficulty: 'Medium', ingredients: [{name: 'chocolate', amount: 1, unit: 'cup'}], instructions: [] },
@@ -64,7 +64,7 @@ describe('Search Page', () => {
     });
     mockGetRecentSearches.mockResolvedValue([]);
     mockSaveSearch.mockResolvedValue(undefined);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('renders and displays all recipes initially', async () => {

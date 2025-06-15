@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import {
   downloadAndStoreImage,
@@ -10,13 +10,13 @@ import {
 import { mockStoredImage } from '@/__tests__/fixtures/recipes';
 
 // Mock the dependencies
-jest.mock('@tauri-apps/api/core');
+vi.mock('@tauri-apps/api/core');
 
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
 
 describe('imageService', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('downloadAndStoreImage', () => {

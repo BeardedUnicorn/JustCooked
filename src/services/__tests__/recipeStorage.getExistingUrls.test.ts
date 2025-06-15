@@ -1,30 +1,34 @@
-import { describe, test, expect, jest } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { Recipe } from '@app-types';
 
-// Create a mock for getAllRecipes
-const mockGetAllRecipes = jest.fn();
-
 // Mock the entire module
-jest.mock('@services/recipeStorage', () => ({
-  getAllRecipes: mockGetAllRecipes,
-  getExistingRecipeUrls: async () => {
-    try {
-      const recipes = await mockGetAllRecipes();
-      return recipes
-        .map((recipe: Recipe) => recipe.sourceUrl)
-        .filter((url: string | undefined) => url && url.trim() !== '');
-    } catch (error) {
-      console.error('Failed to get existing recipe URLs:', error);
-      return [];
-    }
-  },
+vi.mock('@services/recipeStorage', () => ({
+  getAllRecipes: vi.fn(),
+  getExistingRecipeUrls: vi.fn(),
 }));
 
-import { getExistingRecipeUrls } from '@services/recipeStorage';
+// Import after mocking
+import { getExistingRecipeUrls, getAllRecipes } from '@services/recipeStorage';
+
+const mockGetAllRecipes = vi.mocked(getAllRecipes);
+const mockGetExistingRecipeUrls = vi.mocked(getExistingRecipeUrls);
+
+// Mock the implementation of getExistingRecipeUrls
+mockGetExistingRecipeUrls.mockImplementation(async () => {
+  try {
+    const recipes = await mockGetAllRecipes();
+    return recipes
+      .map((recipe: Recipe) => recipe.sourceUrl)
+      .filter((url: string | undefined) => url && url.trim() !== '');
+  } catch (error) {
+    console.error('Failed to get existing recipe URLs:', error);
+    return [];
+  }
+});
 
 describe('getExistingRecipeUrls', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should return array of recipe URLs from existing recipes', async () => {

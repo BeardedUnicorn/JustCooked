@@ -1,4 +1,4 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import {
   getPantryItems,
   addPantryItem,
@@ -8,19 +8,19 @@ import {
 import { PantryItem } from '@app-types';
 
 // Mock Tauri invoke
-const mockInvoke = jest.fn() as jest.MockedFunction<any>;
-jest.mock('@tauri-apps/api/core', () => ({
+const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));
 
 // Mock time utils
-jest.mock('@utils/timeUtils', () => ({
+vi.mock('@utils/timeUtils', () => ({
   getCurrentTimestamp: () => '2024-01-01T00:00:00.000Z',
 }));
 
 describe('Pantry Storage Bug Fix Tests', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('addPantryItem', () => {

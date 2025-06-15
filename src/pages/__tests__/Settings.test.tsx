@@ -6,43 +6,43 @@ import { createTheme } from '@mui/material/styles';
 import Settings from '../Settings';
 
 // Mock the database management service
-jest.mock('@services/databaseManagement', () => ({
+vi.mock('@services/databaseManagement', () => ({
   databaseManagementService: {
-    exportDatabase: jest.fn(),
-    importDatabase: jest.fn(),
-    resetDatabase: jest.fn(),
-    formatImportResult: jest.fn(),
+    exportDatabase: vi.fn(),
+    importDatabase: vi.fn(),
+    resetDatabase: vi.fn(),
+    formatImportResult: vi.fn(),
   },
 }));
 
 // Mock the logging management service
-jest.mock('@services/loggingManagement', () => ({
+vi.mock('@services/loggingManagement', () => ({
   loggingManagementService: {
-    getLogDirectoryPath: jest.fn(),
-    openLogDirectory: jest.fn(),
-    getLogFilePath: jest.fn(),
+    getLogDirectoryPath: vi.fn(),
+    openLogDirectory: vi.fn(),
+    getLogFilePath: vi.fn(),
   },
 }));
 
 // Mock Tauri APIs
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
-jest.mock('@tauri-apps/plugin-dialog', () => ({
-  save: jest.fn(),
-  open: jest.fn(),
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: vi.fn(),
+  open: vi.fn(),
 }));
 
-jest.mock('@tauri-apps/plugin-fs', () => ({
-  writeTextFile: jest.fn(),
-  readTextFile: jest.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  writeTextFile: vi.fn(),
+  readTextFile: vi.fn(),
 }));
 
 // Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
-    writeText: jest.fn(),
+    writeText: vi.fn(),
   },
 });
 
@@ -64,7 +64,7 @@ const renderWithProviders = (component: React.ReactElement) => {
 
 describe('Settings Page', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Mock logging service to return a default path
     mockLoggingManagementService.getLogDirectoryPath.mockResolvedValue('/test/logs');
   });

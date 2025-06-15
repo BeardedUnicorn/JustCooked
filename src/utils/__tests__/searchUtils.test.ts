@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@jest/globals';
+import { vi, describe, test, expect } from 'vitest';
 import {
   fuzzySearch,
   generateSearchSuggestions,

@@ -3,6 +3,7 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -42,7 +43,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src"],
-  "exclude": ["src/**/__tests__/**/*", "src/**/*.test.*", "src/**/*.spec.*", "src/jest-setup.ts"],
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["src/jest-setup.ts", "src/jest-globals.js"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -11,10 +11,10 @@ import ingredientsReducer, {
 
 // Mock localStorage
 const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
 };
 Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
@@ -23,18 +23,18 @@ Object.defineProperty(window, 'localStorage', {
 // Mock crypto.randomUUID
 Object.defineProperty(global, 'crypto', {
   value: {
-    randomUUID: jest.fn(() => 'test-uuid'),
+    randomUUID: vi.fn(() => 'test-uuid'),
   },
 });
 
 // Mock utils
-jest.mock('@utils/timeUtils', () => ({
-  getCurrentTimestamp: jest.fn(() => '2023-01-01T00:00:00.000Z'),
+vi.mock('@utils/timeUtils', () => ({
+  getCurrentTimestamp: vi.fn(() => '2023-01-01T00:00:00.000Z'),
 }));
 
-jest.mock('@utils/ingredientUtils', () => ({
-  cleanIngredientName: jest.fn((name: string) => name.trim()),
-  detectIngredientCategory: jest.fn(() => ({ id: 'vegetables' })),
+vi.mock('@utils/ingredientUtils', () => ({
+  cleanIngredientName: vi.fn((name: string) => name.trim()),
+  detectIngredientCategory: vi.fn(() => ({ id: 'vegetables' })),
 }));
 
 describe('ingredientsSlice', () => {
@@ -46,7 +46,7 @@ describe('ingredientsSlice', () => {
         ingredients: ingredientsReducer,
       },
     });
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('initial state', () => {

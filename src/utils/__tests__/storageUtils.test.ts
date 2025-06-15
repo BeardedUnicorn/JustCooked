@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import {
   getFromStorage,
   setToStorage,
@@ -14,21 +14,21 @@ const localStorageMock = (() => {
   let store: { [key: string]: string } = {};
 
   const mockStorage = {
-    getItem: jest.fn((key: string) => store[key] || null),
-    setItem: jest.fn((key: string, value: string) => {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
       store[key] = value;
     }),
-    removeItem: jest.fn((key: string) => {
+    removeItem: vi.fn((key: string) => {
       delete store[key];
     }),
-    clear: jest.fn(() => {
+    clear: vi.fn(() => {
       store = {};
     }),
     get length() {
       return Object.keys(store).length;
     },
-    key: jest.fn((index: number) => Object.keys(store)[index] || null),
-    hasOwnProperty: jest.fn((key: string) => key in store),
+    key: vi.fn((index: number) => Object.keys(store)[index] || null),
+    hasOwnProperty: vi.fn((key: string) => key in store),
     // Add store access for testing
     _getStore: () => store,
     _setStore: (newStore: { [key: string]: string }) => {
@@ -52,7 +52,7 @@ Object.defineProperty(window, 'localStorage', {
 describe('storageUtils', () => {
   beforeEach(() => {
     localStorageMock.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Clear any enumerable properties from the mock
     Object.keys(localStorageMock).forEach(key => {

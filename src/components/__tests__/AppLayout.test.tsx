@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi, beforeEach, describe, test, expect } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { ThemeProvider } from '@mui/material/styles';
@@ -9,25 +10,53 @@ import AppLayout from '@components/AppLayout';
 import darkTheme from '@styles/theme';
 import importQueueReducer from '@store/slices/importQueueSlice';
 
-// Mock useMediaQuery
-jest.mock('@mui/material', () => ({
-  ...jest.requireActual('@mui/material'),
-  useMediaQuery: jest.fn(),
-}));
+// Mock useMediaQuery and useTheme
+vi.mock('@mui/material', async () => {
+  const actual = await vi.importActual('@mui/material');
+  return {
+    ...actual,
+    useMediaQuery: vi.fn(),
+    useTheme: vi.fn(() => ({
+      breakpoints: {
+        down: vi.fn(() => '(max-width: 960px)'),
+      },
+      spacing: vi.fn((value) => `${value * 8}px`),
+      palette: {
+        primary: {
+          main: '#5D9CEC',
+        },
+        text: {
+          primary: '#FFFFFF',
+          secondary: '#B0B0B0',
+        },
+        background: {
+          default: '#141A22',
+          paper: '#1C2331',
+        },
+      },
+      shape: {
+        borderRadius: 10,
+      },
+    })),
+  };
+});
 
 // Mock react-router-dom hooks
-const mockNavigate = jest.fn();
+const mockNavigate = vi.fn();
 const mockLocation = { pathname: '/' };
 
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-  useLocation: () => mockLocation,
-}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useLocation: () => mockLocation,
+  };
+});
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn().mockResolvedValue({
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn().mockResolvedValue({
     tasks: [],
     currentTaskId: null,
     isProcessing: false,
@@ -46,7 +75,7 @@ const createTestStore = () => {
 };
 
 const renderAppLayout = (children = <div>Test Content</div>, isMobile = false) => {
-  (useMediaQuery as jest.Mock).mockReturnValue(isMobile);
+  vi.mocked(useMediaQuery).mockReturnValue(isMobile);
   const store = createTestStore();
 
   return render(
@@ -62,7 +91,7 @@ const renderAppLayout = (children = <div>Test Content</div>, isMobile = false) =
 
 describe('AppLayout Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockLocation.pathname = '/';
   });
 
@@ -203,7 +232,7 @@ describe('AppLayout Component', () => {
       expect(screen.getByText('JustCooked')).toBeInTheDocument();
 
       // Switch to mobile
-      (useMediaQuery as jest.Mock).mockReturnValue(true);
+      vi.mocked(useMediaQuery).mockReturnValue(true);
       const store = createTestStore();
       rerender(
         <Provider store={store}>

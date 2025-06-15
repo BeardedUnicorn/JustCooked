@@ -2,16 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { loggingService, createLogger } from '../loggingService';
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
+vi.mock('@tauri-apps/api/core');
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
 
 // Mock console methods to avoid noise in tests
 const originalConsole = { ...console };
 beforeAll(() => {
-  console.debug = jest.fn();
-  console.info = jest.fn();
-  console.warn = jest.fn();
-  console.error = jest.fn();
+  console.debug = vi.fn();
+  console.info = vi.fn();
+  console.warn = vi.fn();
+  console.error = vi.fn();
 });
 
 afterAll(() => {
@@ -22,7 +22,7 @@ describe('LoggingService', () => {
   let logger: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     logger = createLogger('TestComponent');
   });
 

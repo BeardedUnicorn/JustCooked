@@ -8,12 +8,12 @@ import darkTheme from '../../theme';
 import { ProductIngredientMappingService } from '../../services/productIngredientMappingService';
 
 // Mock the formatAmountForDisplay function
-jest.mock('../../services/recipeImport', () => ({
-  formatAmountForDisplay: jest.fn((amount: number) => amount.toString()),
+vi.mock('../../services/recipeImport', () => ({
+  formatAmountForDisplay: vi.fn((amount: number) => amount.toString()),
 }));
 
 // Mock the ProductIngredientMappingService
-jest.mock('../../services/productIngredientMappingService');
+vi.mock('../../services/productIngredientMappingService');
 const mockProductIngredientMappingService = ProductIngredientMappingService as jest.Mocked<typeof ProductIngredientMappingService>;
 
 // Mock crypto.randomUUID
@@ -23,9 +23,9 @@ Object.defineProperty(global, 'crypto', {
   }
 });
 
-const mockOnAddItem = jest.fn();
-const mockOnUpdateItem = jest.fn();
-const mockOnDeleteItem = jest.fn();
+const mockOnAddItem = vi.fn();
+const mockOnUpdateItem = vi.fn();
+const mockOnDeleteItem = vi.fn();
 
 const renderPantryManager = (items: PantryItem[] = mockPantryItems) => {
   return render(
@@ -54,7 +54,7 @@ const mockIngredientMappings: ProductIngredientMapping[] = [
 
 describe('PantryManager Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Set up default mock for ingredient mappings
     mockProductIngredientMappingService.getAllMappings.mockResolvedValue(mockIngredientMappings);
   });

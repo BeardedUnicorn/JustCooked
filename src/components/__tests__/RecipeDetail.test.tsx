@@ -7,23 +7,31 @@ import RecipeDetail from '../RecipeDetail';
 import darkTheme from '../../theme';
 
 // Mock the hooks and utils
-jest.mock('@hooks/useImageUrl', () => ({
+vi.mock('@hooks/useImageUrl', () => ({
   useImageUrl: () => ({ imageUrl: 'test-image-url.jpg' }),
 }));
 
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-}));
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // Mock ingredient and serving utils
-jest.mock('@utils/servingUtils', () => ({
-  ...jest.requireActual('@utils/servingUtils'),
-  scaleIngredients: jest.fn((ingredients, _, newServings) => {
+vi.mock('../../utils/servingUtils', () => ({
+  scaleIngredients: vi.fn((ingredients, _, newServings) => {
     // Simple mock scaling for testing
     const scalingFactor = newServings / 4; // Original servings is 4 in mockRecipe
     return ingredients.map((ing: any) => ({ ...ing, amount: ing.amount * scalingFactor }));
+  }),
+  getScalingDescription: vi.fn((originalServings, newServings) => {
+    return `Scaled from ${originalServings} to ${newServings} servings`;
+  }),
+  isValidServingSize: vi.fn((servings) => {
+    return servings > 0 && servings <= 100;
   }),
 }));
 
@@ -50,7 +58,7 @@ const mockRecipe = {
   isFavorite: false,
 };
 
-const mockOnEdit = jest.fn();
+const mockOnEdit = vi.fn();
 
 const renderWithProviders = (component: React.ReactElement) => {
   return render(
@@ -64,7 +72,7 @@ const renderWithProviders = (component: React.ReactElement) => {
 
 describe('RecipeDetail', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should render recipe title and description', () => {
@@ -132,7 +140,9 @@ describe('RecipeDetail', () => {
   });
 
   it('should adjust serving size and scale ingredients', async () => {
-    const { scaleIngredients } = require('@utils/servingUtils');
+    const servingUtils = await import('../../utils/servingUtils');
+    const scaleIngredients = vi.mocked(servingUtils.scaleIngredients);
+    
     const user = userEvent.setup();
     renderWithProviders(<RecipeDetail recipe={mockRecipe} onEdit={mockOnEdit} />);
     
@@ -157,7 +167,9 @@ describe('RecipeDetail', () => {
   });
 
   it('should handle manual input for serving size', async () => {
-    const { scaleIngredients } = require('@utils/servingUtils');
+    const servingUtils = await import('../../utils/servingUtils');
+    const scaleIngredients = vi.mocked(servingUtils.scaleIngredients);
+    
     renderWithProviders(<RecipeDetail recipe={mockRecipe} onEdit={mockOnEdit} />);
     
     const servingsInput = screen.getByDisplayValue('4');

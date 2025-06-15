@@ -5,22 +5,22 @@ import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
 import { DatabaseExport, DatabaseImportResult } from '@app-types';
 
 // Mock Tauri APIs
-jest.mock('@tauri-apps/api/core');
-jest.mock('@tauri-apps/plugin-dialog');
-jest.mock('@tauri-apps/plugin-fs');
+vi.mock('@tauri-apps/api/core');
+vi.mock('@tauri-apps/plugin-dialog');
+vi.mock('@tauri-apps/plugin-fs');
 
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
-const mockSave = save as jest.MockedFunction<typeof save>;
-const mockOpen = open as jest.MockedFunction<typeof open>;
-const mockWriteTextFile = writeTextFile as jest.MockedFunction<typeof writeTextFile>;
-const mockReadTextFile = readTextFile as jest.MockedFunction<typeof readTextFile>;
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockSave = save as vi.MockedFunction<typeof save>;
+const mockOpen = open as vi.MockedFunction<typeof open>;
+const mockWriteTextFile = writeTextFile as vi.MockedFunction<typeof writeTextFile>;
+const mockReadTextFile = readTextFile as vi.MockedFunction<typeof readTextFile>;
 
 describe('DatabaseManagementService', () => {
   let service: DatabaseManagementService;
 
   beforeEach(() => {
     service = new DatabaseManagementService();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('exportDatabase', () => {

@@ -4,20 +4,20 @@ import { BatchImportRequest, ImportQueueStatus, ImportQueueTask, ImportQueueTask
 import { getExistingRecipeUrls } from '../recipeStorage';
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as jest.MockedFunction<typeof invoke>;
+vi.mock('@tauri-apps/api/core');
+const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
 
 // Mock recipe storage
-jest.mock('../recipeStorage');
-const mockGetExistingRecipeUrls = getExistingRecipeUrls as jest.MockedFunction<typeof getExistingRecipeUrls>;
+vi.mock('../recipeStorage');
+const mockGetExistingRecipeUrls = getExistingRecipeUrls as vi.MockedFunction<typeof getExistingRecipeUrls>;
 
 // Mock logging service
-jest.mock('../loggingService', () => ({
-  createLogger: jest.fn(() => ({
-    info: jest.fn(),
-    error: jest.fn(),
-    logError: jest.fn(),
-    debug: jest.fn(),
+vi.mock('../loggingService', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    logError: vi.fn(),
+    debug: vi.fn(),
   })),
 }));
 
@@ -40,7 +40,7 @@ describe('ImportQueueService', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     queueService = new ImportQueueService();
     mockGetExistingRecipeUrls.mockResolvedValue([]);
   });
@@ -247,7 +247,7 @@ describe('ImportQueueService', () => {
 
   describe('Progress Tracking', () => {
     it('should start status monitoring', () => {
-      const mockCallback = jest.fn();
+      const mockCallback = vi.fn();
       mockInvoke.mockResolvedValue(mockQueueTask);
 
       queueService.startStatusMonitoring(mockCallback, 500);
@@ -256,7 +256,7 @@ describe('ImportQueueService', () => {
     });
 
     it('should stop status monitoring', () => {
-      const mockCallback = jest.fn();
+      const mockCallback = vi.fn();
       queueService.startStatusMonitoring(mockCallback, 500);
 
       queueService.stopStatusMonitoring();

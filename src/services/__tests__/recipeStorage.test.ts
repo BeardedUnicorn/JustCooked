@@ -1,26 +1,27 @@
 import { Recipe } from '../../types';
 import * as recipeStorage from '../recipeStorage';
+import { invoke } from '@tauri-apps/api/core';
 
 // Mock the Tauri invoke function
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
-const mockInvoke = require('@tauri-apps/api/core').invoke as jest.MockedFunction<typeof import('@tauri-apps/api/core').invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 // Mock the image service
-jest.mock('@services/imageService', () => ({
-  deleteRecipeImage: jest.fn(),
+vi.mock('@services/imageService', () => ({
+  deleteRecipeImage: vi.fn(),
 }));
 
 // Mock the time utils
-jest.mock('@utils/timeUtils', () => ({
-  getCurrentTimestamp: jest.fn(() => '2024-01-15T10:30:00.000Z'),
+vi.mock('@utils/timeUtils', () => ({
+  getCurrentTimestamp: vi.fn(() => '2024-01-15T10:30:00.000Z'),
 }));
 
 describe('recipeStorage', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const mockRecipe: Recipe = {

@@ -1,16 +1,16 @@
-import { describe, test, expect, jest, beforeEach } from '@jest/globals';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useImageUrl } from '@hooks/useImageUrl';
 import { getLocalImageUrl } from '@services/imageService';
 
 // Mock the image service
-jest.mock('@services/imageService');
+vi.mock('@services/imageService');
 
-const mockGetLocalImageUrl = getLocalImageUrl as jest.MockedFunction<typeof getLocalImageUrl>;
+const mockGetLocalImageUrl = getLocalImageUrl as vi.MockedFunction<typeof getLocalImageUrl>;
 
 describe('useImageUrl', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should return web URL directly for HTTP/HTTPS URLs', async () => {

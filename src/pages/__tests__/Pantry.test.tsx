@@ -4,8 +4,8 @@ import Pantry from '../Pantry';
 import * as pantryStorage from '@services/pantryStorage';
 
 // Mock the pantry storage service
-jest.mock('@services/pantryStorage');
-const mockGetPantryItems = pantryStorage.getPantryItems as jest.MockedFunction<typeof pantryStorage.getPantryItems>;
+vi.mock('@services/pantryStorage');
+const mockGetPantryItems = pantryStorage.getPantryItems as vi.MockedFunction<typeof pantryStorage.getPantryItems>;
 
 const renderPantry = () => {
   return render(

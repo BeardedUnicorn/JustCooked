@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SearchBar from '../SearchBar';
 
-const mockOnSearch = jest.fn();
+const mockOnSearch = vi.fn();
 
 const renderSearchBar = (props = {}) => {
   const defaultProps = {
@@ -16,7 +16,7 @@ const renderSearchBar = (props = {}) => {
 
 describe('SearchBar Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('should render with placeholder text', () => {
@@ -263,8 +263,8 @@ describe('SearchBar Component', () => {
   });
 
   test('should handle multiple search bar instances independently', async () => {
-    const mockOnSearch1 = jest.fn();
-    const mockOnSearch2 = jest.fn();
+    const mockOnSearch1 = vi.fn();
+    const mockOnSearch2 = vi.fn();
     
     render(
       <div>

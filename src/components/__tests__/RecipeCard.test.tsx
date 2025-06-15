@@ -8,28 +8,36 @@ import { mockRecipe } from '../../__tests__/fixtures/recipes';
 import darkTheme from '../../theme';
 
 // Mock services
-jest.mock('@services/recipeStorage', () => ({
-  deleteRecipe: jest.fn(),
-  updateRecipe: jest.fn(),
+vi.mock('@services/recipeStorage', () => ({
+  deleteRecipe: vi.fn(),
+  updateRecipe: vi.fn(),
 }));
 
-jest.mock('@hooks/useImageUrl', () => ({
-  useImageUrl: jest.fn(() => ({ imageUrl: 'test-image-url.jpg' })),
+import { deleteRecipe, updateRecipe } from '@services/recipeStorage';
+const mockDeleteRecipe = vi.mocked(deleteRecipe);
+const mockUpdateRecipe = vi.mocked(updateRecipe);
+
+vi.mock('@hooks/useImageUrl', () => ({
+  useImageUrl: vi.fn(() => ({ imageUrl: 'test-image-url.jpg' })),
 }));
 
-jest.mock('@utils/timeUtils', () => ({
-  calculateTotalTime: jest.fn(() => '27 minutes'),
+vi.mock('@utils/timeUtils', () => ({
+  calculateTotalTime: vi.fn(() => '27 minutes'),
 }));
 
 // Mock react-router-dom
-const mockNavigate = jest.fn();
-jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
-  useNavigate: () => mockNavigate,
-}));
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    BrowserRouter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  };
+});
 
-const mockOnDelete = jest.fn();
-const mockOnUpdate = jest.fn();
+const mockOnDelete = vi.fn();
+const mockOnUpdate = vi.fn();
 
 const renderRecipeCard = (recipe: Recipe = mockRecipe, props = {}) => {
   return render(
@@ -48,7 +56,7 @@ const renderRecipeCard = (recipe: Recipe = mockRecipe, props = {}) => {
 
 describe('RecipeCard Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Rendering', () => {
@@ -176,8 +184,7 @@ describe('RecipeCard Component', () => {
       await user.click(favoriteAction);
 
       // Should call updateRecipe with favorite status
-      const { updateRecipe } = require('@services/recipeStorage');
-      expect(updateRecipe).toHaveBeenCalledWith({
+      expect(mockUpdateRecipe).toHaveBeenCalledWith({
         ...mockRecipe,
         isFavorite: true,
       });
@@ -218,8 +225,7 @@ describe('RecipeCard Component', () => {
         expect(screen.queryByText('Delete Recipe?')).not.toBeInTheDocument();
       });
       
-      const { deleteRecipe } = require('@services/recipeStorage');
-      expect(deleteRecipe).not.toHaveBeenCalled();
+      expect(mockDeleteRecipe).not.toHaveBeenCalled();
     });
 
     test('should delete recipe when confirmed', async () => {
@@ -235,8 +241,7 @@ describe('RecipeCard Component', () => {
       const deleteButton = screen.getByRole('button', { name: /delete/i });
       await user.click(deleteButton);
 
-      const { deleteRecipe } = require('@services/recipeStorage');
-      expect(deleteRecipe).toHaveBeenCalledWith('test-recipe-123');
+      expect(mockDeleteRecipe).toHaveBeenCalledWith('test-recipe-123');
       expect(mockOnDelete).toHaveBeenCalled();
     });
   });
@@ -246,7 +251,7 @@ describe('RecipeCard Component', () => {
       const user = userEvent.setup();
       
       // Mock navigator.share
-      const mockShare = jest.fn();
+      const mockShare = vi.fn();
       Object.defineProperty(navigator, 'share', {
         value: mockShare,
         writable: true,

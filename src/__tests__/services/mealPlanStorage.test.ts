@@ -13,13 +13,13 @@ import {
 import { MealPlan, MealPlanRecipe } from '@app-types';
 
 // Mock Tauri API
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
 // Mock getCurrentTimestamp
-jest.mock('@utils/timeUtils', () => ({
-  getCurrentTimestamp: jest.fn(() => '2024-01-15T12:00:00Z'),
+vi.mock('@utils/timeUtils', () => ({
+  getCurrentTimestamp: vi.fn(() => '2024-01-15T12:00:00Z'),
 }));
 
 describe('mealPlanStorage', () => {
@@ -159,12 +159,12 @@ describe('mealPlanStorage', () => {
   describe('meal plan status functions', () => {
     // Mock current date to 2024-01-15
     beforeAll(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2024-01-15'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2024-01-15'));
     });
 
     afterAll(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     const createMealPlan = (startDate: string, endDate: string): MealPlan => ({
