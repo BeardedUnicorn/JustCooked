@@ -72,17 +72,6 @@ pub fn init_logging(app_data_dir: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// Flush all pending log messages
-pub fn flush_logs() {
-    // Force a small delay to allow async logging to complete
-    std::thread::sleep(std::time::Duration::from_millis(200));
-
-    // Try to access the guards to ensure they're still alive
-    if let Some(_guards) = LOGGING_GUARDS.get() {
-        // Guards exist, give more time for flushing
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-}
 
 /// Log cleanup - remove old log files (older than 30 days)
 pub fn cleanup_old_logs(app_data_dir: &PathBuf) -> Result<()> {

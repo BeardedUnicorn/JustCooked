@@ -5,7 +5,7 @@ import PantryManager from '../PantryManager';
 import { PantryItem, ProductIngredientMapping } from '../../types';
 import { mockPantryItems } from '../../__tests__/fixtures/recipes';
 import darkTheme from '../../theme';
-import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
+import { ProductIngredientMappingService } from '../../services/productIngredientMappingService';
 
 // Mock the formatAmountForDisplay function
 jest.mock('../../services/recipeImport', () => ({
@@ -13,7 +13,7 @@ jest.mock('../../services/recipeImport', () => ({
 }));
 
 // Mock the ProductIngredientMappingService
-jest.mock('@services/productIngredientMappingService');
+jest.mock('../../services/productIngredientMappingService');
 const mockProductIngredientMappingService = ProductIngredientMappingService as jest.Mocked<typeof ProductIngredientMappingService>;
 
 // Mock crypto.randomUUID
@@ -109,8 +109,8 @@ describe('PantryManager Component', () => {
       await user.click(addManuallyItem);
 
       expect(screen.getByText('Add Pantry Item')).toBeInTheDocument();
-      expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/amount/i)).toBeInTheDocument();
+      expect(screen.getByTestId('pantry-item-name-input')).toBeInTheDocument();
+      expect(screen.getByTestId('pantry-item-amount-input')).toBeInTheDocument();
       expect(screen.getAllByText('Unit').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Category').length).toBeGreaterThan(0);
     });
@@ -120,11 +120,17 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
+
       expect(screen.getByText('Add Pantry Item')).toBeInTheDocument();
 
       // Close dialog
-      await user.click(screen.getByRole('button', { name: /cancel/i }));
+      await user.click(screen.getByTestId('pantry-item-cancel-button'));
       await waitFor(() => {
         expect(screen.queryByText('Add Pantry Item')).not.toBeInTheDocument();
       });
@@ -135,12 +141,19 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       // Fill form
-      await user.type(screen.getByLabelText(/name/i), 'Milk');
-      await user.clear(screen.getByLabelText(/amount/i));
-      await user.type(screen.getByLabelText(/amount/i), '1');
+      const nameInput = screen.getByTestId('pantry-item-name-input').querySelector('input')!;
+      await user.type(nameInput, 'Milk');
+      const amountInput = screen.getByTestId('pantry-item-amount-input').querySelector('input')!;
+      await user.clear(amountInput);
+      await user.type(amountInput, '1');
       
       // Select unit - find the unit select by its container
       const unitSelects = screen.getAllByRole('combobox');
@@ -155,7 +168,7 @@ describe('PantryManager Component', () => {
       await user.click(screen.getByText('Dairy'));
 
       // Submit form
-      await user.click(screen.getByRole('button', { name: /add/i }));
+      await user.click(screen.getByTestId('pantry-item-submit-button'));
 
       expect(mockOnAddItem).toHaveBeenCalledWith({
         id: 'test-uuid-123',
@@ -164,6 +177,8 @@ describe('PantryManager Component', () => {
         unit: 'l',
         category: 'Dairy',
         expiryDate: undefined,
+        dateAdded: expect.any(String),
+        dateModified: expect.any(String),
       });
     });
 
@@ -172,16 +187,24 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       // Fill form with expiry date
-      await user.type(screen.getByLabelText(/name/i), 'Bread');
-      await user.clear(screen.getByLabelText(/amount/i));
-      await user.type(screen.getByLabelText(/amount/i), '1');
-      await user.type(screen.getByLabelText(/expiry date/i), '2024-12-31');
+      const nameInput = screen.getByTestId('pantry-item-name-input').querySelector('input')!;
+      await user.type(nameInput, 'Bread');
+      const amountInput = screen.getByTestId('pantry-item-amount-input').querySelector('input')!;
+      await user.clear(amountInput);
+      await user.type(amountInput, '1');
+      const expiryInput = screen.getByTestId('pantry-item-expiry-input').querySelector('input')!;
+      await user.type(expiryInput, '2024-12-31');
 
       // Submit form
-      await user.click(screen.getByRole('button', { name: /add/i }));
+      await user.click(screen.getByTestId('pantry-item-submit-button'));
 
       expect(mockOnAddItem).toHaveBeenCalledWith({
         id: 'test-uuid-123',
@@ -190,6 +213,8 @@ describe('PantryManager Component', () => {
         unit: 'piece(s)',
         category: 'Other',
         expiryDate: '2024-12-31',
+        dateAdded: expect.any(String),
+        dateModified: expect.any(String),
       });
     });
   });
@@ -224,7 +249,7 @@ describe('PantryManager Component', () => {
       await user.type(amountInput, '10');
 
       // Submit form
-      await user.click(screen.getByRole('button', { name: /update/i }));
+      await user.click(screen.getByTestId('pantry-item-submit-button'));
 
       expect(mockOnUpdateItem).toHaveBeenCalledWith({
         id: 'pantry-1',
@@ -233,6 +258,11 @@ describe('PantryManager Component', () => {
         unit: 'lbs',
         category: 'baking',
         expiryDate: '2024-12-31',
+        dateAdded: expect.any(String),
+        dateModified: expect.any(String),
+        productCode: undefined,
+        productName: undefined,
+        brands: undefined,
       });
     });
   });
@@ -256,10 +286,15 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       // Try to submit without name
-      await user.click(screen.getByRole('button', { name: /add/i }));
+      await user.click(screen.getByTestId('pantry-item-submit-button'));
 
       // Should not call onAddItem
       expect(mockOnAddItem).not.toHaveBeenCalled();
@@ -270,15 +305,22 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       // Fill form with valid data
-      await user.type(screen.getByLabelText(/name/i), 'Test Item');
-      await user.clear(screen.getByLabelText(/amount/i));
-      await user.type(screen.getByLabelText(/amount/i), '2.5');
+      const nameInput = screen.getByTestId('pantry-item-name-input').querySelector('input')!;
+      await user.type(nameInput, 'Test Item');
+      const amountInput = screen.getByTestId('pantry-item-amount-input').querySelector('input')!;
+      await user.clear(amountInput);
+      await user.type(amountInput, '2.5');
 
       // Submit form
-      await user.click(screen.getByRole('button', { name: /add/i }));
+      await user.click(screen.getByTestId('pantry-item-submit-button'));
 
       expect(mockOnAddItem).toHaveBeenCalledWith({
         id: 'test-uuid-123',
@@ -287,6 +329,8 @@ describe('PantryManager Component', () => {
         unit: 'piece(s)',
         category: 'Other',
         expiryDate: undefined,
+        dateAdded: expect.any(String),
+        dateModified: expect.any(String),
       });
     });
   });
@@ -309,14 +353,21 @@ describe('PantryManager Component', () => {
       renderPantryManager();
 
       // Open dialog
-      await user.click(screen.getByRole('button', { name: /add item/i }));
+      const addButton = screen.getByRole('button', { name: /add item/i });
+      await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       // The name field should be focused by default (autoFocus)
-      expect(screen.getByLabelText(/name/i)).toHaveFocus();
+      const nameInput = screen.getByTestId('pantry-item-name-input').querySelector('input');
+      expect(nameInput).toHaveFocus();
 
       // Tab to next field
       await user.tab();
-      expect(screen.getByLabelText(/amount/i)).toHaveFocus();
+      const amountInput = screen.getByTestId('pantry-item-amount-input').querySelector('input');
+      expect(amountInput).toHaveFocus();
     });
   });
 

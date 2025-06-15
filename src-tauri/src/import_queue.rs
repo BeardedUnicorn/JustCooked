@@ -272,13 +272,6 @@ impl ImportQueue {
         }
     }
 
-    async fn execute_import_task(
-        importer: Arc<BatchImporter>,
-        request: BatchImportRequest,
-        app: tauri::AppHandle,
-    ) -> Result<BatchImportResult, String> {
-        importer.start_batch_import(app, request).await
-    }
 
     async fn execute_import_task_with_progress(
         importer: Arc<BatchImporter>,

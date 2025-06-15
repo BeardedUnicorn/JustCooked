@@ -25,7 +25,8 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": ["default"]
+      "capabilities": ["default"],
+      "dangerousDisableAssetCspModification": true
     }
   },
   "bundle": {
@@ -47,7 +48,7 @@
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
-      "entitlements": null
+      "entitlements": "entitlements.plist"
     }
   }
 }

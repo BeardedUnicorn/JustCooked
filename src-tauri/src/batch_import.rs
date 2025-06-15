@@ -158,37 +158,6 @@ impl BatchImporter {
         });
     }
 
-    fn calculate_estimated_time_remaining(&self) -> Option<u32> {
-        let progress = self.progress.lock().unwrap();
-        let start_time = self.start_time.lock().unwrap();
-
-        if let Some(start) = *start_time {
-            let elapsed = start.elapsed().as_secs() as u32;
-            let processed = progress.processed_recipes;
-            let total = progress.total_recipes;
-
-            if processed > 0 && total > processed {
-                let avg_time_per_recipe = elapsed as f64 / processed as f64;
-                let remaining_recipes = total - processed;
-                let estimated_remaining = (remaining_recipes as f64 * avg_time_per_recipe) as u32;
-
-                // Cap the estimate at a reasonable maximum (24 hours)
-                return Some(estimated_remaining.min(86400));
-            } else if total > 0 && processed == 0 && elapsed > 5 {
-                // Only provide initial estimate after some time has passed (5 seconds)
-                // This prevents showing estimates immediately when no progress has been made
-                return Some(total * 4);
-            }
-        }
-
-        None
-    }
-
-    fn update_progress_with_estimation(&self) {
-        let estimated_time = self.calculate_estimated_time_remaining();
-        let mut progress = self.progress.lock().unwrap();
-        progress.estimated_time_remaining = estimated_time;
-    }
 
     // Helper method to create a lightweight clone for task execution
     fn clone_for_task(&self) -> BatchImporterTask {
@@ -907,37 +876,6 @@ impl BatchImporterTask {
         }
     }
 
-    fn update_progress_with_estimation(&self) {
-        let estimated_time = self.calculate_estimated_time_remaining();
-        let mut progress = self.progress.lock().unwrap();
-        progress.estimated_time_remaining = estimated_time;
-    }
-
-    fn calculate_estimated_time_remaining(&self) -> Option<u32> {
-        let progress = self.progress.lock().unwrap();
-        let start_time = self.start_time.lock().unwrap();
-
-        if let Some(start) = *start_time {
-            let elapsed = start.elapsed().as_secs() as u32;
-            let processed = progress.processed_recipes;
-            let total = progress.total_recipes;
-
-            if processed > 0 && total > processed {
-                let avg_time_per_recipe = elapsed as f64 / processed as f64;
-                let remaining_recipes = total - processed;
-                let estimated_remaining = (remaining_recipes as f64 * avg_time_per_recipe) as u32;
-
-                // Cap the estimate at a reasonable maximum (24 hours)
-                return Some(estimated_remaining.min(86400));
-            } else if total > 0 && processed == 0 && elapsed > 5 {
-                // Only provide initial estimate after some time has passed (5 seconds)
-                // This prevents showing estimates immediately when no progress has been made
-                return Some(total * 4);
-            }
-        }
-
-        None
-    }
 
     async fn capture_raw_ingredients_batch(
         &self,

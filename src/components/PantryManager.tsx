@@ -12,7 +12,9 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { PantryItem, ProductIngredientMapping } from '@app-types';
 import { formatAmountForDisplay } from '@services/recipeImport';
 import ProductSearchModal from './ProductSearchModal';
-import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
+import IngredientAssociationModal from './IngredientAssociationModal';
+import { ProductIngredientMappingService } from '../services/productIngredientMappingService';
+import { IngredientAssociation } from '@app-types/productIngredientMapping';
 
 interface PantryManagerProps {
   items: PantryItem[];
@@ -42,6 +44,8 @@ const PantryManager: React.FC<PantryManagerProps> = ({
   const [category, setCategory] = useState('Other');
   const [expiryDate, setExpiryDate] = useState('');
   const [ingredientMappings, setIngredientMappings] = useState<Map<string, string>>(new Map());
+  const [showIngredientModal, setShowIngredientModal] = useState(false);
+  const [pendingPantryItem, setPendingPantryItem] = useState<PantryItem | null>(null);
 
   // Load ingredient mappings when component mounts
   useEffect(() => {
@@ -128,7 +132,42 @@ const PantryManager: React.FC<PantryManagerProps> = ({
     setExpiryDate('');
   };
 
-  const handleSubmit = () => {
+  const handleIngredientAssociation = async (association: IngredientAssociation | null) => {
+    if (!pendingPantryItem) return;
+
+    try {
+      // Create mapping if association was provided and item has a product code
+      if (association && pendingPantryItem.productCode) {
+        await ProductIngredientMappingService.createMapping({
+          product_code: pendingPantryItem.productCode,
+          ingredient_id: association.ingredient_id,
+        });
+      }
+
+      // Add or update item to pantry regardless of whether association was made
+      if (editingItem) {
+        onUpdateItem(pendingPantryItem);
+      } else {
+        onAddItem(pendingPantryItem);
+      }
+      
+      // Refresh mappings
+      await refreshIngredientMappings();
+      
+      handleClose();
+    } catch (error) {
+      console.error('Failed to create ingredient mapping:', error);
+      // Still add/update item even if mapping failed
+      if (editingItem) {
+        onUpdateItem(pendingPantryItem);
+      } else {
+        onAddItem(pendingPantryItem);
+      }
+      handleClose();
+    }
+  };
+
+  const handleSubmit = async () => {
     // Basic validation - require name
     if (!name.trim()) {
       return;
@@ -141,15 +180,34 @@ const PantryManager: React.FC<PantryManagerProps> = ({
       unit,
       category,
       expiryDate: expiryDate || undefined,
+      dateAdded: editingItem?.dateAdded || new Date().toISOString(),
+      dateModified: new Date().toISOString(),
     };
 
     if (editingItem) {
-      onUpdateItem(item);
-    } else {
-      onAddItem(item);
-    }
+      // For editing, preserve existing product information and update the item
+      const updatedItem = {
+        ...item,
+        productCode: editingItem.productCode,
+        productName: editingItem.productName,
+        brands: editingItem.brands,
+      };
 
-    handleClose();
+      // Check if item has product code but no ingredient mapping
+      if (updatedItem.productCode && !getIngredientMapping(updatedItem)) {
+        setPendingPantryItem(updatedItem);
+        setShowIngredientModal(true);
+        return;
+      }
+
+      onUpdateItem(updatedItem);
+      handleClose();
+    } else {
+      // For new manually added items, add directly to pantry
+      // (no product code, so no ingredient mapping needed)
+      onAddItem(item);
+      handleClose();
+    }
   };
 
   return (
@@ -273,12 +331,23 @@ const PantryManager: React.FC<PantryManagerProps> = ({
         onAddProduct={handleAddItemWithMappingRefresh}
       />
 
+      {/* Ingredient Association Modal */}
+      <IngredientAssociationModal
+        open={showIngredientModal}
+        onClose={() => {
+          setShowIngredientModal(false);
+          setPendingPantryItem(null);
+        }}
+        onAssociate={handleIngredientAssociation}
+        productName={pendingPantryItem?.name || ''}
+      />
+
       {/* Add/Edit Item Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth data-testid="pantry-item-dialog">
         <DialogTitle>{editingItem ? 'Edit Pantry Item' : 'Add Pantry Item'}</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid size={12}>
+            <Grid size={{ xs: 12 }}>
               <TextField
                 autoFocus
                 label="Name"
@@ -289,7 +358,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 data-testid="pantry-item-name-input"
               />
             </Grid>
-            <Grid size={6}>
+            <Grid size={{ xs: 6 }}>
               <TextField
                 label="Amount"
                 type="number"
@@ -300,7 +369,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 data-testid="pantry-item-amount-input"
               />
             </Grid>
-            <Grid size={6}>
+            <Grid size={{ xs: 6 }}>
               <FormControl fullWidth>
                 <InputLabel>Unit</InputLabel>
                 <Select
@@ -318,7 +387,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={12}>
+            <Grid size={{ xs: 12 }}>
               <FormControl fullWidth>
                 <InputLabel>Category</InputLabel>
                 <Select
@@ -335,7 +404,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={12}>
+            <Grid size={{ xs: 12 }}>
               <TextField
                 label="Expiry Date"
                 type="date"
@@ -350,7 +419,12 @@ const PantryManager: React.FC<PantryManagerProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} data-testid="pantry-item-cancel-button">Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" disableElevation data-testid="pantry-item-submit-button">
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained" 
+            disableElevation 
+            data-testid="pantry-item-submit-button"
+          >
             {editingItem ? 'Update' : 'Add'}
           </Button>
         </DialogActions>

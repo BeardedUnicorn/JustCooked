@@ -1,5 +1,5 @@
 import { ProductIngredientMappingService } from '../productIngredientMappingService';
-import { ProductIngredientMapping, CreateProductIngredientMappingRequest } from '@app-types/productIngredientMapping';
+import { ProductIngredientMapping, CreateProductIngredientMappingRequest } from '@app-types';
 
 // Mock Tauri API
 jest.mock('@tauri-apps/api/core', () => ({
@@ -77,7 +77,10 @@ describe('ProductIngredientMappingService', () => {
 
       const result = await ProductIngredientMappingService.createMapping(request);
 
-      expect(mockInvoke).toHaveBeenCalledWith('db_create_product_ingredient_mapping', request);
+      expect(mockInvoke).toHaveBeenCalledWith('db_create_product_ingredient_mapping', {
+        productCode: '123456789012',
+        ingredientId: 'ingredient-1',
+      });
       expect(result).toEqual(mockMapping);
     });
 

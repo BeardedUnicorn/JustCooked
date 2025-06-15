@@ -33,6 +33,7 @@
     "@tauri-apps/plugin-fs": "^2.3.0",
     "@tauri-apps/plugin-http": "^2.4.4",
     "@tauri-apps/plugin-shell": "^2.2.1",
+    "@zxing/browser": "^0.1.5",
     "date-fns": "^4.1.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",

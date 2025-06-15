@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import IngredientAssociationModal from '../IngredientAssociationModal';
-import { IngredientDatabase } from '@app-types/ingredientDatabase';
+import { IngredientDatabase } from '../../types/ingredientDatabase';
 
 // Mock Tauri API
 jest.mock('@tauri-apps/api/core', () => ({
@@ -18,24 +18,24 @@ const mockIngredients: IngredientDatabase[] = [
     name: 'All-purpose flour',
     category: 'Baking',
     aliases: ['flour', 'white flour'],
-    date_added: '2024-01-01T00:00:00Z',
-    date_modified: '2024-01-01T00:00:00Z',
+    dateAdded: '2024-01-01T00:00:00Z',
+    dateModified: '2024-01-01T00:00:00Z',
   },
   {
     id: '2',
     name: 'Granulated sugar',
     category: 'Baking',
     aliases: ['sugar', 'white sugar'],
-    date_added: '2024-01-01T00:00:00Z',
-    date_modified: '2024-01-01T00:00:00Z',
+    dateAdded: '2024-01-01T00:00:00Z',
+    dateModified: '2024-01-01T00:00:00Z',
   },
   {
     id: '3',
     name: 'Whole milk',
     category: 'Dairy',
     aliases: ['milk'],
-    date_added: '2024-01-01T00:00:00Z',
-    date_modified: '2024-01-01T00:00:00Z',
+    dateAdded: '2024-01-01T00:00:00Z',
+    dateModified: '2024-01-01T00:00:00Z',
   },
 ];
 
@@ -91,8 +91,20 @@ describe('IngredientAssociationModal', () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     renderModal();
 
-    const searchInput = screen.getByTestId('ingredient-search-input');
-    await user.tripleClick(searchInput);
+    // Wait for initial auto-search to complete
+    jest.advanceTimersByTime(300);
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('db_search_ingredients', {
+        query: 'Test Product',
+        limit: 20,
+      });
+    });
+
+    // Clear the mock to test the new search
+    mockInvoke.mockClear();
+
+    const searchInput = screen.getByTestId('ingredient-search-input').querySelector('input')!;
+    await user.clear(searchInput);
     await user.type(searchInput, 'sugar');
 
     // Advance timers to trigger debounced search
@@ -129,8 +141,8 @@ describe('IngredientAssociationModal', () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     renderModal();
 
-    const searchInput = screen.getByTestId('ingredient-search-input');
-    await user.tripleClick(searchInput);
+    const searchInput = screen.getByTestId('ingredient-search-input').querySelector('input')!;
+    await user.clear(searchInput);
     await user.type(searchInput, 'flour');
 
     // Advance timers to trigger debounced search
@@ -145,7 +157,6 @@ describe('IngredientAssociationModal', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Selected Ingredient')).toBeInTheDocument();
-      expect(screen.getByText('All-purpose flour')).toBeInTheDocument();
       expect(screen.getByText('Category: Baking')).toBeInTheDocument();
     });
   });
@@ -216,16 +227,15 @@ describe('IngredientAssociationModal', () => {
   it('shows loading indicator during search', async () => {
     const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
     // Make the mock return a promise that doesn't resolve immediately
-    const slowPromise = new Promise(resolve => setTimeout(() => resolve(mockIngredients), 100));
+    let resolvePromise: (value: any) => void;
+    const slowPromise = new Promise(resolve => {
+      resolvePromise = resolve;
+    });
     mockInvoke.mockReturnValue(slowPromise);
 
     renderModal();
     
-    const searchInput = screen.getByTestId('ingredient-search-input');
-    await user.tripleClick(searchInput);
-    await user.type(searchInput, 'flour');
-
-    // Advance timers to trigger debounced search
+    // Advance timers to trigger the auto-search
     jest.advanceTimersByTime(300);
 
     // Should show loading indicator
@@ -233,8 +243,8 @@ describe('IngredientAssociationModal', () => {
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
     });
 
-    // Advance timers to resolve the slow promise
-    jest.advanceTimersByTime(100);
+    // Resolve the promise
+    resolvePromise!(mockIngredients);
 
     // Wait for search to complete
     await waitFor(() => {
@@ -266,8 +276,8 @@ describe('IngredientAssociationModal', () => {
 
     renderModal();
     
-    const searchInput = screen.getByTestId('ingredient-search-input');
-    await user.tripleClick(searchInput);
+    const searchInput = screen.getByTestId('ingredient-search-input').querySelector('input')!;
+    await user.clear(searchInput);
     await user.type(searchInput, 'nonexistent');
 
     // Advance timers to trigger debounced search

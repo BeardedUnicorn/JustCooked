@@ -19,10 +19,14 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import { invoke } from '@tauri-apps/api/core';
 import { Product, ProductSearchResult, PantryItem } from '@app-types';
 import IngredientAssociationModal from './IngredientAssociationModal';
+import BarcodeScanner from './BarcodeScanner';
 import { IngredientAssociation } from '@app-types/productIngredientMapping';
 import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
 
@@ -56,6 +60,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
   const [expiryDate, setExpiryDate] = useState('');
   const [showIngredientModal, setShowIngredientModal] = useState(false);
   const [pendingPantryItem, setPendingPantryItem] = useState<PantryItem | null>(null);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
   // Debounced search
   useEffect(() => {
@@ -157,6 +162,29 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     }
   };
 
+  const handleBarcodeScanned = async (code: string) => {
+    setSearchQuery(code);
+    setShowBarcodeScanner(false);
+    
+    // Perform search with the scanned code
+    await performSearch(code);
+    
+    // If there's exactly one result, auto-select it
+    const result = await invoke<ProductSearchResult>('db_search_products', {
+      query: code.trim(),
+      limit: 10,
+    });
+    
+    const filteredProducts = result.products.filter(product =>
+      product.product_name &&
+      product.product_name.trim() !== ''
+    );
+    
+    if (filteredProducts.length === 1) {
+      setSelectedProduct(filteredProducts[0]);
+    }
+  };
+
   const handleClose = () => {
     setSearchQuery('');
     setSearchResults([]);
@@ -168,6 +196,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     setError(null);
     setShowIngredientModal(false);
     setPendingPantryItem(null);
+    setShowBarcodeScanner(false);
     onClose();
   };
 
@@ -186,6 +215,20 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
             margin="normal"
             placeholder="e.g., 123456789012, Coca Cola, Heinz"
             data-testid="product-search-input"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => setShowBarcodeScanner(true)}
+                    edge="end"
+                    aria-label="scan barcode"
+                    data-testid="barcode-scanner-button"
+                  >
+                    <QrCodeScannerIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
 
           {/* Loading Indicator */}
@@ -357,6 +400,13 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
         onClose={() => setShowIngredientModal(false)}
         onAssociate={handleIngredientAssociation}
         productName={selectedProduct?.product_name || ''}
+      />
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScanner
+        open={showBarcodeScanner}
+        onClose={() => setShowBarcodeScanner(false)}
+        onScan={handleBarcodeScanned}
       />
     </Dialog>
   );

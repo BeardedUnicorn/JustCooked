@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "core:window:default",
+    "core:webview:default",
     "fs:default",
     "fs:allow-write-text-file",
     "fs:allow-read-text-file",

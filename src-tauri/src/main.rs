@@ -17,7 +17,7 @@ use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
 use import_queue::{ImportQueue, ImportQueueStatus};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, Product, ProductSearchResult, ProductIngredientMapping};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, ProductSearchResult, ProductIngredientMapping};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -746,10 +746,6 @@ fn parse_enhanced_amount(amount_str: &str) -> f64 {
     }
 }
 
-/// Parse fraction strings to decimal (kept for backward compatibility)
-fn parse_fraction_to_decimal(amount_str: &str) -> f64 {
-    parse_enhanced_amount(amount_str)
-}
 
 /// Parse simple fractions like "1/2"
 fn parse_simple_fraction(fraction_str: &str) -> f64 {

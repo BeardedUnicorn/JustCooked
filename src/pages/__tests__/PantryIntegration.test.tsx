@@ -4,10 +4,12 @@ import '@testing-library/jest-dom';
 import Pantry from '../Pantry';
 import { PantryItem } from '@app-types';
 
-// Mock Tauri invoke
-const mockInvoke = jest.fn() as jest.MockedFunction<any>;
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: any[]) => mockInvoke(...args),
+// Mock pantryStorage service
+jest.mock('@services/pantryStorage', () => ({
+  getPantryItems: jest.fn(),
+  addPantryItem: jest.fn(),
+  updatePantryItem: jest.fn(),
+  deletePantryItem: jest.fn(),
 }));
 
 // Mock time utils
@@ -43,20 +45,63 @@ jest.mock('@services/recipeImport', () => ({
   formatAmountForDisplay: (amount: number) => amount.toString(),
 }));
 
+// Mock ProductIngredientMappingService
+jest.mock('@services/productIngredientMappingService', () => ({
+  ProductIngredientMappingService: {
+    getAllMappings: jest.fn(() => Promise.resolve([])),
+    createMapping: jest.fn(() => Promise.resolve()),
+  },
+}));
+
+// Mock IngredientAssociationModal
+jest.mock('@components/IngredientAssociationModal', () => {
+  return function MockIngredientAssociationModal({
+    open,
+    onClose,
+    onAssociate
+  }: {
+    open: boolean;
+    onClose: () => void;
+    onAssociate: (association: any) => void;
+  }) {
+    if (!open) return null;
+
+    return (
+      <div data-testid="ingredient-association-modal">
+        <button data-testid="close-ingredient-association" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    );
+  };
+});
+
 describe('Pantry Integration Tests - Bug Fix Verification', () => {
+  let mockGetPantryItems: jest.MockedFunction<any>;
+  let mockAddPantryItem: jest.MockedFunction<any>;
+  let mockUpdatePantryItem: jest.MockedFunction<any>;
+  let mockDeletePantryItem: jest.MockedFunction<any>;
+
   beforeEach(() => {
+    // Get the mocked functions
+    const pantryStorage = require('@services/pantryStorage');
+    mockGetPantryItems = pantryStorage.getPantryItems as jest.MockedFunction<any>;
+    mockAddPantryItem = pantryStorage.addPantryItem as jest.MockedFunction<any>;
+    mockUpdatePantryItem = pantryStorage.updatePantryItem as jest.MockedFunction<any>;
+    mockDeletePantryItem = pantryStorage.deletePantryItem as jest.MockedFunction<any>;
+    
     jest.clearAllMocks();
   });
 
   test('should call backend with correct data structure when adding pantry item', async () => {
     // Mock initial empty pantry
-    mockInvoke.mockResolvedValueOnce([]);
+    mockGetPantryItems.mockResolvedValue([]);
 
     render(<Pantry />);
 
     // Wait for initial load
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
+      expect(mockGetPantryItems).toHaveBeenCalled();
     });
 
     // Verify the page renders without errors
@@ -76,7 +121,7 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     };
 
     // Mock initial pantry with one item
-    mockInvoke.mockResolvedValueOnce([existingItem]);
+    mockGetPantryItems.mockResolvedValue([existingItem]);
 
     render(<Pantry />);
 
@@ -103,7 +148,7 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     };
 
     // Mock initial pantry with one item
-    mockInvoke.mockResolvedValueOnce([existingItem]);
+    mockGetPantryItems.mockResolvedValue([existingItem]);
 
     render(<Pantry />);
 
@@ -121,13 +166,13 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     // This is the core of the bug fix - ensuring data flows correctly between frontend and backend
 
     // Mock initial empty pantry
-    mockInvoke.mockResolvedValueOnce([]);
+    mockGetPantryItems.mockResolvedValue([]);
 
     render(<Pantry />);
 
     // Wait for initial load
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
+      expect(mockGetPantryItems).toHaveBeenCalled();
     });
 
     // Verify that the component renders without errors, indicating data structure compatibility
@@ -147,7 +192,7 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     };
 
     // Mock a second call that returns the backend item
-    mockInvoke.mockResolvedValueOnce([backendItem]);
+    mockGetPantryItems.mockResolvedValue([backendItem]);
 
     // Force a re-render by calling the component's effect again
     // In a real scenario, this would happen when the backend returns data
@@ -155,7 +200,7 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
 
     // Verify the backend item can be processed and displayed
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('db_get_all_pantry_items');
+      expect(mockGetPantryItems).toHaveBeenCalled();
     });
   });
 
@@ -191,7 +236,7 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     ];
 
     // Mock initial pantry with multiple items
-    mockInvoke.mockResolvedValueOnce(multipleItems);
+    mockGetPantryItems.mockResolvedValue(multipleItems);
 
     render(<Pantry />);
 
