@@ -1,15 +1,20 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
-import PantryManager from '@components/PantryManager';
-import { PantryItem } from '@app-types';
-import { mockPantryItems } from '@/__tests__/fixtures/recipes';
-import darkTheme from '@styles/theme';
+import PantryManager from '../PantryManager';
+import { PantryItem, ProductIngredientMapping } from '../../types';
+import { mockPantryItems } from '../../__tests__/fixtures/recipes';
+import darkTheme from '../../theme';
+import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
 
 // Mock the formatAmountForDisplay function
-jest.mock('@services/recipeImport', () => ({
+jest.mock('../../services/recipeImport', () => ({
   formatAmountForDisplay: jest.fn((amount: number) => amount.toString()),
 }));
+
+// Mock the ProductIngredientMappingService
+jest.mock('@services/productIngredientMappingService');
+const mockProductIngredientMappingService = ProductIngredientMappingService as jest.Mocked<typeof ProductIngredientMappingService>;
 
 // Mock crypto.randomUUID
 Object.defineProperty(global, 'crypto', {
@@ -35,9 +40,23 @@ const renderPantryManager = (items: PantryItem[] = mockPantryItems) => {
   );
 };
 
+// Mock ingredient mappings for testing
+const mockIngredientMappings: ProductIngredientMapping[] = [
+  {
+    id: 'mapping-1',
+    product_code: '123456789012',
+    ingredient_id: 'ingredient-1',
+    ingredient_name: 'All-purpose flour',
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  },
+];
+
 describe('PantryManager Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Set up default mock for ingredient mappings
+    mockProductIngredientMappingService.getAllMappings.mockResolvedValue(mockIngredientMappings);
   });
 
   describe('Rendering', () => {
@@ -78,12 +97,16 @@ describe('PantryManager Component', () => {
   });
 
   describe('Add Item Dialog', () => {
-    test('should open add dialog when add button is clicked', async () => {
+    test('should open add dialog when add manually menu item is clicked', async () => {
       const user = userEvent.setup();
       renderPantryManager();
 
       const addButton = screen.getByRole('button', { name: /add item/i });
       await user.click(addButton);
+
+      // Click "Add Manually" menu item
+      const addManuallyItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(addManuallyItem);
 
       expect(screen.getByText('Add Pantry Item')).toBeInTheDocument();
       expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
@@ -297,6 +320,79 @@ describe('PantryManager Component', () => {
     });
   });
 
+  describe('Ingredient Mapping', () => {
+    const itemsWithProductCodes: PantryItem[] = [
+      {
+        id: 'item-1',
+        name: 'All-Purpose Flour',
+        amount: 2,
+        unit: 'kg',
+        category: 'Baking',
+        productCode: '123456789012',
+        productName: 'King Arthur All-Purpose Flour',
+        brands: 'King Arthur',
+      },
+      {
+        id: 'item-2',
+        name: 'Organic Milk',
+        amount: 1,
+        unit: 'l',
+        category: 'Dairy',
+        // No productCode - should show "No ingredient mapped"
+      },
+    ];
+
+    test('should load ingredient mappings on component mount', async () => {
+      renderPantryManager(itemsWithProductCodes);
+
+      await waitFor(() => {
+        expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    test('should display ingredient mapping for items with product codes', async () => {
+      renderPantryManager(itemsWithProductCodes);
+
+      await waitFor(() => {
+        expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalled();
+      });
+
+      // Check that the ingredient mapping is displayed for the first item
+      const ingredientMapping1 = screen.getByTestId('pantry-item-item-1-ingredient-mapping');
+      expect(ingredientMapping1).toHaveTextContent('Ingredient: All-purpose flour');
+    });
+
+    test('should display "No ingredient mapped" for items without mappings', async () => {
+      renderPantryManager(itemsWithProductCodes);
+
+      await waitFor(() => {
+        expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalled();
+      });
+
+      // Check that "No ingredient mapped" is displayed for items without mappings
+      const ingredientMapping2 = screen.getByTestId('pantry-item-item-2-ingredient-mapping');
+      expect(ingredientMapping2).toHaveTextContent('Ingredient: No ingredient mapped');
+    });
+
+    test('should handle ingredient mapping service errors gracefully', async () => {
+      // Mock the service to throw an error
+      mockProductIngredientMappingService.getAllMappings.mockRejectedValue(new Error('Service error'));
+
+      renderPantryManager(itemsWithProductCodes);
+
+      await waitFor(() => {
+        expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalled();
+      });
+
+      // All items should show "No ingredient mapped" when service fails
+      const ingredientMapping1 = screen.getByTestId('pantry-item-item-1-ingredient-mapping');
+      expect(ingredientMapping1).toHaveTextContent('Ingredient: No ingredient mapped');
+
+      const ingredientMapping2 = screen.getByTestId('pantry-item-item-2-ingredient-mapping');
+      expect(ingredientMapping2).toHaveTextContent('Ingredient: No ingredient mapped');
+    });
+  });
+
   describe('Error Handling', () => {
     test('should handle empty items array', () => {
       expect(() => renderPantryManager([])).not.toThrow();
@@ -306,7 +402,7 @@ describe('PantryManager Component', () => {
       const itemsWithoutCategory = [
         { id: '1', name: 'Test', amount: 1, unit: 'piece', category: '' }
       ];
-      
+
       expect(() => renderPantryManager(itemsWithoutCategory)).not.toThrow();
     });
   });

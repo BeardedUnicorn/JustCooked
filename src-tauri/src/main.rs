@@ -17,7 +17,7 @@ use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
 use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
 use import_queue::{ImportQueue, ImportQueueStatus};
-use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem};
+use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, Product, ProductSearchResult, ProductIngredientMapping};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -76,6 +76,24 @@ struct FrontendMealPlan {
 struct FrontendMealPlanSettings {
     enabled_meal_types: Vec<String>,
     default_servings: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FrontendPantryItem {
+    id: String,
+    name: String,
+    amount: f64,
+    unit: String,
+    category: Option<String>,
+    expiry_date: Option<String>,
+    location: Option<String>,
+    notes: Option<String>,
+    date_added: Option<String>,
+    date_modified: Option<String>,
+    product_code: Option<String>,
+    product_name: Option<String>,
+    brands: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -421,18 +439,20 @@ async fn db_search_ingredients(app: tauri::AppHandle, query: String) -> Result<V
 #[tauri::command]
 async fn db_save_pantry_item(
     app: tauri::AppHandle,
-    item: PantryItem,
+    item: FrontendPantryItem,
 ) -> Result<(), String> {
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
-    db.save_pantry_item(&item).await.map_err(|e| e.to_string())?;
+    let db_item = convert_frontend_to_db_pantry_item(item);
+    db.save_pantry_item(&db_item).await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-async fn db_get_all_pantry_items(app: tauri::AppHandle) -> Result<Vec<PantryItem>, String> {
+async fn db_get_all_pantry_items(app: tauri::AppHandle) -> Result<Vec<FrontendPantryItem>, String> {
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     let items = db.get_all_pantry_items().await.map_err(|e| e.to_string())?;
-    Ok(items)
+    let frontend_items = items.into_iter().map(convert_db_to_frontend_pantry_item).collect();
+    Ok(frontend_items)
 }
 
 #[tauri::command]
@@ -440,6 +460,59 @@ async fn db_delete_pantry_item(app: tauri::AppHandle, id: String) -> Result<bool
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     let deleted = db.delete_pantry_item(&id).await.map_err(|e| e.to_string())?;
     Ok(deleted)
+}
+
+// Product search commands
+#[tauri::command]
+async fn db_search_products(
+    app: tauri::AppHandle,
+    query: String,
+    limit: i32,
+) -> Result<ProductSearchResult, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let result = db.search_products(&app, &query, limit).await.map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+// Product ingredient mapping commands
+#[tauri::command]
+async fn db_get_product_ingredient_mapping(
+    app: tauri::AppHandle,
+    product_code: String,
+) -> Result<Option<ProductIngredientMapping>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let mapping = db.get_product_ingredient_mapping(&product_code).await.map_err(|e| e.to_string())?;
+    Ok(mapping)
+}
+
+#[tauri::command]
+async fn db_create_product_ingredient_mapping(
+    app: tauri::AppHandle,
+    product_code: String,
+    ingredient_id: String,
+) -> Result<ProductIngredientMapping, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let mapping = db.create_product_ingredient_mapping(&product_code, &ingredient_id).await.map_err(|e| e.to_string())?;
+    Ok(mapping)
+}
+
+#[tauri::command]
+async fn db_delete_product_ingredient_mapping(
+    app: tauri::AppHandle,
+    product_code: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let deleted = db.delete_product_ingredient_mapping(&product_code).await.map_err(|e| e.to_string())?;
+    Ok(deleted)
+}
+
+#[tauri::command]
+async fn db_get_all_product_ingredient_mappings(
+    app: tauri::AppHandle,
+) -> Result<Vec<ProductIngredientMapping>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let mappings = db.get_all_product_ingredient_mappings().await.map_err(|e| e.to_string())?;
+    Ok(mappings)
 }
 
 // Recipe collection database commands
@@ -1520,6 +1593,155 @@ fn convert_db_to_frontend_shopping_list_item(db: ShoppingListItem) -> FrontendSh
     }
 }
 
+// Conversion functions for pantry items
+fn convert_frontend_to_db_pantry_item(frontend: FrontendPantryItem) -> PantryItem {
+    PantryItem {
+        id: frontend.id,
+        ingredient_name: frontend.name,
+        quantity: frontend.amount,
+        unit: frontend.unit,
+        category: frontend.category,
+        expiry_date: frontend.expiry_date,
+        location: frontend.location,
+        notes: frontend.notes,
+        date_added: frontend.date_added.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        date_modified: frontend.date_modified.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        product_code: frontend.product_code,
+        product_name: frontend.product_name,
+        brands: frontend.brands,
+    }
+}
+
+fn convert_db_to_frontend_pantry_item(db: PantryItem) -> FrontendPantryItem {
+    FrontendPantryItem {
+        id: db.id,
+        name: db.ingredient_name,
+        amount: db.quantity,
+        unit: db.unit,
+        category: db.category,
+        expiry_date: db.expiry_date,
+        location: db.location,
+        notes: db.notes,
+        date_added: Some(db.date_added),
+        date_modified: Some(db.date_modified),
+        product_code: db.product_code,
+        product_name: db.product_name,
+        brands: db.brands,
+    }
+}
+
+#[cfg(test)]
+mod pantry_conversion_tests {
+    use super::*;
+    use crate::database::PantryItem as DbPantryItem;
+
+    #[test]
+    fn test_frontend_to_db_conversion() {
+        let frontend_item = FrontendPantryItem {
+            id: "test-id".to_string(),
+            name: "Test Item".to_string(),
+            amount: 2.5,
+            unit: "cups".to_string(),
+            category: Some("baking".to_string()),
+            expiry_date: Some("2024-12-31".to_string()),
+            location: Some("pantry".to_string()),
+            notes: Some("test notes".to_string()),
+            date_added: Some("2024-01-01T00:00:00Z".to_string()),
+            date_modified: Some("2024-01-01T00:00:00Z".to_string()),
+            product_code: Some("123456789012".to_string()),
+            product_name: Some("Test Product".to_string()),
+            brands: Some("Test Brand".to_string()),
+        };
+
+        let db_item = convert_frontend_to_db_pantry_item(frontend_item);
+
+        assert_eq!(db_item.id, "test-id");
+        assert_eq!(db_item.ingredient_name, "Test Item");
+        assert_eq!(db_item.quantity, 2.5);
+        assert_eq!(db_item.unit, "cups");
+        assert_eq!(db_item.category, Some("baking".to_string()));
+        assert_eq!(db_item.expiry_date, Some("2024-12-31".to_string()));
+        assert_eq!(db_item.location, Some("pantry".to_string()));
+        assert_eq!(db_item.notes, Some("test notes".to_string()));
+        assert_eq!(db_item.date_added, "2024-01-01T00:00:00Z");
+        assert_eq!(db_item.date_modified, "2024-01-01T00:00:00Z");
+        assert_eq!(db_item.product_code, Some("123456789012".to_string()));
+        assert_eq!(db_item.product_name, Some("Test Product".to_string()));
+        assert_eq!(db_item.brands, Some("Test Brand".to_string()));
+    }
+
+    #[test]
+    fn test_db_to_frontend_conversion() {
+        let db_item = DbPantryItem {
+            id: "db-test-id".to_string(),
+            ingredient_name: "DB Test Item".to_string(),
+            quantity: 3.0,
+            unit: "lbs".to_string(),
+            category: Some("produce".to_string()),
+            expiry_date: Some("2024-06-30".to_string()),
+            location: Some("fridge".to_string()),
+            notes: Some("db test notes".to_string()),
+            date_added: "2024-01-01T00:00:00Z".to_string(),
+            date_modified: "2024-01-02T00:00:00Z".to_string(),
+            product_code: Some("987654321098".to_string()),
+            product_name: Some("DB Test Product".to_string()),
+            brands: Some("DB Test Brand".to_string()),
+        };
+
+        let frontend_item = convert_db_to_frontend_pantry_item(db_item);
+
+        assert_eq!(frontend_item.id, "db-test-id");
+        assert_eq!(frontend_item.name, "DB Test Item");
+        assert_eq!(frontend_item.amount, 3.0);
+        assert_eq!(frontend_item.unit, "lbs");
+        assert_eq!(frontend_item.category, Some("produce".to_string()));
+        assert_eq!(frontend_item.expiry_date, Some("2024-06-30".to_string()));
+        assert_eq!(frontend_item.location, Some("fridge".to_string()));
+        assert_eq!(frontend_item.notes, Some("db test notes".to_string()));
+        assert_eq!(frontend_item.date_added, Some("2024-01-01T00:00:00Z".to_string()));
+        assert_eq!(frontend_item.date_modified, Some("2024-01-02T00:00:00Z".to_string()));
+        assert_eq!(frontend_item.product_code, Some("987654321098".to_string()));
+        assert_eq!(frontend_item.product_name, Some("DB Test Product".to_string()));
+        assert_eq!(frontend_item.brands, Some("DB Test Brand".to_string()));
+    }
+
+    #[test]
+    fn test_round_trip_conversion() {
+        let original_frontend = FrontendPantryItem {
+            id: "round-trip-id".to_string(),
+            name: "Round Trip Item".to_string(),
+            amount: 1.25,
+            unit: "oz".to_string(),
+            category: Some("spices".to_string()),
+            expiry_date: Some("2025-01-01".to_string()),
+            location: Some("spice rack".to_string()),
+            notes: Some("round trip test".to_string()),
+            date_added: Some("2024-01-01T00:00:00Z".to_string()),
+            date_modified: Some("2024-01-01T00:00:00Z".to_string()),
+            product_code: Some("555666777888".to_string()),
+            product_name: Some("Round Trip Product".to_string()),
+            brands: Some("Round Trip Brand".to_string()),
+        };
+
+        // Convert to DB format and back
+        let db_item = convert_frontend_to_db_pantry_item(original_frontend.clone());
+        let converted_frontend = convert_db_to_frontend_pantry_item(db_item);
+
+        // Should be identical
+        assert_eq!(converted_frontend.id, original_frontend.id);
+        assert_eq!(converted_frontend.name, original_frontend.name);
+        assert_eq!(converted_frontend.amount, original_frontend.amount);
+        assert_eq!(converted_frontend.unit, original_frontend.unit);
+        assert_eq!(converted_frontend.category, original_frontend.category);
+        assert_eq!(converted_frontend.expiry_date, original_frontend.expiry_date);
+        assert_eq!(converted_frontend.location, original_frontend.location);
+        assert_eq!(converted_frontend.notes, original_frontend.notes);
+        assert_eq!(converted_frontend.product_code, original_frontend.product_code);
+        assert_eq!(converted_frontend.product_name, original_frontend.product_name);
+        assert_eq!(converted_frontend.brands, original_frontend.brands);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let batch_importers: BatchImporterMap = Arc::new(Mutex::new(HashMap::new()));
@@ -1586,6 +1808,11 @@ pub fn run() {
             db_save_pantry_item,
             db_get_all_pantry_items,
             db_delete_pantry_item,
+            db_search_products,
+            db_get_product_ingredient_mapping,
+            db_create_product_ingredient_mapping,
+            db_delete_product_ingredient_mapping,
+            db_get_all_product_ingredient_mappings,
             db_save_recipe_collection,
             db_get_all_recipe_collections,
             db_delete_recipe_collection,

@@ -64,11 +64,29 @@ pub struct PantryItem {
     pub ingredient_name: String,
     pub quantity: f64,
     pub unit: String,
+    pub category: Option<String>,
     pub expiry_date: Option<String>,
     pub location: Option<String>,
     pub notes: Option<String>,
     pub date_added: String,
     pub date_modified: String,
+    pub product_code: Option<String>,
+    pub product_name: Option<String>,
+    pub brands: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Product {
+    pub code: String,
+    pub url: String,
+    pub product_name: String,
+    pub brands: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductSearchResult {
+    pub products: Vec<Product>,
+    pub total: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +161,16 @@ pub struct ShoppingListItem {
     pub is_checked: bool,
     pub notes: Option<String>,
     pub date_created: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductIngredientMapping {
+    pub id: String,
+    pub product_code: String,
+    pub ingredient_id: String,
+    pub ingredient_name: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,13 +317,30 @@ impl Database {
                 location TEXT,
                 notes TEXT,
                 date_added TEXT NOT NULL,
-                date_modified TEXT NOT NULL
+                date_modified TEXT NOT NULL,
+                product_code TEXT,
+                product_name TEXT,
+                brands TEXT
             )
             "#,
         )
         .execute(&self.pool)
         .await
         .context("Failed to create pantry_items table")?;
+
+        // Add product columns to existing pantry_items table if they don't exist
+        let _ = sqlx::query("ALTER TABLE pantry_items ADD COLUMN product_code TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE pantry_items ADD COLUMN product_name TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE pantry_items ADD COLUMN brands TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE pantry_items ADD COLUMN category TEXT")
+            .execute(&self.pool)
+            .await;
 
         // Create recipe collections table
         sqlx::query(
@@ -404,6 +449,24 @@ impl Database {
         .execute(&self.pool)
         .await
         .context("Failed to create shopping_lists table")?;
+
+        // Create product ingredient mappings table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS product_ingredient_mappings (
+                id TEXT PRIMARY KEY,
+                product_code TEXT NOT NULL UNIQUE,
+                ingredient_id TEXT NOT NULL,
+                ingredient_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&self.pool)
+        .await
+        .context("Failed to create product_ingredient_mappings table")?;
 
         // Create shopping list items table
         sqlx::query(
@@ -1182,19 +1245,23 @@ impl Database {
         sqlx::query(
             r#"
             INSERT OR REPLACE INTO pantry_items (
-                id, ingredient_name, quantity, unit, expiry_date, location, notes, date_added, date_modified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, ingredient_name, quantity, unit, category, expiry_date, location, notes, date_added, date_modified, product_code, product_name, brands
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&item.id)
         .bind(&item.ingredient_name)
         .bind(item.quantity)
         .bind(&item.unit)
+        .bind(&item.category)
         .bind(&item.expiry_date)
         .bind(&item.location)
         .bind(&item.notes)
         .bind(item.date_added.clone())
         .bind(item.date_modified.clone())
+        .bind(&item.product_code)
+        .bind(&item.product_name)
+        .bind(&item.brands)
         .execute(&self.pool)
         .await
         .context("Failed to save pantry item")?;
@@ -1679,11 +1746,15 @@ impl Database {
             ingredient_name: row.get("ingredient_name"),
             quantity: row.get("quantity"),
             unit: row.get("unit"),
+            category: row.try_get("category").ok(),
             expiry_date: row.get("expiry_date"),
             location: row.get("location"),
             notes: row.get("notes"),
             date_added: row.get("date_added"),
             date_modified: row.get("date_modified"),
+            product_code: row.try_get("product_code").ok(),
+            product_name: row.try_get("product_name").ok(),
+            brands: row.try_get("brands").ok(),
         })
     }
 
@@ -2402,6 +2473,221 @@ impl Database {
             .context("Failed to delete shopping list item")?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    // Product search methods
+    pub async fn search_products(&self, app_handle: &AppHandle, query: &str, limit: i32) -> Result<ProductSearchResult> {
+        // Get the path to the products database
+        let products_db_path = self.get_products_db_path(app_handle).await?;
+        
+        // Connect to the products database
+        let products_pool = SqlitePool::connect(&format!("sqlite:{}", products_db_path.to_string_lossy()))
+            .await
+            .context("Failed to connect to products database")?;
+
+        let search_pattern = format!("%{}%", query);
+        let rows = sqlx::query(
+            r#"
+            SELECT code, url, product_name, brands FROM products 
+            WHERE code LIKE ? OR product_name LIKE ? OR brands LIKE ?
+            ORDER BY 
+                CASE 
+                    WHEN code = ? THEN 1
+                    WHEN product_name LIKE ? THEN 2
+                    WHEN brands LIKE ? THEN 3
+                    ELSE 4
+                END,
+                product_name
+            LIMIT ?
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(query)
+        .bind(&format!("{}%", query))
+        .bind(&format!("{}%", query))
+        .bind(limit)
+        .fetch_all(&products_pool)
+        .await
+        .context("Failed to search products")?;
+
+        let mut products = Vec::new();
+        for row in rows {
+            products.push(Product {
+                code: row.get("code"),
+                url: row.get("url"),
+                product_name: row.get("product_name"),
+                brands: row.get("brands"),
+            });
+        }
+
+        // Get total count for the search
+        let total: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM products 
+            WHERE code LIKE ? OR product_name LIKE ? OR brands LIKE ?
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .fetch_one(&products_pool)
+        .await
+        .context("Failed to get products count")?;
+
+        products_pool.close().await;
+
+        Ok(ProductSearchResult {
+            products,
+            total,
+        })
+    }
+
+    async fn get_products_db_path(&self, app_handle: &AppHandle) -> Result<std::path::PathBuf> {
+        // First try to get the bundled resource path
+        if let Ok(resource_path) = app_handle.path().resolve("resources/products.db", tauri::path::BaseDirectory::Resource) {
+            if resource_path.exists() {
+                return Ok(resource_path);
+            }
+        }
+
+        // Fallback to development path
+        let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+        let dev_path = current_dir.join("src-tauri/resources/products.db");
+        if dev_path.exists() {
+            return Ok(dev_path);
+        }
+
+        // Last fallback to original location
+        let original_path = current_dir.join("db/products.db");
+        if original_path.exists() {
+            return Ok(original_path);
+        }
+
+        Err(anyhow::anyhow!("Products database not found"))
+    }
+
+    // Product Ingredient Mapping methods
+    pub async fn get_product_ingredient_mapping(&self, product_code: &str) -> Result<Option<ProductIngredientMapping>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, product_code, ingredient_id, ingredient_name, created_at, updated_at
+            FROM product_ingredient_mappings
+            WHERE product_code = ?
+            "#,
+        )
+        .bind(product_code)
+        .fetch_optional(&self.pool)
+        .await
+        .context("Failed to get product ingredient mapping")?;
+
+        if let Some(row) = row {
+            let created_at = DateTime::parse_from_rfc3339(&row.get::<String, _>("created_at"))
+                .context("Failed to parse created_at")?
+                .with_timezone(&Utc);
+            let updated_at = DateTime::parse_from_rfc3339(&row.get::<String, _>("updated_at"))
+                .context("Failed to parse updated_at")?
+                .with_timezone(&Utc);
+
+            Ok(Some(ProductIngredientMapping {
+                id: row.get("id"),
+                product_code: row.get("product_code"),
+                ingredient_id: row.get("ingredient_id"),
+                ingredient_name: row.get("ingredient_name"),
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn create_product_ingredient_mapping(
+        &self,
+        product_code: &str,
+        ingredient_id: &str,
+    ) -> Result<ProductIngredientMapping> {
+        // First get the ingredient name
+        let ingredient_name: String = sqlx::query_scalar(
+            "SELECT name FROM ingredients WHERE id = ?"
+        )
+        .bind(ingredient_id)
+        .fetch_one(&self.pool)
+        .await
+        .context("Failed to get ingredient name")?;
+
+        let mapping = ProductIngredientMapping {
+            id: uuid::Uuid::new_v4().to_string(),
+            product_code: product_code.to_string(),
+            ingredient_id: ingredient_id.to_string(),
+            ingredient_name,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO product_ingredient_mappings (
+                id, product_code, ingredient_id, ingredient_name, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&mapping.id)
+        .bind(&mapping.product_code)
+        .bind(&mapping.ingredient_id)
+        .bind(&mapping.ingredient_name)
+        .bind(mapping.created_at.to_rfc3339())
+        .bind(mapping.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .context("Failed to create product ingredient mapping")?;
+
+        Ok(mapping)
+    }
+
+    pub async fn delete_product_ingredient_mapping(&self, product_code: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM product_ingredient_mappings WHERE product_code = ?")
+            .bind(product_code)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete product ingredient mapping")?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn get_all_product_ingredient_mappings(&self) -> Result<Vec<ProductIngredientMapping>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, product_code, ingredient_id, ingredient_name, created_at, updated_at
+            FROM product_ingredient_mappings
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to get all product ingredient mappings")?;
+
+        let mut mappings = Vec::new();
+        for row in rows {
+            let created_at = DateTime::parse_from_rfc3339(&row.get::<String, _>("created_at"))
+                .context("Failed to parse created_at")?
+                .with_timezone(&Utc);
+            let updated_at = DateTime::parse_from_rfc3339(&row.get::<String, _>("updated_at"))
+                .context("Failed to parse updated_at")?
+                .with_timezone(&Utc);
+
+            mappings.push(ProductIngredientMapping {
+                id: row.get("id"),
+                product_code: row.get("product_code"),
+                ingredient_id: row.get("ingredient_id"),
+                ingredient_name: row.get("ingredient_name"),
+                created_at,
+                updated_at,
+            });
+        }
+
+        Ok(mappings)
     }
 }
 

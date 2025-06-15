@@ -17,18 +17,39 @@ const Pantry: React.FC = () => {
   }, []);
 
   const handleAddItem = async (item: PantryItem) => {
-    await addPantryItem(item);
-    setItems([...items, item]);
+    try {
+      await addPantryItem(item);
+      // Reload items from backend to ensure consistency
+      const updatedItems = await getPantryItems();
+      setItems(updatedItems);
+    } catch (error) {
+      console.error('Failed to add pantry item:', error);
+      // Could add error handling/notification here
+    }
   };
 
   const handleUpdateItem = async (item: PantryItem) => {
-    await updatePantryItem(item);
-    setItems(items.map(i => i.id === item.id ? item : i));
+    try {
+      await updatePantryItem(item);
+      // Reload items from backend to ensure consistency
+      const updatedItems = await getPantryItems();
+      setItems(updatedItems);
+    } catch (error) {
+      console.error('Failed to update pantry item:', error);
+      // Could add error handling/notification here
+    }
   };
 
   const handleDeleteItem = async (id: string) => {
-    await deletePantryItem(id);
-    setItems(items.filter(i => i.id !== id));
+    try {
+      await deletePantryItem(id);
+      // Reload items from backend to ensure consistency
+      const updatedItems = await getPantryItems();
+      setItems(updatedItems);
+    } catch (error) {
+      console.error('Failed to delete pantry item:', error);
+      // Could add error handling/notification here
+    }
   };
 
   return (

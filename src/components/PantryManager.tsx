@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, Typography, TextField, Button, Grid, Paper, IconButton,
   List, ListItem, ListItemText, ListItemSecondaryAction, Dialog,
   DialogTitle, DialogContent, DialogActions, FormControl, InputLabel,
-  Select, MenuItem, Chip, Divider
+  Select, MenuItem, Chip, Divider, Menu
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { PantryItem } from '@app-types';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import { PantryItem, ProductIngredientMapping } from '@app-types';
 import { formatAmountForDisplay } from '@services/recipeImport';
+import ProductSearchModal from './ProductSearchModal';
+import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
 
 interface PantryManagerProps {
   items: PantryItem[];
@@ -30,12 +33,33 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                                                        items, onAddItem, onUpdateItem, onDeleteItem
                                                      }) => {
   const [open, setOpen] = useState(false);
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [addMenuAnchor, setAddMenuAnchor] = useState<null | HTMLElement>(null);
   const [editingItem, setEditingItem] = useState<PantryItem | null>(null);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState(0);
   const [unit, setUnit] = useState('piece(s)');
   const [category, setCategory] = useState('Other');
   const [expiryDate, setExpiryDate] = useState('');
+  const [ingredientMappings, setIngredientMappings] = useState<Map<string, string>>(new Map());
+
+  // Load ingredient mappings when component mounts
+  useEffect(() => {
+    const loadIngredientMappings = async () => {
+      try {
+        const mappings = await ProductIngredientMappingService.getAllMappings();
+        const mappingMap = new Map<string, string>();
+        mappings.forEach((mapping: ProductIngredientMapping) => {
+          mappingMap.set(mapping.product_code, mapping.ingredient_name);
+        });
+        setIngredientMappings(mappingMap);
+      } catch (error) {
+        console.error('Failed to load ingredient mappings:', error);
+      }
+    };
+
+    loadIngredientMappings();
+  }, []);
 
   // Group items by category
   const groupedItems = items.reduce((acc, item) => {
@@ -46,6 +70,35 @@ const PantryManager: React.FC<PantryManagerProps> = ({
     acc[itemCategory].push(item);
     return acc;
   }, {} as Record<string, PantryItem[]>);
+
+  // Helper function to refresh ingredient mappings
+  const refreshIngredientMappings = async () => {
+    try {
+      const mappings = await ProductIngredientMappingService.getAllMappings();
+      const mappingMap = new Map<string, string>();
+      mappings.forEach((mapping: ProductIngredientMapping) => {
+        mappingMap.set(mapping.product_code, mapping.ingredient_name);
+      });
+      setIngredientMappings(mappingMap);
+    } catch (error) {
+      console.error('Failed to refresh ingredient mappings:', error);
+    }
+  };
+
+  // Helper function to get ingredient mapping for a pantry item
+  const getIngredientMapping = (item: PantryItem): string | null => {
+    if (item.productCode && ingredientMappings.has(item.productCode)) {
+      return ingredientMappings.get(item.productCode) || null;
+    }
+    return null;
+  };
+
+  // Wrapper function to handle adding items and refreshing mappings
+  const handleAddItemWithMappingRefresh = async (item: PantryItem) => {
+    onAddItem(item);
+    // Refresh mappings after adding an item, in case it has a product code
+    await refreshIngredientMappings();
+  };
 
   const handleOpen = (item?: PantryItem) => {
     if (item) {
@@ -105,15 +158,43 @@ const PantryManager: React.FC<PantryManagerProps> = ({
         <Typography variant="h5" component="h2">
           Pantry Items
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpen()}
-          data-testid="pantry-add-item-button"
-        >
-          Add Item
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            endIcon={<ArrowDropDownIcon />}
+            onClick={(e) => setAddMenuAnchor(e.currentTarget)}
+            data-testid="pantry-add-item-button"
+          >
+            Add Item
+          </Button>
+          <Menu
+            anchorEl={addMenuAnchor}
+            open={Boolean(addMenuAnchor)}
+            onClose={() => setAddMenuAnchor(null)}
+            data-testid="pantry-add-menu"
+          >
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null);
+                setProductSearchOpen(true);
+              }}
+              data-testid="pantry-add-product-menu-item"
+            >
+              Search Products
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null);
+                handleOpen();
+              }}
+              data-testid="pantry-add-manual-menu-item"
+            >
+              Add Manually
+            </MenuItem>
+          </Menu>
+        </Box>
       </Box>
 
       {Object.entries(groupedItems).length > 0 ? (
@@ -126,38 +207,54 @@ const PantryManager: React.FC<PantryManagerProps> = ({
             </Box>
             <Divider />
             <List disablePadding>
-              {categoryItems.map((item) => (
-                <ListItem key={item.id} divider data-testid={`pantry-item-${item.id}`}>
-                  <ListItemText
-                    primary={item.name}
-                    secondary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                        <Chip
-                          size="small"
-                          label={item.unit && item.unit.trim() !== ''
-                            ? `${formatAmountForDisplay(item.amount)} ${item.unit}`
-                            : `${formatAmountForDisplay(item.amount)}`
-                          }
-                          sx={{ mr: 1 }}
-                        />
-                        {item.expiryDate && (
-                          <Typography variant="caption" color="text.secondary">
-                            Expires: {new Date(item.expiryDate).toLocaleDateString()}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={() => handleOpen(item)} size="small" aria-label="edit item" data-testid={`pantry-item-${item.id}-edit`}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small" aria-label="delete item" data-testid={`pantry-item-${item.id}-delete`}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
+              {categoryItems.map((item) => {
+                const ingredientMapping = getIngredientMapping(item);
+
+                return (
+                  <ListItem key={item.id} divider data-testid={`pantry-item-${item.id}`}>
+                    <ListItemText
+                      primary={item.name}
+                      secondary={
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Chip
+                              size="small"
+                              label={item.unit && item.unit.trim() !== ''
+                                ? `${formatAmountForDisplay(item.amount)} ${item.unit}`
+                                : `${formatAmountForDisplay(item.amount)}`
+                              }
+                              sx={{ mr: 1 }}
+                            />
+                            {item.expiryDate && (
+                              <Typography variant="caption" color="text.secondary">
+                                Expires: {new Date(item.expiryDate).toLocaleDateString()}
+                              </Typography>
+                            )}
+                          </Box>
+                          {/* Ingredient mapping display */}
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              data-testid={`pantry-item-${item.id}-ingredient-mapping`}
+                            >
+                              Ingredient: {ingredientMapping || 'No ingredient mapped'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      }
+                    />
+                    <ListItemSecondaryAction>
+                      <IconButton edge="end" onClick={() => handleOpen(item)} size="small" aria-label="edit item" data-testid={`pantry-item-${item.id}-edit`}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton edge="end" onClick={() => onDeleteItem(item.id)} size="small" aria-label="delete item" data-testid={`pantry-item-${item.id}-delete`}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                );
+              })}
             </List>
           </Paper>
         ))
@@ -168,6 +265,13 @@ const PantryManager: React.FC<PantryManagerProps> = ({
           </Typography>
         </Paper>
       )}
+
+      {/* Product Search Modal */}
+      <ProductSearchModal
+        open={productSearchOpen}
+        onClose={() => setProductSearchOpen(false)}
+        onAddProduct={handleAddItemWithMappingRefresh}
+      />
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth data-testid="pantry-item-dialog">

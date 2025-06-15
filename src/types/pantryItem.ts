@@ -9,4 +9,8 @@ export interface PantryItem {
   notes?: string;
   dateAdded?: string;
   dateModified?: string;
+  // Product information for items added via product search
+  productCode?: string;
+  productName?: string;
+  brands?: string;
 }

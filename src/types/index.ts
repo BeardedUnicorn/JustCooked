@@ -14,6 +14,10 @@ export type { StorageInfo } from './storageInfo';
 export type { PantryItem } from './pantryItem';
 export type { RecipeCollection } from './recipeCollection';
 
+// Product types
+export type { Product, ProductSearchResult } from './product';
+export type { ProductIngredientMapping, CreateProductIngredientMappingRequest, IngredientAssociation } from './productIngredientMapping';
+
 // Meal planning types
 export type { MealPlan, MealPlanRecipe, MealPlanSettings, MealType } from './mealPlan';
 export { MEAL_TYPES, DEFAULT_MEAL_PLAN_SETTINGS, getMealTypeDisplayName, getMealTypeOrder } from './mealPlan';
