@@ -27,6 +27,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Product, ProductSearchResult, PantryItem } from '@app-types';
 import IngredientAssociationModal from './IngredientAssociationModal';
 import BarcodeScanner from './BarcodeScanner';
+import CreateProductDialog, { CreateProductData } from './CreateProductDialog';
 import { IngredientAssociation } from '@app-types/productIngredientMapping';
 import { ProductIngredientMappingService } from '@services/productIngredientMappingService';
 
@@ -61,6 +62,8 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
   const [showIngredientModal, setShowIngredientModal] = useState(false);
   const [pendingPantryItem, setPendingPantryItem] = useState<PantryItem | null>(null);
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [showCreateProductDialog, setShowCreateProductDialog] = useState(false);
+  const [scannedUpcCode, setScannedUpcCode] = useState('');
 
   // Debounced search
   useEffect(() => {
@@ -169,7 +172,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     // Perform search with the scanned code
     await performSearch(code);
     
-    // If there's exactly one result, auto-select it
+    // Check if any products were found
     const result = await invoke<ProductSearchResult>('db_search_products', {
       query: code.trim(),
       limit: 10,
@@ -181,7 +184,55 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     );
     
     if (filteredProducts.length === 1) {
+      // Exactly one result found, auto-select it
       setSelectedProduct(filteredProducts[0]);
+    } else if (filteredProducts.length === 0) {
+      // No products found, check if the code looks like a UPC code
+      const isUpcCode = /^\d{8,14}$/.test(code.trim());
+      if (isUpcCode) {
+        // Show create product dialog for UPC codes
+        setScannedUpcCode(code.trim());
+        setShowCreateProductDialog(true);
+      }
+    }
+    // If multiple results found, let user choose from the list
+  };
+
+  const handleCreateProduct = async (productData: CreateProductData) => {
+    try {
+      // Create the product in the database
+      await invoke('db_create_product', {
+        product: {
+          code: productData.code,
+          url: '', // Empty URL for manually created products
+          product_name: productData.product_name,
+          brands: productData.brand,
+        }
+      });
+
+      // Create a Product object for the newly created product
+      const newProduct: Product = {
+        code: productData.code,
+        url: '',
+        product_name: productData.product_name,
+        brands: productData.brand,
+      };
+
+      // Auto-select the newly created product
+      setSelectedProduct(newProduct);
+      setShowCreateProductDialog(false);
+      setScannedUpcCode('');
+
+      // Set default category from the created product
+      setCategory(productData.category);
+
+      // Set expiration date if provided
+      if (productData.expiration_date) {
+        setExpiryDate(productData.expiration_date);
+      }
+    } catch (error) {
+      console.error('Failed to create product:', error);
+      setError('Failed to create product. Please try again.');
     }
   };
 
@@ -197,6 +248,8 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
     setShowIngredientModal(false);
     setPendingPantryItem(null);
     setShowBarcodeScanner(false);
+    setShowCreateProductDialog(false);
+    setScannedUpcCode('');
     onClose();
   };
 
@@ -407,6 +460,17 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
         open={showBarcodeScanner}
         onClose={() => setShowBarcodeScanner(false)}
         onScan={handleBarcodeScanned}
+      />
+
+      {/* Create Product Dialog */}
+      <CreateProductDialog
+        open={showCreateProductDialog}
+        onClose={() => {
+          setShowCreateProductDialog(false);
+          setScannedUpcCode('');
+        }}
+        onCreateProduct={handleCreateProduct}
+        upcCode={scannedUpcCode}
       />
     </Dialog>
   );

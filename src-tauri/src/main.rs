@@ -515,6 +515,16 @@ async fn db_get_all_product_ingredient_mappings(
     Ok(mappings)
 }
 
+#[tauri::command]
+async fn db_create_product(
+    app: tauri::AppHandle,
+    product: database::Product,
+) -> Result<(), String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.create_product(&app, &product).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // Recipe collection database commands
 #[tauri::command]
 async fn db_save_recipe_collection(
@@ -1809,6 +1819,7 @@ pub fn run() {
             db_create_product_ingredient_mapping,
             db_delete_product_ingredient_mapping,
             db_get_all_product_ingredient_mappings,
+            db_create_product,
             db_save_recipe_collection,
             db_get_all_recipe_collections,
             db_delete_recipe_collection,

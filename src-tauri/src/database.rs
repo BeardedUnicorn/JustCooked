@@ -2689,6 +2689,34 @@ impl Database {
 
         Ok(mappings)
     }
+
+    // Product creation methods
+    pub async fn create_product(&self, app_handle: &AppHandle, product: &Product) -> Result<()> {
+        // Get the path to the products database
+        let products_db_path = self.get_products_db_path(app_handle).await?;
+        
+        // Connect to the products database
+        let products_pool = SqlitePool::connect(&format!("sqlite:{}", products_db_path.to_string_lossy()))
+            .await
+            .context("Failed to connect to products database")?;
+
+        sqlx::query(
+            r#"
+            INSERT OR REPLACE INTO products (code, url, product_name, brands)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(&product.code)
+        .bind(&product.url)
+        .bind(&product.product_name)
+        .bind(&product.brands)
+        .execute(&products_pool)
+        .await
+        .context("Failed to create product")?;
+
+        products_pool.close().await;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
