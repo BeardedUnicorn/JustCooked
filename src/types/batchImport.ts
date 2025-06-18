@@ -74,7 +74,7 @@ export interface BatchImportConfig {
 }
 
 export const DEFAULT_BATCH_IMPORT_CONFIG: BatchImportConfig = {
-  maxConcurrentImports: 3,
+  maxConcurrentImports: 5, // Updated to match backend recipe import threading
   delayBetweenRequests: 1000, // 1 second
   retryAttempts: 2,
   skipExistingRecipes: true,

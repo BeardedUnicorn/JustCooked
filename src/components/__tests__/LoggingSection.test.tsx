@@ -21,7 +21,7 @@ Object.assign(navigator, {
   },
 });
 
-const mockLoggingManagementService = loggingManagementService as jest.Mocked<typeof loggingManagementService>;
+const mockLoggingManagementService = vi.mocked(loggingManagementService);
 
 const theme = createTheme();
 
@@ -37,7 +37,7 @@ describe('LoggingSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset clipboard mock
-    (navigator.clipboard.writeText as jest.Mock).mockResolvedValue(undefined);
+    vi.mocked(navigator.clipboard.writeText).mockResolvedValue(undefined);
   });
 
   it('renders logging section with correct title and description', async () => {
@@ -164,7 +164,7 @@ describe('LoggingSection', () => {
   it('handles error when copying to clipboard', async () => {
     const mockPath = '/Users/test/Library/Application Support/com.justcooked.app/logs';
     mockLoggingManagementService.getLogDirectoryPath.mockResolvedValue(mockPath);
-    (navigator.clipboard.writeText as jest.Mock).mockRejectedValue(new Error('Clipboard error'));
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValue(new Error('Clipboard error'));
 
     renderWithTheme(<LoggingSection />);
 

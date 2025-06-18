@@ -8,7 +8,7 @@ import {
 } from '../searchHistoryStorage';
 
 // Mock Tauri invoke
-const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));
@@ -42,7 +42,7 @@ describe('searchHistoryStorage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset crypto.randomUUID mock
-    (global.crypto.randomUUID as jest.Mock).mockReturnValue('test-uuid-123');
+    vi.mocked(global.crypto.randomUUID).mockReturnValue('550e8400-e29b-41d4-a716-446655440000');
   });
 
   describe('getRecentSearches', () => {

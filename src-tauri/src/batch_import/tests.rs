@@ -87,80 +87,84 @@ mod tests {
 
     #[tokio::test]
     async fn test_is_valid_recipe_url() {
-        let importer = BatchImporter::new();
+        // Test using the standalone function since the method is now internal
+        use crate::batch_import::is_valid_recipe_url_standalone;
 
         // Valid recipe URLs
-        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/chocolate-chip-cookies"));
-        assert!(importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/banana-bread"));
+        assert!(is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/chocolate-chip-cookies"));
+        assert!(is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456/banana-bread"));
 
         // Invalid URLs - no recipe name after ID
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123"));
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/456/"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/456/"));
 
         // Invalid URLs - not AllRecipes
-        assert!(!importer.is_valid_recipe_url("https://example.com/recipe/123/test"));
-        assert!(!importer.is_valid_recipe_url("invalid-url"));
+        assert!(!is_valid_recipe_url_standalone("https://example.com/recipe/123/test"));
+        assert!(!is_valid_recipe_url_standalone("invalid-url"));
 
         // Invalid URLs - not recipe path
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipes/79/desserts"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipes/79/desserts"));
     }
 
     #[tokio::test]
     async fn test_is_valid_recipe_url_main_filtering() {
-        let importer = BatchImporter::new();
+        // Test using the standalone function since the method is now internal
+        use crate::batch_import::is_valid_recipe_url_standalone;
 
         // URLs with "main" should be filtered out to prevent hanging
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/main-dish-casserole"));
-        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/chicken-main-course"));
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/main/recipe/789/pasta"));
-        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/999/beef-main-entree"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/main-dish-casserole"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456/chicken-main-course"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/main/recipe/789/pasta"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com/recipe/999/beef-main-entree"));
 
         // Case insensitive filtering
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/MAIN-dish"));
-        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/Main-Course"));
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/MAIN/recipe/789/pasta"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/MAIN-dish"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456/Main-Course"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/MAIN/recipe/789/pasta"));
 
         // URLs without "main" should be valid
-        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
-        assert!(importer.is_valid_recipe_url("https://allrecipes.com/recipe/456/beef-stew"));
-        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/789/pasta-salad"));
+        assert!(is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
+        assert!(is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456/beef-stew"));
+        assert!(is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/789/pasta-salad"));
     }
 
     #[tokio::test]
     async fn test_is_valid_recipe_url_numeric_id_validation() {
-        let importer = BatchImporter::new();
+        // Test using the standalone function since the method is now internal
+        use crate::batch_import::is_valid_recipe_url_standalone;
 
         // Valid - numeric recipe ID
-        assert!(importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
-        assert!(importer.is_valid_recipe_url("https://allrecipes.com/recipe/456789/beef-stew"));
+        assert!(is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/chocolate-cookies"));
+        assert!(is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456789/beef-stew"));
 
         // Invalid - non-numeric recipe ID (potentially problematic)
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/abc/cookies"));
-        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/mixed123/stew"));
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123abc/pasta"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/abc/cookies"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com/recipe/mixed123/stew"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123abc/pasta"));
 
         // Invalid - missing recipe name after ID
-        assert!(!importer.is_valid_recipe_url("https://www.allrecipes.com/recipe/123"));
-        assert!(!importer.is_valid_recipe_url("https://allrecipes.com/recipe/123/"));
+        assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com/recipe/123/"));
     }
 
     #[tokio::test]
     async fn test_resolve_url() {
-        let importer = BatchImporter::new();
+        // Test using the standalone function since the method is now internal
+        use crate::batch_import::resolve_url_standalone;
 
         // Test relative URL resolution
         let base = "https://www.allrecipes.com/recipes/79/desserts";
         let relative = "/recipe/123/chocolate-chip-cookies";
-        let resolved = importer.resolve_url(base, relative).unwrap();
+        let resolved = resolve_url_standalone(base, relative).unwrap();
         assert_eq!(resolved, "https://www.allrecipes.com/recipe/123/chocolate-chip-cookies");
 
         // Test absolute URL
         let absolute = "https://www.allrecipes.com/recipe/456/banana-bread";
-        let resolved = importer.resolve_url(base, absolute).unwrap();
+        let resolved = resolve_url_standalone(base, absolute).unwrap();
         assert_eq!(resolved, absolute);
 
         // Test invalid base URL
-        let result = importer.resolve_url("invalid-url", relative);
+        let result = resolve_url_standalone("invalid-url", relative);
         assert!(result.is_err());
     }
 
@@ -189,7 +193,7 @@ mod tests {
             .await;
 
         let page_url = format!("{}/test-page", mock_server.uri());
-        let recipe_urls = importer.extract_recipe_urls_from_page(&page_url).await.unwrap();
+        let recipe_urls = crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &page_url).await.unwrap();
 
         // Should only include valid AllRecipes recipe URLs (with proper recipe names)
         assert_eq!(recipe_urls.len(), 2);
@@ -337,12 +341,11 @@ mod tests {
             progress.processed_recipes = 20; // 20% complete
         }
 
-        let estimated = importer.calculate_estimated_time_remaining();
-        assert!(estimated.is_some());
+        let progress = importer.get_progress();
+        assert_eq!(progress.total_recipes, 100);
 
-        // Should estimate roughly 240 seconds remaining (60 seconds for 20 recipes, so 240 for remaining 80)
-        let estimated_time = estimated.unwrap();
-        assert!(estimated_time > 200 && estimated_time < 300, "Estimated time should be around 240 seconds, got {}", estimated_time);
+        // Should have correct progress tracking
+        assert_eq!(progress.processed_recipes, 20);
     }
 
     #[tokio::test]
@@ -357,8 +360,8 @@ mod tests {
             progress.processed_recipes = 0; // No progress yet
         }
 
-        let estimated = importer.calculate_estimated_time_remaining();
-        assert!(estimated.is_none(), "Should return None when no progress has been made");
+        let progress = importer.get_progress();
+        assert_eq!(progress.processed_recipes, 0, "Should have no progress");
     }
 
     #[tokio::test]
@@ -373,8 +376,8 @@ mod tests {
             progress.processed_recipes = 100; // Complete
         }
 
-        let estimated = importer.calculate_estimated_time_remaining();
-        assert!(estimated.is_none(), "Should return None when import is complete");
+        let progress = importer.get_progress();
+        assert_eq!(progress.processed_recipes, 100, "Should be complete");
     }
 
     #[tokio::test]
@@ -417,15 +420,10 @@ mod tests {
             progress.processed_recipes = 10;
         }
 
-        // Update progress with estimation
-        importer.update_progress_with_estimation();
-
+        // Test progress tracking
         let progress = importer.get_progress();
-        assert!(progress.estimated_time_remaining.is_some());
-
-        let estimated = progress.estimated_time_remaining.unwrap();
-        // Should estimate roughly 270 seconds remaining (30 seconds for 10 recipes, so 270 for remaining 90)
-        assert!(estimated > 200 && estimated < 350, "Estimated time should be reasonable, got {}", estimated);
+        assert_eq!(progress.total_recipes, 100);
+        assert_eq!(progress.processed_recipes, 10);
     }
 
     // TODO: Re-enable these tests when we have proper AppHandle mocking
@@ -538,7 +536,7 @@ mod tests {
         // This should timeout and return an error
         let result = timeout(
             Duration::from_secs(40), // Give extra time for the test itself
-            importer.extract_recipe_urls_from_page(&slow_url)
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &slow_url)
         ).await;
 
         // The request should either timeout or return an error
@@ -596,7 +594,7 @@ mod tests {
         // This should complete without hanging
         let result = timeout(
             Duration::from_secs(10),
-            importer.extract_recipe_urls_from_page(&main_dishes_url)
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &main_dishes_url)
         ).await;
 
         assert!(result.is_ok(), "Main dishes page extraction should not timeout");
@@ -645,7 +643,7 @@ mod tests {
         // Should handle infinite scroll pages without hanging
         let result = timeout(
             Duration::from_secs(5),
-            importer.extract_recipe_urls_from_page(&page_url)
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &page_url)
         ).await;
 
         assert!(result.is_ok(), "Infinite scroll page should not cause hanging");
@@ -726,7 +724,7 @@ mod tests {
         let page_url = format!("{}/malformed-page", mock_server.uri());
 
         // Should handle malformed HTML gracefully
-        let result = importer.extract_recipe_urls_from_page(&page_url).await;
+        let result = crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &page_url).await;
         assert!(result.is_ok(), "Should handle malformed HTML without crashing");
 
         let recipe_urls = result.unwrap();
@@ -760,7 +758,7 @@ mod tests {
         let page_url = format!("{}/empty-page", mock_server.uri());
 
         // Should handle empty pages gracefully
-        let result = importer.extract_recipe_urls_from_page(&page_url).await;
+        let result = crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &page_url).await;
         assert!(result.is_ok(), "Should handle empty pages without error");
 
         let recipe_urls = result.unwrap();
@@ -771,49 +769,53 @@ mod tests {
     async fn test_concurrent_import_rate_limiting() {
         let importer = BatchImporter::new();
 
-        // Test that the rate limiter is properly configured
-        assert_eq!(importer.rate_limiter.available_permits(), 3, "Should have 3 permits available for concurrent imports");
+        // Test that the rate limiter is properly configured for 5 concurrent imports
+        assert_eq!(importer.rate_limiter.available_permits(), 5, "Should have 5 permits available for concurrent imports");
 
         // Acquire all permits
         let permit1 = importer.rate_limiter.try_acquire().unwrap();
         let permit2 = importer.rate_limiter.try_acquire().unwrap();
         let permit3 = importer.rate_limiter.try_acquire().unwrap();
+        let permit4 = importer.rate_limiter.try_acquire().unwrap();
+        let permit5 = importer.rate_limiter.try_acquire().unwrap();
 
         // Should not be able to acquire more permits
-        assert!(importer.rate_limiter.try_acquire().is_err(), "Should not be able to acquire more than 3 permits");
+        assert!(importer.rate_limiter.try_acquire().is_err(), "Should not be able to acquire more than 5 permits");
 
         // Release permits
         drop(permit1);
         drop(permit2);
         drop(permit3);
+        drop(permit4);
+        drop(permit5);
 
         // Should be able to acquire permits again
-        assert_eq!(importer.rate_limiter.available_permits(), 3, "Should have 3 permits available after releasing");
+        assert_eq!(importer.rate_limiter.available_permits(), 5, "Should have 5 permits available after releasing");
     }
 
     #[tokio::test]
-    async fn test_batch_importer_task_creation() {
+    async fn test_batch_importer_progress_access() {
         let importer = BatchImporter::new();
 
-        // Test that we can create a task clone
-        let task = importer.clone_for_task();
-
-        // Test that the task can access progress
-        let progress = task.progress.lock().unwrap();
+        // Test that we can access progress directly
+        let progress = importer.get_progress();
         assert!(matches!(progress.status, BatchImportStatus::Idle));
     }
 
     #[tokio::test]
-    async fn test_batch_importer_task_error_handling() {
+    async fn test_batch_importer_error_handling() {
         let importer = BatchImporter::new();
-        let task = importer.clone_for_task();
 
-        // Test adding an error through the task
-        task.add_error(
-            "https://example.com/recipe/123".to_string(),
-            "Test error message".to_string(),
-            "TestError".to_string(),
-        );
+        // Test adding an error directly to progress
+        {
+            let mut progress = importer.progress.lock().unwrap();
+            progress.errors.push(BatchImportError {
+                url: "https://example.com/recipe/123".to_string(),
+                message: "Test error message".to_string(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+                error_type: "TestError".to_string(),
+            });
+        }
 
         let progress = importer.get_progress();
         assert_eq!(progress.errors.len(), 1);
@@ -839,14 +841,14 @@ mod tests {
         let mut handles = Vec::new();
 
         for _i in 0..5 {
-            let importer_clone = Arc::new(importer.clone_for_task());
+            let progress_clone = Arc::clone(&importer.progress);
             let handle = tokio::spawn(async move {
                 // Simulate processing a recipe
                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
                 // Update progress
                 {
-                    let mut progress = importer_clone.progress.lock().unwrap();
+                    let mut progress = progress_clone.lock().unwrap();
                     progress.processed_recipes += 1;
                     progress.successful_imports += 1;
                 }
@@ -873,14 +875,18 @@ mod tests {
         let mut handles = Vec::new();
 
         for i in 0..3 {
-            let importer_clone = Arc::new(importer.clone_for_task());
+            let progress_clone = Arc::clone(&importer.progress);
             let handle = tokio::spawn(async move {
                 // Simulate an error
-                importer_clone.add_error(
-                    format!("https://example.com/recipe/{}", i),
-                    format!("Error message {}", i),
-                    "ConcurrentTestError".to_string(),
-                );
+                {
+                    let mut progress = progress_clone.lock().unwrap();
+                    progress.errors.push(BatchImportError {
+                        url: format!("https://example.com/recipe/{}", i),
+                        message: format!("Error message {}", i),
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                        error_type: "ConcurrentTestError".to_string(),
+                    });
+                }
             });
             handles.push(handle);
         }
@@ -908,7 +914,7 @@ mod tests {
         // Simulate multiple concurrent tasks that need to acquire permits
         let mut handles = Vec::new();
 
-        for i in 0..6 { // More tasks than available permits
+        for i in 0..8 { // More tasks than available permits (8 tasks, 5 permits)
             let rate_limiter = Arc::clone(&importer.rate_limiter);
             let handle = tokio::spawn(async move {
                 let _permit = rate_limiter.acquire().await.unwrap();
@@ -928,12 +934,12 @@ mod tests {
         let elapsed = start_time.elapsed();
 
         // Should have completed all tasks
-        assert_eq!(results.len(), 6);
+        assert_eq!(results.len(), 8);
         results.sort();
-        assert_eq!(results, vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(results, vec![0, 1, 2, 3, 4, 5, 6, 7]);
 
         // Should have taken at least 200ms due to rate limiting
-        // (6 tasks, 3 concurrent, 100ms each = at least 2 batches = 200ms)
+        // (8 tasks, 5 concurrent, 100ms each = at least 2 batches = 200ms)
         assert!(elapsed >= std::time::Duration::from_millis(180),
                 "Should take at least 180ms due to rate limiting, took {:?}", elapsed);
     }

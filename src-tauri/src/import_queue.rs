@@ -56,6 +56,7 @@ pub struct ImportQueue {
     current_task: Arc<Mutex<Option<String>>>,
     is_processing: Arc<Mutex<bool>>,
     importers: Arc<Mutex<std::collections::HashMap<String, Arc<BatchImporter>>>>,
+    processing_started: Arc<Mutex<bool>>,
 }
 
 impl ImportQueue {
@@ -65,6 +66,7 @@ impl ImportQueue {
             current_task: Arc::new(Mutex::new(None)),
             is_processing: Arc::new(Mutex::new(false)),
             importers: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            processing_started: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -96,6 +98,17 @@ impl ImportQueue {
     }
 
     pub async fn process_queue(&self, app: tauri::AppHandle) {
+        // Check if processing has already been started
+        {
+            let mut started = self.processing_started.lock().unwrap();
+            if *started {
+                info!("Queue processing already started, skipping duplicate start request");
+                return;
+            }
+            *started = true;
+        }
+
+        info!("Starting queue processing for the first time");
         Self::process_queue_loop(
             self.tasks.clone(),
             self.current_task.clone(),
@@ -103,6 +116,13 @@ impl ImportQueue {
             self.importers.clone(),
             app,
         ).await;
+
+        // Reset the started flag when processing completes
+        {
+            let mut started = self.processing_started.lock().unwrap();
+            *started = false;
+        }
+        info!("Queue processing completed, reset started flag");
     }
 
     pub fn get_status(&self) -> ImportQueueStatus {
@@ -171,9 +191,28 @@ impl ImportQueue {
         importers: Arc<Mutex<std::collections::HashMap<String, Arc<BatchImporter>>>>,
         app: tauri::AppHandle,
     ) {
-        info!("Starting queue processing loop");
+        info!("=== STARTING QUEUE PROCESSING LOOP ===");
 
         loop {
+            // Debug: Check queue state
+            {
+                let tasks_guard = tasks.lock().unwrap();
+                let pending_count = tasks_guard.iter().filter(|t| t.status == ImportQueueTaskStatus::Pending).count();
+                let running_count = tasks_guard.iter().filter(|t| t.status == ImportQueueTaskStatus::Running).count();
+                let completed_count = tasks_guard.iter().filter(|t| t.status == ImportQueueTaskStatus::Completed).count();
+                let failed_count = tasks_guard.iter().filter(|t| t.status == ImportQueueTaskStatus::Failed).count();
+
+                info!("Queue state: {} pending, {} running, {} completed, {} failed",
+                      pending_count, running_count, completed_count, failed_count);
+
+                if pending_count > 0 {
+                    info!("Pending tasks:");
+                    for task in tasks_guard.iter().filter(|t| t.status == ImportQueueTaskStatus::Pending) {
+                        info!("  - {}: {}", task.id, task.description);
+                    }
+                }
+            }
+
             // Check if already processing - if so, wait and retry
             let is_currently_processing = {
                 let processing = is_processing.lock().unwrap();
@@ -192,6 +231,7 @@ impl ImportQueue {
                 tasks_guard.iter_mut()
                     .find(|task| task.status == ImportQueueTaskStatus::Pending)
                     .map(|task| {
+                        info!("Found pending task: {} - {}", task.id, task.description);
                         task.status = ImportQueueTaskStatus::Running;
                         task.started_at = Some(chrono::Utc::now().to_rfc3339());
                         task.clone()
@@ -223,6 +263,7 @@ impl ImportQueue {
             }
 
             // Execute the import with progress tracking
+            info!("Executing import task: {} - {}", task.id, task.description);
             let result = Self::execute_import_task_with_progress(
                 importer.clone(),
                 task.request.clone(),
@@ -239,14 +280,18 @@ impl ImportQueue {
                     task_mut.progress = Some(importer.get_progress());
 
                     match result {
-                        Ok(_) => {
+                        Ok(import_result) => {
                             task_mut.status = ImportQueueTaskStatus::Completed;
-                            info!("Queue task completed successfully: {}", task.id);
+                            info!("✓ Queue task {} completed successfully", task.id);
+                            info!("  - {} successful imports", import_result.successful_imports);
+                            info!("  - {} failed imports", import_result.failed_imports);
+                            info!("  - {} skipped recipes", import_result.skipped_recipes);
+                            info!("  - Duration: {}s", import_result.duration);
                         }
                         Err(e) => {
                             task_mut.status = ImportQueueTaskStatus::Failed;
                             task_mut.error = Some(e.clone());
-                            error!("Queue task failed: {} - {}", task.id, e);
+                            error!("✗ Queue task {} failed: {}", task.id, e);
                         }
                     }
                 }
@@ -337,4 +382,6 @@ impl ImportQueue {
                 .and_then(|task| task.progress.clone())
         }
     }
+
+
 }

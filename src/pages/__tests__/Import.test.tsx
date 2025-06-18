@@ -11,7 +11,7 @@ import importQueueReducer from '@store/slices/importQueueSlice';
 // Mock the recipe import service
 vi.mock('@services/recipeImport');
 
-const mockImportRecipeFromUrl = importRecipeFromUrl as vi.MockedFunction<typeof importRecipeFromUrl>;
+const mockImportRecipeFromUrl = vi.mocked(importRecipeFromUrl);
 
 // Mock useNavigate
 const mockNavigate = vi.fn();

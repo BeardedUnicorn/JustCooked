@@ -5,7 +5,7 @@ import * as pantryStorage from '@services/pantryStorage';
 
 // Mock the pantry storage service
 vi.mock('@services/pantryStorage');
-const mockGetPantryItems = pantryStorage.getPantryItems as vi.MockedFunction<typeof pantryStorage.getPantryItems>;
+const mockGetPantryItems = vi.mocked(pantryStorage.getPantryItems);
 
 const renderPantry = () => {
   return render(

@@ -5,6 +5,7 @@ import { autoDetectIngredients } from '@services/ingredientStorage';
 import { processRecipeImage } from '@services/imageService';
 import { createLogger } from '@services/loggingService';
 import {
+  parseIngredientsWithIngredientCrate,
   parseIngredients
 } from '@utils/ingredientUtils';
 import { isSupportedUrl } from '@utils/urlUtils';
@@ -77,8 +78,8 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
     );
     const decodedKeywords = decodeAllHtmlEntities(importedRecipe.keywords || '');
 
-    // Parse ingredients after decoding HTML entities
-    const parsedIngredients = parseIngredients(decodedIngredients);
+    // Parse ingredients after decoding HTML entities using ingredient crate parsing
+    const parsedIngredients = await parseIngredientsWithIngredientCrate(decodedIngredients);
 
     const recipe: Recipe = {
       id: crypto.randomUUID(),

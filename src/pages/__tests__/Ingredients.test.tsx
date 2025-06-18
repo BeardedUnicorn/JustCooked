@@ -6,8 +6,8 @@ import { IngredientDatabase } from '@app-types';
 
 // Mock the ingredient storage service
 vi.mock('@services/ingredientStorage');
-const mockLoadIngredients = ingredientStorage.loadIngredients as vi.MockedFunction<typeof ingredientStorage.loadIngredients>;
-const mockSearchIngredients = ingredientStorage.searchIngredients as vi.MockedFunction<typeof ingredientStorage.searchIngredients>;
+const mockLoadIngredients = vi.mocked(ingredientStorage.loadIngredients);
+const mockSearchIngredients = vi.mocked(ingredientStorage.searchIngredients);
 
 const renderIngredients = () => {
   return render(

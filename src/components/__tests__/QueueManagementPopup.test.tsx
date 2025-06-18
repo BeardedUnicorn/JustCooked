@@ -1,10 +1,10 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import QueueManagementPopup from '../QueueManagementPopup';
 import importQueueReducer from '@store/slices/importQueueSlice';
-import { ImportQueueTaskStatus, BatchImportStatus } from '@app-types';
+import { ImportQueueTaskStatus } from '@app-types';
+import { vi, describe, test, expect, beforeEach } from 'vitest';
 
 // Mock the importQueueService
 vi.mock('@services/importQueue', () => ({

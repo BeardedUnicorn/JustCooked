@@ -9,31 +9,44 @@ import { getCurrentTimestamp } from '@utils/timeUtils';
 // Save a recipe
 export async function saveRecipe(recipe: Recipe): Promise<void> {
   try {
-    // Convert frontend Recipe to the format expected by Tauri command
+    // Validate required fields
+    if (!recipe.sourceUrl) {
+      throw new Error('Recipe sourceUrl is required');
+    }
+    if (!recipe.dateAdded) {
+      throw new Error('Recipe dateAdded is required');
+    }
+    if (!recipe.dateModified) {
+      throw new Error('Recipe dateModified is required');
+    }
+
+    // The Tauri FrontendRecipe struct expects camelCase fields due to #[serde(rename_all = "camelCase")]
+    // So we should send the recipe object directly without field name conversion
     const frontendRecipe = {
       id: recipe.id,
       title: recipe.title,
       description: recipe.description,
       image: recipe.image,
-      source_url: recipe.sourceUrl,
-      prep_time: recipe.prepTime,
-      cook_time: recipe.cookTime,
-      total_time: recipe.totalTime,
+      sourceUrl: recipe.sourceUrl, // Keep camelCase for Tauri serde
+      prepTime: recipe.prepTime,
+      cookTime: recipe.cookTime,
+      totalTime: recipe.totalTime,
       servings: recipe.servings,
       ingredients: recipe.ingredients.map(ing => ({
         name: ing.name,
         amount: ing.amount,
         unit: ing.unit,
+        section: ing.section, // Include section for grouped ingredients
       })),
       instructions: recipe.instructions,
       tags: recipe.tags,
-      date_added: recipe.dateAdded,
-      date_modified: recipe.dateModified,
+      dateAdded: recipe.dateAdded,
+      dateModified: recipe.dateModified,
       rating: recipe.rating,
       difficulty: recipe.difficulty,
-      is_favorite: recipe.isFavorite,
-      personal_notes: recipe.personalNotes,
-      collections: recipe.collections,
+      isFavorite: recipe.isFavorite,
+      personalNotes: recipe.personalNotes,
+      collections: recipe.collections || [], // Ensure collections is always an array
     };
 
     await invoke('db_save_recipe', { recipe: frontendRecipe });

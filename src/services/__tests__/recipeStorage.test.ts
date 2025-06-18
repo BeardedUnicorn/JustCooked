@@ -106,21 +106,26 @@ describe('recipeStorage', () => {
           title: mockRecipe.title,
           description: mockRecipe.description,
           image: mockRecipe.image,
-          source_url: mockRecipe.sourceUrl,
-          prep_time: mockRecipe.prepTime,
-          cook_time: mockRecipe.cookTime,
-          total_time: mockRecipe.totalTime,
+          sourceUrl: mockRecipe.sourceUrl, // camelCase for Tauri serde
+          prepTime: mockRecipe.prepTime,
+          cookTime: mockRecipe.cookTime,
+          totalTime: mockRecipe.totalTime,
           servings: mockRecipe.servings,
-          ingredients: mockRecipe.ingredients,
+          ingredients: mockRecipe.ingredients.map(ing => ({
+            name: ing.name,
+            amount: ing.amount,
+            unit: ing.unit,
+            section: ing.section, // Include section field
+          })),
           instructions: mockRecipe.instructions,
           tags: mockRecipe.tags,
-          date_added: mockRecipe.dateAdded,
-          date_modified: mockRecipe.dateModified,
+          dateAdded: mockRecipe.dateAdded, // camelCase for Tauri serde
+          dateModified: mockRecipe.dateModified, // camelCase for Tauri serde
           rating: mockRecipe.rating,
           difficulty: mockRecipe.difficulty,
-          is_favorite: mockRecipe.isFavorite,
-          personal_notes: mockRecipe.personalNotes,
-          collections: mockRecipe.collections,
+          isFavorite: mockRecipe.isFavorite, // camelCase for Tauri serde
+          personalNotes: mockRecipe.personalNotes, // camelCase for Tauri serde
+          collections: mockRecipe.collections || [],
         },
       });
     });
@@ -199,7 +204,7 @@ describe('recipeStorage', () => {
       expect(mockInvoke).toHaveBeenCalledWith('db_save_recipe', {
         recipe: expect.objectContaining({
           id: mockRecipe.id,
-          date_modified: '2024-01-15T10:30:00.000Z',
+          dateModified: '2024-01-15T10:30:00.000Z', // camelCase for Tauri serde
         }),
       });
     });

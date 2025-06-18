@@ -12,7 +12,7 @@ import { mockStoredImage } from '@/__tests__/fixtures/recipes';
 // Mock the dependencies
 vi.mock('@tauri-apps/api/core');
 
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 describe('imageService', () => {
   beforeEach(() => {

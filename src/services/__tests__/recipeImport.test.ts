@@ -1,7 +1,7 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { importRecipeFromUrl } from '@services/recipeImport';
-import { formatIngredientForDisplay } from '@utils/ingredientUtils';
+import { formatIngredientForDisplay, parseIngredientsWithKalosm } from '@utils/ingredientUtils';
 import { saveRecipe } from '@services/recipeStorage';
 import { autoDetectIngredients } from '@services/ingredientStorage';
 import { processRecipeImage } from '@services/imageService';
@@ -37,8 +37,14 @@ vi.mock('@utils/urlUtils', () => ({
   isValidImageUrl: vi.fn(() => true),
 }));
 
-// Don't mock ingredientUtils since we want to test formatIngredientForDisplay
-// vi.mock('@utils/ingredientUtils');
+// Mock ingredientUtils but keep formatIngredientForDisplay unmocked
+vi.mock('@utils/ingredientUtils', async () => {
+  const actual = await vi.importActual('@utils/ingredientUtils');
+  return {
+    ...actual,
+    parseIngredientsWithKalosm: vi.fn(),
+  };
+});
 
 // Mock logging service
 vi.mock('@services/loggingService', () => ({
@@ -52,10 +58,11 @@ vi.mock('@services/loggingService', () => ({
   })),
 }));
 
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
-const mockSaveRecipe = saveRecipe as vi.MockedFunction<typeof saveRecipe>;
-const mockAutoDetectIngredients = autoDetectIngredients as vi.MockedFunction<typeof autoDetectIngredients>;
-const mockProcessRecipeImage = processRecipeImage as vi.MockedFunction<typeof processRecipeImage>;
+const mockInvoke = vi.mocked(invoke);
+const mockSaveRecipe = vi.mocked(saveRecipe);
+const mockAutoDetectIngredients = vi.mocked(autoDetectIngredients);
+const mockProcessRecipeImage = vi.mocked(processRecipeImage);
+const mockParseIngredientsWithKalosm = vi.mocked(parseIngredientsWithKalosm);
 
 describe('recipeImport', () => {
   beforeEach(() => {
@@ -94,8 +101,17 @@ describe('recipeImport', () => {
       // Common mocks for successful import
       mockInvoke.mockResolvedValue(mockImportedRecipe);
       mockProcessRecipeImage.mockResolvedValue('processed-image-url');
-      mockAutoDetectIngredients.mockReturnValue([]);
+      mockAutoDetectIngredients.mockResolvedValue([]);
       mockSaveRecipe.mockResolvedValue();
+
+      // Mock the Kalosm ingredient parsing to return parsed ingredients
+      mockParseIngredientsWithKalosm.mockResolvedValue([
+        { name: 'all-purpose flour', amount: 2, unit: 'cups' },
+        { name: 'granulated sugar', amount: 1, unit: 'cup' },
+        { name: 'eggs', amount: 2, unit: '' },
+        { name: 'milk', amount: 0.5, unit: 'cup' },
+        { name: 'butter', amount: 0.25, unit: 'cup' },
+      ]);
     });
 
     test('should successfully import a recipe from supported URL', async () => {
@@ -202,6 +218,9 @@ describe('recipeImport', () => {
         ...mockImportedRecipe,
         ingredients: [],
       });
+
+      // Mock empty ingredient parsing result
+      mockParseIngredientsWithKalosm.mockResolvedValue([]);
 
       await importRecipeFromUrl(url);
 

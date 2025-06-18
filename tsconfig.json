@@ -43,7 +43,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src", "vite.config.ts"],
+  "include": ["src"],
   "exclude": ["src/jest-setup.ts", "src/jest-globals.js"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -1449,7 +1449,7 @@ impl Database {
         }
     }
 
-    fn clean_ingredient_name(&self, name: &str) -> String {
+    pub fn clean_ingredient_name(&self, name: &str) -> String {
         let mut cleaned = name.trim().to_string();
 
         // Remove preparation instructions after commas first
@@ -1521,7 +1521,7 @@ impl Database {
         }
     }
 
-    fn detect_ingredient_category(&self, name: &str) -> String {
+    pub fn detect_ingredient_category(&self, name: &str) -> String {
         let name_lower = name.to_lowercase();
 
         // Vegetables

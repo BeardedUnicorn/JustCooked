@@ -9,11 +9,11 @@ vi.mock('@tauri-apps/api/core');
 vi.mock('@tauri-apps/plugin-dialog');
 vi.mock('@tauri-apps/plugin-fs');
 
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
-const mockSave = save as vi.MockedFunction<typeof save>;
-const mockOpen = open as vi.MockedFunction<typeof open>;
-const mockWriteTextFile = writeTextFile as vi.MockedFunction<typeof writeTextFile>;
-const mockReadTextFile = readTextFile as vi.MockedFunction<typeof readTextFile>;
+const mockInvoke = vi.mocked(invoke);
+const mockSave = vi.mocked(save);
+const mockOpen = vi.mocked(open);
+const mockWriteTextFile = vi.mocked(writeTextFile);
+const mockReadTextFile = vi.mocked(readTextFile);
 
 describe('DatabaseManagementService', () => {
   let service: DatabaseManagementService;
@@ -185,7 +185,7 @@ describe('DatabaseManagementService', () => {
 
   describe('resetDatabase', () => {
     it('resets database successfully', async () => {
-      mockInvoke.mockResolvedValue();
+      mockInvoke.mockResolvedValue(undefined);
 
       await service.resetDatabase();
 

@@ -5,11 +5,11 @@ import { getExistingRecipeUrls } from '../recipeStorage';
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 // Mock recipe storage
 vi.mock('../recipeStorage');
-const mockGetExistingRecipeUrls = getExistingRecipeUrls as vi.MockedFunction<typeof getExistingRecipeUrls>;
+const mockGetExistingRecipeUrls = vi.mocked(getExistingRecipeUrls);
 
 // Mock logging service
 vi.mock('../loggingService', () => ({

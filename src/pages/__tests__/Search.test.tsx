@@ -19,12 +19,12 @@ vi.mock('../../components/RecipeCard', () => ({
   ),
 }));
 
-const mockGetRecipesPaginated = recipeStorage.getRecipesPaginated as vi.MockedFunction<typeof recipeStorage.getRecipesPaginated>;
-const mockGetRecipeCount = recipeStorage.getRecipeCount as vi.MockedFunction<typeof recipeStorage.getRecipeCount>;
-const mockSearchRecipesPaginated = recipeStorage.searchRecipesPaginated as vi.MockedFunction<typeof recipeStorage.searchRecipesPaginated>;
-const mockGetSearchRecipesCount = recipeStorage.getSearchRecipesCount as vi.MockedFunction<typeof recipeStorage.getSearchRecipesCount>;
-const mockGetRecentSearches = searchHistoryStorage.getRecentSearches as vi.MockedFunction<typeof searchHistoryStorage.getRecentSearches>;
-const mockSaveSearch = searchHistoryStorage.saveSearch as vi.MockedFunction<typeof searchHistoryStorage.saveSearch>;
+const mockGetRecipesPaginated = vi.mocked(recipeStorage.getRecipesPaginated);
+const mockGetRecipeCount = vi.mocked(recipeStorage.getRecipeCount);
+const mockSearchRecipesPaginated = vi.mocked(recipeStorage.searchRecipesPaginated);
+const mockGetSearchRecipesCount = vi.mocked(recipeStorage.getSearchRecipesCount);
+const mockGetRecentSearches = vi.mocked(searchHistoryStorage.getRecentSearches);
+const mockSaveSearch = vi.mocked(searchHistoryStorage.saveSearch);
 
 const mockRecipes = [
   { id: '1', title: 'Chocolate Cake', description: 'A rich chocolate cake', tags: ['dessert', 'chocolate'], dateAdded: '2024-01-02T10:00:00Z', rating: 4.5, difficulty: 'Medium', ingredients: [{name: 'chocolate', amount: 1, unit: 'cup'}], instructions: [] },

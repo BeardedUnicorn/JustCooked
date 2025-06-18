@@ -1,6 +1,23 @@
-# Tauri + React + Typescript
+# JustCooked - Recipe Management Application
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A modern digital cookbook application built with Tauri, React, and TypeScript. JustCooked helps you import, organize, and manage your recipes with advanced ingredient parsing and local storage.
+
+## Features
+
+- **Recipe Import**: Import recipes from popular cooking websites
+- **Smart Ingredient Parsing**: Advanced ingredient parsing using the ingredient crate with regex fallback
+- **Local Storage**: All data stored locally using SQLite
+- **Image Management**: Local image storage and optimization
+- **Search & Filter**: Advanced recipe search and filtering capabilities
+- **Responsive Design**: Works on desktop and mobile devices
+- **Dark/Light Theme**: Toggle between dark and light themes
+
+## Technology Stack
+
+- **Frontend**: React + TypeScript + Material-UI
+- **Backend**: Rust + Tauri
+- **Database**: SQLite
+- **Ingredient Parsing**: [ingredient crate](https://github.com/nickysemenza/ingredient-parser)
 
 ## Recommended IDE Setup
 

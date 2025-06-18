@@ -3,10 +3,23 @@ import { IngredientDatabase, IngredientSearchResult } from '@app-types';
 import { cleanIngredientName, detectIngredientCategory } from '@utils/ingredientUtils';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
+// Helper function to convert Tauri ingredient format to frontend format
+function convertTauriToFrontendIngredient(tauriIngredient: any): IngredientDatabase {
+  return {
+    id: tauriIngredient.id,
+    name: tauriIngredient.name,
+    category: tauriIngredient.category,
+    aliases: tauriIngredient.aliases,
+    dateAdded: tauriIngredient.date_added, // Convert snake_case to camelCase
+    dateModified: tauriIngredient.date_modified, // Convert snake_case to camelCase
+  };
+}
+
 // Load ingredients from database
 export async function loadIngredients(): Promise<IngredientDatabase[]> {
   try {
-    return await invoke<IngredientDatabase[]>('db_get_all_ingredients');
+    const tauriIngredients = await invoke<any[]>('db_get_all_ingredients');
+    return tauriIngredients.map(convertTauriToFrontendIngredient);
   } catch (error) {
     console.error('Failed to load ingredients:', error);
     return [];
@@ -16,7 +29,25 @@ export async function loadIngredients(): Promise<IngredientDatabase[]> {
 // Save ingredient to database
 export async function saveIngredient(ingredient: IngredientDatabase): Promise<void> {
   try {
-    await invoke('db_save_ingredient', { ingredient });
+    // Validate required fields
+    if (!ingredient.dateAdded) {
+      throw new Error('Ingredient dateAdded is required');
+    }
+    if (!ingredient.dateModified) {
+      throw new Error('Ingredient dateModified is required');
+    }
+
+    // Convert frontend IngredientDatabase to the format expected by Tauri command
+    const tauriIngredient = {
+      id: ingredient.id,
+      name: ingredient.name,
+      category: ingredient.category,
+      aliases: ingredient.aliases,
+      date_added: ingredient.dateAdded, // Convert camelCase to snake_case
+      date_modified: ingredient.dateModified, // Convert camelCase to snake_case
+    };
+
+    await invoke('db_save_ingredient', { ingredient: tauriIngredient });
   } catch (error) {
     console.error('Failed to save ingredient:', error);
     throw error;
@@ -41,17 +72,17 @@ export async function updateIngredient(id: string, updates: Partial<IngredientDa
   try {
     const ingredients = await loadIngredients();
     const existing = ingredients.find(ing => ing.id === id);
-    
+
     if (!existing) {
       return null;
     }
-    
+
     const updated: IngredientDatabase = {
       ...existing,
       ...updates,
       dateModified: getCurrentTimestamp(),
     };
-    
+
     await saveIngredient(updated);
     return updated;
   } catch (error) {
@@ -73,8 +104,9 @@ export async function deleteIngredient(id: string): Promise<boolean> {
 // Search ingredients by name (fuzzy search)
 export async function searchIngredients(query: string): Promise<IngredientSearchResult[]> {
   try {
-    const ingredients = await invoke<IngredientDatabase[]>('db_search_ingredients', { query });
-    
+    const tauriIngredients = await invoke<any[]>('db_search_ingredients', { query });
+    const ingredients = tauriIngredients.map(convertTauriToFrontendIngredient);
+
     // Convert to search results with scoring
     const results: IngredientSearchResult[] = ingredients.map(ingredient => {
       const normalizedQuery = query.toLowerCase().trim();

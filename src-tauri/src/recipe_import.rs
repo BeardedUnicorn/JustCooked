@@ -35,13 +35,13 @@ impl std::error::Error for RecipeImportError {}
 
 #[instrument(skip_all, fields(url = %url))]
 pub async fn import_recipe_from_url(url: &str) -> Result<ImportedRecipe, RecipeImportError> {
-    debug!("Starting recipe import from URL: {}", url);
+    info!("Starting recipe import from URL: {}", url);
 
     // Validate URL
     let parsed_url = Url::parse(url).map_err(|e| {
         error!("Invalid URL format for {}: {}", url, e);
         RecipeImportError {
-            message: "Invalid URL format".to_string(),
+            message: format!("Invalid URL format: {}", e),
             error_type: "ValidationError".to_string(),
         }
     })?;

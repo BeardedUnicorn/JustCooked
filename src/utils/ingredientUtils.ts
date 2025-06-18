@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { Ingredient, INGREDIENT_CATEGORIES } from '@app-types';
 
 /**
@@ -23,7 +24,24 @@ export function shouldUseEmptyUnit(ingredientName: string): boolean {
   );
 }
 
-// Parse ingredients from array of strings
+// Parse ingredients from array of strings using the ingredient crate with fallback
+export async function parseIngredientsWithIngredientCrate(ingredientStrings: string[]): Promise<Ingredient[]> {
+  try {
+    const parsedIngredients = await invoke<Ingredient[]>('parse_ingredients_with_ingredient_crate_command', {
+      ingredients: ingredientStrings
+    });
+    return parsedIngredients;
+  } catch (error) {
+    console.warn('Ingredient crate parsing failed, falling back to regex parsing:', error);
+    // Fallback to regex parsing
+    return ingredientStrings.map(item => parseIngredient(item));
+  }
+}
+
+// Alias for backward compatibility
+export const parseIngredientsWithKalosm = parseIngredientsWithIngredientCrate;
+
+// Parse ingredients from array of strings (legacy regex-based parsing)
 export function parseIngredients(ingredientStrings: string[]): Ingredient[] {
   return ingredientStrings.map(item => parseIngredient(item));
 }

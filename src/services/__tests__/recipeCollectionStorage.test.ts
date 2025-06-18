@@ -10,7 +10,7 @@ import {
 } from '../recipeCollectionStorage';
 
 // Mock Tauri invoke
-const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));
@@ -38,7 +38,7 @@ describe('recipeCollectionStorage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset crypto.randomUUID mock
-    (global.crypto.randomUUID as jest.Mock).mockReturnValue('test-uuid-123');
+    vi.mocked(global.crypto.randomUUID).mockReturnValue('550e8400-e29b-41d4-a716-446655440000');
   });
 
   describe('getAllCollections', () => {
@@ -202,8 +202,9 @@ describe('recipeCollectionStorage', () => {
       });
       
       // Verify that recipe-1 was removed
-      const saveCall = mockInvoke.mock.calls.find(call => call[0] === 'db_save_recipe_collection');
-      expect(saveCall[1].collection.recipeIds).not.toContain('recipe-1');
+      const saveCall = mockInvoke.mock.calls.find((call: any) => call[0] === 'db_save_recipe_collection');
+      expect(saveCall).toBeDefined();
+      expect((saveCall as any)[1].collection.recipeIds).not.toContain('recipe-1');
     });
 
     test('should handle non-existent collection', async () => {

@@ -11,7 +11,7 @@ import {
 import { mockIngredientDatabase } from '../../__tests__/fixtures/recipes';
 
 // Mock Tauri invoke
-const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));
@@ -20,17 +20,27 @@ describe('ingredientStorage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset crypto.randomUUID mock
-    (global.crypto.randomUUID as jest.Mock).mockReturnValue('test-uuid-123');
+    vi.mocked(global.crypto.randomUUID).mockReturnValue('550e8400-e29b-41d4-a716-446655440000');
   });
 
   describe('loadIngredients', () => {
     test('should load ingredients from database', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      // Mock the backend format (snake_case) that Tauri returns
+      const mockTauriIngredients = mockIngredientDatabase.map(ing => ({
+        id: ing.id,
+        name: ing.name,
+        category: ing.category,
+        aliases: ing.aliases,
+        date_added: ing.dateAdded, // Convert to snake_case for backend format
+        date_modified: ing.dateModified, // Convert to snake_case for backend format
+      }));
+
+      mockInvoke.mockResolvedValue(mockTauriIngredients);
 
       const ingredients = await loadIngredients();
 
       expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
-      expect(ingredients).toEqual(mockIngredientDatabase);
+      expect(ingredients).toEqual(mockIngredientDatabase); // Should convert back to frontend format
     });
 
     test('should return empty array when database call fails', async () => {
@@ -54,13 +64,23 @@ describe('ingredientStorage', () => {
 
       const result = await addIngredient(newIngredient);
 
-      expect(result.id).toBe('test-uuid-123');
+      expect(result.id).toBe('550e8400-e29b-41d4-a716-446655440000');
       expect(result.name).toBe('Tomato');
       expect(result.category).toBe('vegetables');
       expect(result.aliases).toEqual(['tomatoes', 'fresh tomato']);
       expect(result.dateAdded).toBeDefined();
       expect(result.dateModified).toBeDefined();
-      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', { ingredient: result });
+      // Check that the correct format (snake_case) is sent to Tauri
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', {
+        ingredient: expect.objectContaining({
+          id: result.id,
+          name: result.name,
+          category: result.category,
+          aliases: result.aliases,
+          date_added: result.dateAdded, // Should be snake_case
+          date_modified: result.dateModified, // Should be snake_case
+        })
+      });
     });
 
     test('should handle database save errors', async () => {
@@ -77,9 +97,19 @@ describe('ingredientStorage', () => {
   });
 
   describe('updateIngredient', () => {
+    // Helper function to create mock Tauri format
+    const createMockTauriIngredients = () => mockIngredientDatabase.map(ing => ({
+      id: ing.id,
+      name: ing.name,
+      category: ing.category,
+      aliases: ing.aliases,
+      date_added: ing.dateAdded,
+      date_modified: ing.dateModified,
+    }));
+
     test('should update existing ingredient', async () => {
       mockInvoke
-        .mockResolvedValueOnce(mockIngredientDatabase) // loadIngredients call
+        .mockResolvedValueOnce(createMockTauriIngredients()) // loadIngredients call
         .mockResolvedValueOnce(undefined); // saveIngredient call
 
       const updates = {
@@ -94,11 +124,18 @@ describe('ingredientStorage', () => {
       expect(result!.aliases).toEqual(['updated flour', 'new alias']);
       expect(result!.dateModified).toBeDefined();
       expect(mockInvoke).toHaveBeenCalledWith('db_get_all_ingredients');
-      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', { ingredient: result });
+      expect(mockInvoke).toHaveBeenCalledWith('db_save_ingredient', { ingredient: expect.objectContaining({
+        id: result!.id,
+        name: result!.name,
+        category: result!.category,
+        aliases: result!.aliases,
+        date_added: result!.dateAdded,
+        date_modified: result!.dateModified,
+      }) });
     });
 
     test('should handle non-existent ingredient', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      mockInvoke.mockResolvedValue(createMockTauriIngredients());
 
       const result = await updateIngredient('non-existent-id', { name: 'Updated Name' });
 
@@ -138,8 +175,16 @@ describe('ingredientStorage', () => {
 
   describe('searchIngredients', () => {
     test('should search ingredients in database', async () => {
-      const searchResults = [mockIngredientDatabase[1]]; // Sugar
-      mockInvoke.mockResolvedValue(searchResults);
+      // Mock the backend format (snake_case) that Tauri returns
+      const mockTauriResult = [{
+        id: mockIngredientDatabase[1].id,
+        name: mockIngredientDatabase[1].name,
+        category: mockIngredientDatabase[1].category,
+        aliases: mockIngredientDatabase[1].aliases,
+        date_added: mockIngredientDatabase[1].dateAdded,
+        date_modified: mockIngredientDatabase[1].dateModified,
+      }];
+      mockInvoke.mockResolvedValue(mockTauriResult);
 
       const results = await searchIngredients('Sugar');
 
@@ -151,8 +196,16 @@ describe('ingredientStorage', () => {
     });
 
     test('should handle fuzzy matches', async () => {
-      const searchResults = [mockIngredientDatabase[0]]; // All-Purpose Flour
-      mockInvoke.mockResolvedValue(searchResults);
+      // Mock the backend format (snake_case) that Tauri returns
+      const mockTauriResult = [{
+        id: mockIngredientDatabase[0].id,
+        name: mockIngredientDatabase[0].name,
+        category: mockIngredientDatabase[0].category,
+        aliases: mockIngredientDatabase[0].aliases,
+        date_added: mockIngredientDatabase[0].dateAdded,
+        date_modified: mockIngredientDatabase[0].dateModified,
+      }];
+      mockInvoke.mockResolvedValue(mockTauriResult);
 
       const results = await searchIngredients('flou');
 
@@ -178,11 +231,19 @@ describe('ingredientStorage', () => {
     });
 
     test('should sort results by score', async () => {
-      const searchResults = [
+      // Mock the backend format (snake_case) that Tauri returns
+      const mockTauriResults = [
         mockIngredientDatabase.find(ing => ing.name === 'Eggs')!,
         mockIngredientDatabase.find(ing => ing.name === 'All-Purpose Flour')!,
-      ];
-      mockInvoke.mockResolvedValue(searchResults);
+      ].map(ing => ({
+        id: ing.id,
+        name: ing.name,
+        category: ing.category,
+        aliases: ing.aliases,
+        date_added: ing.dateAdded,
+        date_modified: ing.dateModified,
+      }));
+      mockInvoke.mockResolvedValue(mockTauriResults);
 
       const results = await searchIngredients('egg');
 
@@ -195,8 +256,18 @@ describe('ingredientStorage', () => {
   });
 
   describe('findIngredientByName', () => {
+    // Helper function to create mock Tauri format
+    const createMockTauriIngredients = () => mockIngredientDatabase.map(ing => ({
+      id: ing.id,
+      name: ing.name,
+      category: ing.category,
+      aliases: ing.aliases,
+      date_added: ing.dateAdded,
+      date_modified: ing.dateModified,
+    }));
+
     test('should find ingredient by exact name', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      mockInvoke.mockResolvedValue(createMockTauriIngredients());
 
       const ingredient = await findIngredientByName('Sugar');
 
@@ -206,7 +277,7 @@ describe('ingredientStorage', () => {
     });
 
     test('should find ingredient by alias', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      mockInvoke.mockResolvedValue(createMockTauriIngredients());
 
       const ingredient = await findIngredientByName('white sugar');
 
@@ -215,7 +286,7 @@ describe('ingredientStorage', () => {
     });
 
     test('should return null for non-existent ingredient', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      mockInvoke.mockResolvedValue(createMockTauriIngredients());
 
       const ingredient = await findIngredientByName('nonexistent');
 
@@ -223,7 +294,7 @@ describe('ingredientStorage', () => {
     });
 
     test('should handle case insensitive search', async () => {
-      mockInvoke.mockResolvedValue(mockIngredientDatabase);
+      mockInvoke.mockResolvedValue(createMockTauriIngredients());
 
       const ingredient = await findIngredientByName('SUGAR');
 
@@ -241,12 +312,22 @@ describe('ingredientStorage', () => {
   });
 
   describe('autoDetectIngredients', () => {
+    // Helper function to create mock Tauri format
+    const createMockTauriIngredients = () => mockIngredientDatabase.map(ing => ({
+      id: ing.id,
+      name: ing.name,
+      category: ing.category,
+      aliases: ing.aliases,
+      date_added: ing.dateAdded,
+      date_modified: ing.dateModified,
+    }));
+
     test('should add new ingredients and skip existing ones', async () => {
       mockInvoke
-        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'Sugar'
-        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'New Ingredient'
+        .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName for 'Sugar'
+        .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName for 'New Ingredient'
         .mockResolvedValueOnce(undefined) // saveIngredient for 'New Ingredient'
-        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName for 'Another New One'
+        .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName for 'Another New One'
         .mockResolvedValueOnce(undefined); // saveIngredient for 'Another New One'
 
       const ingredientNames = ['Sugar', 'New Ingredient', 'Another New One'];
@@ -261,7 +342,7 @@ describe('ingredientStorage', () => {
 
     test('should clean ingredient names before processing', async () => {
       mockInvoke
-        .mockResolvedValueOnce(mockIngredientDatabase) // findIngredientByName
+        .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName
         .mockResolvedValueOnce(undefined); // saveIngredient
 
       const ingredientNames = ['2 cups fresh tomatoes, diced'];

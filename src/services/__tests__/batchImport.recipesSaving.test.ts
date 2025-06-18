@@ -13,8 +13,8 @@ vi.mock('../recipeStorage', () => ({
   getExistingRecipeUrls: vi.fn(),
 }));
 
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
-const mockGetExistingUrls = getExistingRecipeUrls as vi.MockedFunction<typeof getExistingRecipeUrls>;
+const mockInvoke = vi.mocked(invoke);
+const mockGetExistingUrls = vi.mocked(getExistingRecipeUrls);
 
 describe('BatchImport Recipe Saving', () => {
   beforeEach(() => {

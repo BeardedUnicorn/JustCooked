@@ -5,7 +5,7 @@ import { BatchImportStatus, BatchImportProgress } from '@app-types';
 
 // Mock Tauri invoke
 vi.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 // Mock recipe storage
 vi.mock('@services/recipeStorage', () => ({

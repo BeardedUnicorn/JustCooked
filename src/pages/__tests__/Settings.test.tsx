@@ -50,7 +50,7 @@ const theme = createTheme();
 
 // Import the logging management service for mocking
 import { loggingManagementService } from '@services/loggingManagement';
-const mockLoggingManagementService = loggingManagementService as jest.Mocked<typeof loggingManagementService>;
+const mockLoggingManagementService = vi.mocked(loggingManagementService);
 
 const renderWithProviders = (component: React.ReactElement) => {
   return render(

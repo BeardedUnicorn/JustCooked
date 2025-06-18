@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@mui/material/styles';
@@ -30,8 +30,7 @@ const mockProductIngredientMappingService = vi.mocked(ProductIngredientMappingSe
 vi.mock('@components/ProductSearchModal', () => ({
   default: function MockProductSearchModal({
     open,
-    onClose,
-    onAddProduct
+    onClose
   }: {
     open: boolean;
     onClose: () => void;
@@ -404,18 +403,6 @@ describe('PantryManager - Enhanced Functionality', () => {
 
       // Simulate adding a product through the product search modal
       // This would normally be triggered by the ProductSearchModal component
-      const mockPantryItem: PantryItem = {
-        id: 'test-uuid-123',
-        name: 'Test Product',
-        amount: 1,
-        unit: 'piece(s)',
-        category: 'Other',
-        productCode: '123456789012',
-        productName: 'Test Product',
-        brands: 'Test Brand',
-        dateAdded: new Date().toISOString(),
-        dateModified: new Date().toISOString(),
-      };
 
       // Open product search modal
       const addButton = screen.getByTestId('pantry-add-item-button');

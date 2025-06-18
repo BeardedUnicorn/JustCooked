@@ -38,6 +38,22 @@ export class ImportQueueService {
   }
 
   /**
+   * Start processing the import queue
+   */
+  async startQueueProcessing(): Promise<void> {
+    try {
+      await logger.info('Starting queue processing');
+
+      await invoke('start_queue_processing');
+
+      await logger.info('Queue processing started successfully');
+    } catch (error) {
+      await logger.logError(error, 'Failed to start queue processing');
+      throw new Error(`Failed to start queue processing: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
    * Add multiple batch import tasks to the queue
    */
   async addMultipleToQueue(

@@ -1,7 +1,7 @@
-import React from 'react';
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import CreateProductDialog, { CreateProductData } from '../CreateProductDialog';
+import CreateProductDialog from '../CreateProductDialog';
 
 describe('CreateProductDialog', () => {
   const mockOnClose = vi.fn();

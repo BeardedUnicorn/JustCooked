@@ -302,7 +302,6 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         let scanAttempts = 0;
         let consecutiveFailures = 0;
         const maxConsecutiveFailures = 50;
-        let scanInterval = 150; // Not used but kept for consistency
 
         // Show scanning tip after a few seconds if no success
         const tipTimeout = setTimeout(() => {
@@ -311,7 +310,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           }
         }, 5000);
 
-        controlsRef.current = await codeReader.current.decodeFromVideoElement(videoRef.current, async (result, error, controls) => {
+        controlsRef.current = await codeReader.current.decodeFromVideoElement(videoRef.current, async (result, error) => {
           scanAttempts++;
 
           // Update debug info periodically with more detailed information

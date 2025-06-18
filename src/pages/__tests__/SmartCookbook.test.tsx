@@ -9,8 +9,8 @@ import { mockRecipe } from '../../__tests__/fixtures/recipes';
 vi.mock('@services/recipeStorage');
 vi.mock('@services/pantryStorage');
 
-const mockGetAllRecipes = recipeStorage.getAllRecipes as vi.MockedFunction<typeof recipeStorage.getAllRecipes>;
-const mockGetPantryItems = pantryStorage.getPantryItems as vi.MockedFunction<typeof pantryStorage.getPantryItems>;
+const mockGetAllRecipes = vi.mocked(recipeStorage.getAllRecipes);
+const mockGetPantryItems = vi.mocked(pantryStorage.getPantryItems);
 
 const renderSmartCookbook = () => {
   return render(

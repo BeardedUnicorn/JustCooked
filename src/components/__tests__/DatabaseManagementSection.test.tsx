@@ -30,7 +30,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   readTextFile: vi.fn(),
 }));
 
-const mockDatabaseManagementService = databaseManagementService as jest.Mocked<typeof databaseManagementService>;
+const mockDatabaseManagementService = vi.mocked(databaseManagementService);
 
 const theme = createTheme();
 

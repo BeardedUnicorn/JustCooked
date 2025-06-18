@@ -95,8 +95,8 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('CollectionView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(mockCollection);
-    vi.mocked(recipeStorage.getAllRecipes).mockResolvedValue(mockRecipes);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockResolvedValue(mockCollection);
+    vi.mocked(recipeStorage.getAllRecipes).mockResolvedValue(mockRecipes as any);
   });
 
   it('renders collection view with collection details', async () => {
@@ -125,7 +125,7 @@ describe('CollectionView', () => {
 
   it('displays empty state when collection has no recipes', async () => {
     const emptyCollection = { ...mockCollection, recipeIds: [] };
-    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(emptyCollection);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockResolvedValue(emptyCollection);
     
     renderWithProviders(<CollectionView />);
     
@@ -138,7 +138,7 @@ describe('CollectionView', () => {
   });
 
   it('shows error when collection is not found', async () => {
-    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(null);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockResolvedValue(null);
     
     renderWithProviders(<CollectionView />);
     
@@ -367,7 +367,7 @@ describe('CollectionView', () => {
   });
 
   it('navigates back to collections when back button is clicked', async () => {
-    vi.mocked(recipeCollectionStorage.getCollectionById).mockReturnValue(null);
+    vi.mocked(recipeCollectionStorage.getCollectionById).mockResolvedValue(null);
     
     renderWithProviders(<CollectionView />);
     

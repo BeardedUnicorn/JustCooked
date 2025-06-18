@@ -45,6 +45,19 @@ export const addToQueue = createAsyncThunk(
   }
 );
 
+export const startQueueProcessing = createAsyncThunk(
+  'importQueue/startQueueProcessing',
+  async (_, { rejectWithValue }) => {
+    try {
+      await importQueueService.startQueueProcessing();
+      return;
+    } catch (error) {
+      console.error('Failed to start queue processing:', error);
+      return rejectWithValue(error instanceof Error ? error.message : String(error));
+    }
+  }
+);
+
 export const addMultipleToQueue = createAsyncThunk(
   'importQueue/addMultipleToQueue',
   async ({
@@ -145,6 +158,20 @@ const importQueueSlice = createSlice({
       .addCase(addToQueue.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to add task to queue';
+      })
+
+      // Start queue processing
+      .addCase(startQueueProcessing.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(startQueueProcessing.fulfilled, (state) => {
+        state.loading = false;
+        // Queue processing started successfully
+      })
+      .addCase(startQueueProcessing.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to start queue processing';
       })
 
       // Add multiple to queue

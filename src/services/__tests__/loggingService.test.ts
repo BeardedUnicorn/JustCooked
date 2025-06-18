@@ -3,7 +3,7 @@ import { loggingService, createLogger } from '../loggingService';
 
 // Mock Tauri API
 vi.mock('@tauri-apps/api/core');
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 // Mock console methods to avoid noise in tests
 const originalConsole = { ...console };
@@ -97,7 +97,7 @@ describe('LoggingService', () => {
 
       // Verify the context contains the error details
       const call = mockInvoke.mock.calls[0];
-      const contextStr = call[1].context;
+      const contextStr = (call[1] as any).context;
       const contextObj = JSON.parse(contextStr);
 
       expect(contextObj.url).toBe('https://example.com/recipe/123');

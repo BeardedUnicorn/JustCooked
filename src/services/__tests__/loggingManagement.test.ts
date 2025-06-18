@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 // Mock Tauri APIs
 vi.mock('@tauri-apps/api/core');
 
-const mockInvoke = invoke as vi.MockedFunction<typeof invoke>;
+const mockInvoke = vi.mocked(invoke);
 
 describe('LoggingManagementService', () => {
   let service: LoggingManagementService;

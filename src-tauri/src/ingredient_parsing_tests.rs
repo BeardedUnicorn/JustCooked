@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn test_parse_ingredient_string_basic() {
         // Test basic parsing with amount, unit, and name
-        let result = crate::parse_ingredient_string("2 cups all-purpose flour", None);
+        let result = crate::parse_ingredient_string_fallback("2 cups all-purpose flour", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "all-purpose flour");
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn test_parse_parenthetical_amounts() {
         // Test parenthetical amounts like "1 (15 oz) can tomatoes"
-        let result = crate::parse_ingredient_string("1 (15 oz) can diced tomatoes", None);
+        let result = crate::parse_ingredient_string_fallback("1 (15 oz) can diced tomatoes", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("can"));
@@ -149,14 +149,14 @@ mod tests {
         assert!(ingredient.unit.contains("oz"));
 
         // Test without leading count
-        let result = crate::parse_ingredient_string("(14.5 ounce) can tomatoes, undrained", None);
+        let result = crate::parse_ingredient_string_fallback("(14.5 ounce) can tomatoes, undrained", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("can"));
         assert!(ingredient.name.contains("tomatoes"));
 
         // Test AllRecipes format: "1 (15 ounce) package pretzel snaps"
-        let result = crate::parse_ingredient_string("1 (15 ounce) package pretzel snaps (square waffle-shaped pretzels)", None);
+        let result = crate::parse_ingredient_string_fallback("1 (15 ounce) package pretzel snaps (square waffle-shaped pretzels)", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 1.0);
@@ -164,7 +164,7 @@ mod tests {
         assert!(ingredient.name.contains("15 ounce package pretzel snaps"));
 
         // Test AllRecipes format: "1 (10 ounce) bag chocolate candies"
-        let result = crate::parse_ingredient_string("1 (10 ounce) bag chocolate candies (such as Hershey®'s Hugs®)", None);
+        let result = crate::parse_ingredient_string_fallback("1 (10 ounce) bag chocolate candies (such as Hershey®'s Hugs®)", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 1.0);
@@ -172,7 +172,7 @@ mod tests {
         assert!(ingredient.name.contains("10 ounce bag chocolate candies"));
 
         // Test AllRecipes format: "1 (14 ounce) package candy corn"
-        let result = crate::parse_ingredient_string("1 (14 ounce) package candy corn", None);
+        let result = crate::parse_ingredient_string_fallback("1 (14 ounce) package candy corn", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 1.0);
@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn test_parse_fractions_and_mixed_numbers() {
         // Test simple fractions
-        let result = crate::parse_ingredient_string("1/2 cup flour", None);
+        let result = crate::parse_ingredient_string_fallback("1/2 cup flour", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "flour");
@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(ingredient.unit, "cup");
 
         // Test mixed numbers
-        let result = crate::parse_ingredient_string("1 1/2 tablespoons olive oil", None);
+        let result = crate::parse_ingredient_string_fallback("1 1/2 tablespoons olive oil", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "olive oil");
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(ingredient.unit, "tbsp");
 
         // Test unicode fractions
-        let result = crate::parse_ingredient_string("½ cup milk", None);
+        let result = crate::parse_ingredient_string_fallback("½ cup milk", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "milk");
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn test_parse_ranges() {
         // Test range amounts
-        let result = crate::parse_ingredient_string("2-3 cups flour", None);
+        let result = crate::parse_ingredient_string_fallback("2-3 cups flour", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "flour");
@@ -218,7 +218,7 @@ mod tests {
         assert_eq!(ingredient.unit, "cup");
 
         // Test "to" ranges
-        let result = crate::parse_ingredient_string("1 to 2 pounds beef", None);
+        let result = crate::parse_ingredient_string_fallback("1 to 2 pounds beef", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "beef");
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn test_parse_decimal_amounts() {
         // Test decimal amounts including precision issues from CSV
-        let result = crate::parse_ingredient_string("1.3333333730698 cups flour", None);
+        let result = crate::parse_ingredient_string_fallback("1.3333333730698 cups flour", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "flour");
@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(ingredient.unit, "cup");
 
         // Test simple decimals
-        let result = crate::parse_ingredient_string("0.25 teaspoon salt", None);
+        let result = crate::parse_ingredient_string_fallback("0.25 teaspoon salt", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "salt");
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_parse_count_with_descriptors() {
         // Test count with size descriptors
-        let result = crate::parse_ingredient_string("2 large eggs", None);
+        let result = crate::parse_ingredient_string_fallback("2 large eggs", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "large eggs");
@@ -256,7 +256,7 @@ mod tests {
         assert_eq!(ingredient.unit, ""); // Should use empty unit for count-based
 
         // Test with other descriptors
-        let result = crate::parse_ingredient_string("3 medium onions", None);
+        let result = crate::parse_ingredient_string_fallback("3 medium onions", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "medium onions");
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_parse_ingredient_string_with_section() {
-        let result = crate::parse_ingredient_string("1 cup sugar", Some("Cake Layer".to_string()));
+        let result = crate::parse_ingredient_string_fallback("1 cup sugar", Some("Cake Layer".to_string()));
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "sugar");
@@ -278,19 +278,19 @@ mod tests {
     #[test]
     fn test_parse_ingredient_string_fractions() {
         // Test unicode fractions
-        let result = crate::parse_ingredient_string("½ cup milk", None);
+        let result = crate::parse_ingredient_string_fallback("½ cup milk", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 0.5);
         
         // Test regular fractions
-        let result = crate::parse_ingredient_string("1/2 cup milk", None);
+        let result = crate::parse_ingredient_string_fallback("1/2 cup milk", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 0.5);
         
         // Test mixed numbers
-        let result = crate::parse_ingredient_string("1 1/2 cups flour", None);
+        let result = crate::parse_ingredient_string_fallback("1 1/2 cups flour", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.amount, 1.5);
@@ -300,14 +300,14 @@ mod tests {
     fn test_parse_ingredient_string_count_based() {
         // Test count-based ingredients (should use empty unit)
         // Enhanced parser preserves descriptors like "large" in the name
-        let result = crate::parse_ingredient_string("2 large eggs", None);
+        let result = crate::parse_ingredient_string_fallback("2 large eggs", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "large eggs");
         assert_eq!(ingredient.amount, 2.0);
         assert_eq!(ingredient.unit, "");
 
-        let result = crate::parse_ingredient_string("1 medium onion", None);
+        let result = crate::parse_ingredient_string_fallback("1 medium onion", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "medium onion");
@@ -319,13 +319,13 @@ mod tests {
     fn test_parse_ingredient_string_with_preparation() {
         // Test ingredients with preparation instructions
         // Enhanced parser handles preparation differently based on pattern matching
-        let result = crate::parse_ingredient_string("1 onion, diced", None);
+        let result = crate::parse_ingredient_string_fallback("1 onion, diced", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "onion diced");
         assert_eq!(ingredient.amount, 1.0);
 
-        let result = crate::parse_ingredient_string("2 cups butter, melted", None);
+        let result = crate::parse_ingredient_string_fallback("2 cups butter, melted", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "butter, melted"); // Essential preparation preserved
@@ -336,7 +336,7 @@ mod tests {
     #[test]
     fn test_parse_complex_descriptions() {
         // Test complex ingredient descriptions from CSV
-        let result = crate::parse_ingredient_string("1 pound fully cooked ham, cut into 1/2-inch cubes", None);
+        let result = crate::parse_ingredient_string_fallback("1 pound fully cooked ham, cut into 1/2-inch cubes", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("ham"));
@@ -344,7 +344,7 @@ mod tests {
         assert_eq!(ingredient.unit, "lb");
 
         // Test with brand names and specifications
-        let result = crate::parse_ingredient_string("1 (24 ounce) package dried navy beans (such as Hurst's®)", None);
+        let result = crate::parse_ingredient_string_fallback("1 (24 ounce) package dried navy beans (such as Hurst's®)", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("package"));
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn test_parse_preparation_methods() {
         // Test ingredients with preparation methods
-        let result = crate::parse_ingredient_string("2 stalks celery, chopped", None);
+        let result = crate::parse_ingredient_string_fallback("2 stalks celery, chopped", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert!(ingredient.name.contains("celery"));
@@ -363,7 +363,7 @@ mod tests {
         assert_eq!(ingredient.unit, "stalk");
 
         // Test "to taste" - should parse as ingredient but may be filtered
-        let result = crate::parse_ingredient_string("salt and pepper to taste", None);
+        let result = crate::parse_ingredient_string_fallback("salt and pepper to taste", None);
         // Enhanced parser may handle this differently
         if result.is_some() {
             let ingredient = result.unwrap();
@@ -371,7 +371,7 @@ mod tests {
         }
 
         // Test "as needed" - should parse as ingredient but may be filtered
-        let result = crate::parse_ingredient_string("cooking spray as needed", None);
+        let result = crate::parse_ingredient_string_fallback("cooking spray as needed", None);
         // Enhanced parser may handle this differently
         if result.is_some() {
             let ingredient = result.unwrap();
@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn test_parse_temperature_specifications() {
         // Test ingredients with temperature specs
-        let result = crate::parse_ingredient_string("1 cup warm water (110 degrees F)", None);
+        let result = crate::parse_ingredient_string_fallback("1 cup warm water (110 degrees F)", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "warm water");
@@ -393,17 +393,17 @@ mod tests {
     #[test]
     fn test_enhanced_unit_normalization() {
         // Test comprehensive unit normalization
-        let result = crate::parse_ingredient_string("2 tablespoons butter", None);
+        let result = crate::parse_ingredient_string_fallback("2 tablespoons butter", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "tbsp");
 
-        let result = crate::parse_ingredient_string("3 teaspoons vanilla", None);
+        let result = crate::parse_ingredient_string_fallback("3 teaspoons vanilla", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "tsp");
 
         // Note: "fluid ounce" as two words may not be recognized as a single unit
         // Test with a simpler unit pattern
-        let result = crate::parse_ingredient_string("1 ounce cream", None);
+        let result = crate::parse_ingredient_string_fallback("1 ounce cream", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "oz");
     }
@@ -411,15 +411,15 @@ mod tests {
     #[test]
     fn test_enhanced_empty_unit_detection() {
         // Test enhanced count-based ingredient detection
-        let result = crate::parse_ingredient_string("3 chicken breasts", None);
+        let result = crate::parse_ingredient_string_fallback("3 chicken breasts", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "");
 
-        let result = crate::parse_ingredient_string("2 bell peppers", None);
+        let result = crate::parse_ingredient_string_fallback("2 bell peppers", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "");
 
-        let result = crate::parse_ingredient_string("4 pork chops", None);
+        let result = crate::parse_ingredient_string_fallback("4 pork chops", None);
         assert!(result.is_some());
         assert_eq!(result.unwrap().unit, "");
     }
@@ -427,18 +427,18 @@ mod tests {
     #[test]
     fn test_parse_ingredient_string_invalid() {
         // Test invalid ingredient strings (should return None)
-        assert!(crate::parse_ingredient_string("chopped", None).is_none());
-        assert!(crate::parse_ingredient_string("to taste", None).is_none());
-        assert!(crate::parse_ingredient_string("", None).is_none());
-        assert!(crate::parse_ingredient_string("   ", None).is_none());
-        assert!(crate::parse_ingredient_string("such as Frank's RedHot", None).is_none());
-        assert!(crate::parse_ingredient_string("or more to taste", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("chopped", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("to taste", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("   ", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("such as Frank's RedHot", None).is_none());
+        assert!(crate::parse_ingredient_string_fallback("or more to taste", None).is_none());
     }
 
     #[test]
     fn test_parse_ingredient_string_fallback() {
         // Test fallback for simple ingredient names without amounts
-        let result = crate::parse_ingredient_string("salt", None);
+        let result = crate::parse_ingredient_string_fallback("salt", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "salt");
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(ingredient.unit, "unit");
 
         // Test with count-based ingredients
-        let result = crate::parse_ingredient_string("eggs", None);
+        let result = crate::parse_ingredient_string_fallback("eggs", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.name, "eggs");
@@ -456,17 +456,17 @@ mod tests {
 
     #[test]
     fn test_unit_normalization() {
-        let result = crate::parse_ingredient_string("2 tablespoons olive oil", None);
+        let result = crate::parse_ingredient_string_fallback("2 tablespoons olive oil", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.unit, "tbsp");
         
-        let result = crate::parse_ingredient_string("1 teaspoon vanilla", None);
+        let result = crate::parse_ingredient_string_fallback("1 teaspoon vanilla", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.unit, "tsp");
         
-        let result = crate::parse_ingredient_string("1 pound beef", None);
+        let result = crate::parse_ingredient_string_fallback("1 pound beef", None);
         assert!(result.is_some());
         let ingredient = result.unwrap();
         assert_eq!(ingredient.unit, "lb");

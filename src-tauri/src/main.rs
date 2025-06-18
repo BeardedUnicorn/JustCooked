@@ -9,9 +9,15 @@ mod batch_import;
 mod database;
 mod import_queue;
 mod logging;
+mod ingredient_parsing;
+mod parsing_feedback;
+mod conversions;
 
 #[cfg(test)]
 mod ingredient_parsing_tests;
+
+#[cfg(test)]
+mod e2e_tests;
 
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
@@ -19,6 +25,9 @@ use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
 use import_queue::{ImportQueue, ImportQueueStatus};
 use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, ProductSearchResult, ProductIngredientMapping};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
+use ingredient_parsing::{get_ingredient_parser, ParsingMetrics};
+
+use parsing_feedback::{ParsingFeedback, ParsingCorrection, FeedbackStatistics, get_parsing_feedback_manager};
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
@@ -175,30 +184,75 @@ async fn delete_recipe_image(local_path: String) -> Result<(), String> {
     }
 }
 
-fn convert_imported_recipe_to_frontend(imported: ImportedRecipe) -> FrontendRecipe {
-    let recipe_id = uuid::Uuid::new_v4().to_string();
-    let current_time = chrono::Utc::now().to_rfc3339();
-    
-    // Parse ingredients from strings to structured format
-    let ingredients = imported.ingredients.iter().filter_map(|ingredient_str| {
+/// Parse ingredients using the ingredient crate with fallback to regex parsing
+async fn parse_ingredients_with_ingredient_crate(ingredient_strings: &[String]) -> Vec<FrontendIngredient> {
+    let parser = get_ingredient_parser();
+
+    let mut frontend_ingredients = Vec::new();
+
+    for ingredient_str in ingredient_strings {
         // Check if ingredient has section information (format: [Section Name] ingredient text)
-        let (section, ingredient_text) = if let Some(captures) = regex::Regex::new(r"^\[([^\]]+)\]\s*(.+)$").unwrap().captures(ingredient_str) {
+        let (section, ingredient_text) = if let Some(captures) =
+            regex::Regex::new(r"^\[([^\]]+)\]\s*(.+)$")
+                .unwrap()
+                .captures(ingredient_str)
+        {
             (Some(captures[1].to_string()), captures[2].to_string())
         } else {
             (None, ingredient_str.clone())
         };
 
-        // Parse ingredient using improved logic
-        parse_ingredient_string(&ingredient_text, section)
-    }).collect();
-    
+        // Try parsing with ingredient crate first
+        match parser.parse_ingredient(&ingredient_text, section.clone()).await {
+            Ok(Some(db_ingredient)) => {
+                // Convert database ingredient to frontend format
+                let frontend_ingredient = FrontendIngredient {
+                    name: db_ingredient.name,
+                    amount: db_ingredient.amount.parse().unwrap_or(1.0),
+                    unit: db_ingredient.unit,
+                    section: db_ingredient.section,
+                };
+                frontend_ingredients.push(frontend_ingredient);
+            }
+            Ok(None) => {
+                // Ingredient crate returned None (invalid ingredient), skip
+                warn!("Ingredient parsing returned None for ingredient: '{}'", ingredient_text);
+            }
+            Err(e) => {
+                // Ingredient crate failed, fallback to regex parsing
+                warn!("Ingredient parsing failed for '{}': {}, using fallback", ingredient_text, e);
+                if let Some(frontend_ingredient) = parse_ingredient_string_fallback(&ingredient_text, section) {
+                    frontend_ingredients.push(frontend_ingredient);
+                }
+            }
+        }
+    }
+
+    frontend_ingredients
+}
+
+/// Tauri command to parse ingredients using the ingredient crate
+#[tauri::command]
+async fn parse_ingredients_with_ingredient_crate_command(ingredients: Vec<String>) -> Result<Vec<FrontendIngredient>, String> {
+    match parse_ingredients_with_ingredient_crate(&ingredients).await {
+        parsed_ingredients => Ok(parsed_ingredients),
+    }
+}
+
+pub async fn convert_imported_recipe_to_frontend_async(imported: ImportedRecipe) -> FrontendRecipe {
+    let recipe_id = uuid::Uuid::new_v4().to_string();
+    let current_time = chrono::Utc::now().to_rfc3339();
+
+    // Parse ingredients using ingredient crate with fallback to regex parsing
+    let ingredients = parse_ingredients_with_ingredient_crate(&imported.ingredients).await;
+
     // Parse tags from keywords
     let tags: Vec<String> = if imported.keywords.is_empty() {
         Vec::new()
     } else {
         imported.keywords.split(',').map(|s| s.trim().to_string()).collect()
     };
-    
+
     FrontendRecipe {
         id: recipe_id,
         title: imported.name,
@@ -222,25 +276,31 @@ fn convert_imported_recipe_to_frontend(imported: ImportedRecipe) -> FrontendReci
     }
 }
 
+
+
 #[tauri::command]
 async fn save_imported_recipe(
     app: tauri::AppHandle,
     imported_recipe: ImportedRecipe,
 ) -> Result<String, String> {
-    let frontend_recipe = convert_imported_recipe_to_frontend(imported_recipe.clone());
+    info!("Saving imported recipe with ingredient crate parsing: {}", imported_recipe.name);
+
+    // Use ingredient crate-based parsing for better accuracy
+    let frontend_recipe = conversions::convert_imported_recipe_to_frontend_async(imported_recipe.clone()).await;
     let recipe_id = frontend_recipe.id.clone();
 
     // Convert frontend recipe to database recipe and save to database
-    let db_recipe = convert_frontend_to_db_recipe(frontend_recipe);
+    let db_recipe = conversions::convert_frontend_to_db_recipe(frontend_recipe);
 
     // Initialize database and save recipe
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     db.save_recipe(&db_recipe).await.map_err(|e| e.to_string())?;
 
     // Capture raw ingredients for analysis
-    capture_raw_ingredients(&db, &imported_recipe, Some(&recipe_id)).await
+    conversions::capture_raw_ingredients(&db, &imported_recipe, Some(&recipe_id)).await
         .map_err(|e| format!("Failed to capture raw ingredients: {}", e))?;
 
+    info!("Successfully saved recipe with ID: {}", recipe_id);
     Ok(recipe_id)
 }
 
@@ -582,8 +642,9 @@ async fn db_clear_search_history(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Parse ingredient string into structured format with comprehensive pattern matching
-fn parse_ingredient_string(ingredient_text: &str, section: Option<String>) -> Option<FrontendIngredient> {
+/// Parse ingredient string into structured format with comprehensive pattern matching (FALLBACK ONLY)
+/// This function should only be used as a fallback when ingredient crate parsing fails
+fn parse_ingredient_string_fallback(ingredient_text: &str, section: Option<String>) -> Option<FrontendIngredient> {
     let trimmed = ingredient_text.trim();
 
     // Skip empty or invalid ingredients
@@ -1043,7 +1104,7 @@ fn is_valid_ingredient_name(name: &str) -> bool {
 }
 
 // Conversion functions
-fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
+pub fn convert_frontend_to_db_recipe(frontend: FrontendRecipe) -> DbRecipe {
     use chrono::{DateTime, Utc};
     
     let ingredients = frontend.ingredients.into_iter().map(|ing| DbIngredient {
@@ -1154,7 +1215,7 @@ async fn start_batch_import(
 }
 
 // Helper function to capture raw ingredients for analysis
-async fn capture_raw_ingredients(
+pub async fn capture_raw_ingredients(
     db: &Database,
     imported_recipe: &ImportedRecipe,
     recipe_id: Option<&str>,
@@ -1274,21 +1335,53 @@ async fn add_to_import_queue(
           request.start_url, request.max_recipes, request.max_depth,
           request.existing_urls.as_ref().map_or(0, |urls| urls.len()));
 
-    let task_id = queue_state.add_task(description, request)?;
+    // Debug: Check if queue is processing
+    let queue_status = queue_state.get_status();
+    info!("Current queue status: processing={}, pending={}, completed={}, failed={}",
+          queue_status.is_processing, queue_status.total_pending, queue_status.total_completed, queue_status.total_failed);
+
+    let task_id = queue_state.add_task(description.clone(), request.clone())?;
     info!("Task added with ID: {}", task_id);
 
-    // Trigger queue processing
-    info!("Spawning queue processing task...");
-    let queue_clone = queue_state.inner().clone();
+    // Start queue processing if not already started
+    info!("Starting queue processing for task: {}", task_id);
+    let queue_state_clone = queue_state.inner().clone();
     let app_clone = app.clone();
+
     tokio::spawn(async move {
-        info!("Queue processing task started");
-        queue_clone.process_queue(app_clone).await;
-        info!("Queue processing task completed");
+        queue_state_clone.process_queue(app_clone).await;
     });
 
     info!("add_to_import_queue returning task_id: {}", task_id);
     Ok(task_id)
+}
+
+#[tauri::command]
+async fn start_queue_processing(
+    app: tauri::AppHandle,
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<(), String> {
+    info!("=== START_QUEUE_PROCESSING CALLED ===");
+
+    let queue_status = queue_state.get_status();
+    info!("Current queue status: processing={}, pending={}, completed={}, failed={}",
+          queue_status.is_processing, queue_status.total_pending, queue_status.total_completed, queue_status.total_failed);
+
+    if queue_status.total_pending == 0 {
+        info!("No pending tasks in queue, nothing to process");
+        return Ok(());
+    }
+
+    info!("Starting queue processing...");
+    let queue_state_clone = queue_state.inner().clone();
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        queue_state_clone.process_queue(app_clone).await;
+    });
+
+    info!("Queue processing started");
+    Ok(())
 }
 
 #[tauri::command]
@@ -1748,6 +1841,52 @@ mod pantry_conversion_tests {
     }
 }
 
+// Ingredient crate performance monitoring commands
+#[tauri::command]
+async fn get_parsing_metrics() -> Result<ParsingMetrics, String> {
+    let parser = get_ingredient_parser();
+    Ok(parser.get_metrics().await)
+}
+
+
+
+// Parsing feedback commands
+#[tauri::command]
+async fn submit_parsing_feedback(feedback: ParsingFeedback) -> Result<(), String> {
+    let manager = get_parsing_feedback_manager();
+    manager.submit_feedback(feedback)
+}
+
+#[tauri::command]
+async fn get_parsing_feedback_statistics() -> Result<FeedbackStatistics, String> {
+    let manager = get_parsing_feedback_manager();
+    manager.get_statistics()
+}
+
+#[tauri::command]
+async fn add_parsing_correction_suggestion(correction: ParsingCorrection) -> Result<(), String> {
+    let manager = get_parsing_feedback_manager();
+    manager.add_correction_suggestion(correction)
+}
+
+#[tauri::command]
+async fn get_parsing_correction_suggestions(ingredient_text: String) -> Result<Vec<ParsingCorrection>, String> {
+    let manager = get_parsing_feedback_manager();
+    manager.get_correction_suggestions(&ingredient_text)
+}
+
+#[tauri::command]
+async fn clear_parsing_feedback_history() -> Result<(), String> {
+    let manager = get_parsing_feedback_manager();
+    manager.clear_feedback_history()
+}
+
+#[tauri::command]
+async fn export_parsing_feedback_data() -> Result<String, String> {
+    let manager = get_parsing_feedback_manager();
+    manager.export_feedback_data()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let batch_importers: BatchImporterMap = Arc::new(Mutex::new(HashMap::new()));
@@ -1787,10 +1926,12 @@ pub fn run() {
             get_local_image,
             delete_recipe_image,
             save_imported_recipe,
+            parse_ingredients_with_ingredient_crate_command,
             start_batch_import,
             get_batch_import_progress,
             cancel_batch_import,
             add_to_import_queue,
+            start_queue_processing,
             get_import_queue_status,
             remove_from_import_queue,
             get_queue_task_progress,
@@ -1853,7 +1994,14 @@ pub fn run() {
             log_debug,
             get_log_file_path,
             get_log_directory_path,
-            open_log_directory
+            open_log_directory,
+            get_parsing_metrics,
+            submit_parsing_feedback,
+            get_parsing_feedback_statistics,
+            add_parsing_correction_suggestion,
+            get_parsing_correction_suggestions,
+            clear_parsing_feedback_history,
+            export_parsing_feedback_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

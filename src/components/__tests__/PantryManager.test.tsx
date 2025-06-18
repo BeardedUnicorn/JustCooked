@@ -14,7 +14,7 @@ vi.mock('../../services/recipeImport', () => ({
 
 // Mock the ProductIngredientMappingService
 vi.mock('../../services/productIngredientMappingService');
-const mockProductIngredientMappingService = ProductIngredientMappingService as jest.Mocked<typeof ProductIngredientMappingService>;
+const mockProductIngredientMappingService = vi.mocked(ProductIngredientMappingService);
 
 // Mock crypto.randomUUID
 Object.defineProperty(global, 'crypto', {

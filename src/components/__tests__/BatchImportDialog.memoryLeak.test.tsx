@@ -1,7 +1,6 @@
 import React from 'react';
-import { render, waitFor, act } from '@testing-library/react';
+import { render, act } from '@testing-library/react';
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
-import BatchImportDialog from '../BatchImportDialog';
 import { batchImportService } from '@services/batchImport';
 import { BatchImportStatus } from '@app-types/batchImport';
 
@@ -37,7 +36,7 @@ const mockBatchImportService = batchImportService as any;
 // Test component that simulates the memory leak scenario
 const TestComponent: React.FC<{ isImporting: boolean }> = ({ isImporting }) => {
   const [progress, setProgress] = React.useState<any>(null);
-  const [error, setError] = React.useState<string | null>(null);
+  const [, setError] = React.useState<string | null>(null);
 
   // This mimics the useEffect from BatchImportDialog
   React.useEffect(() => {

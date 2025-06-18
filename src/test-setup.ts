@@ -3,11 +3,11 @@ import { TextEncoder, TextDecoder } from 'util';
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder as any;
 
-import { jest } from '@jest/globals';
+import { vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 
 // Mock crypto.randomUUID for consistent test results
-const mockRandomUUID = jest.fn(() => 'test-uuid-123');
+const mockRandomUUID = vi.fn(() => 'test-uuid-123');
 Object.defineProperty(global, 'crypto', {
   value: {
     randomUUID: mockRandomUUID,
@@ -20,14 +20,14 @@ const localStorageMock = (() => {
   let store: { [key: string]: string } = {};
 
   return {
-    getItem: jest.fn((key: string) => store[key] || null),
-    setItem: jest.fn((key: string, value: string) => {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
       store[key] = value;
     }),
-    removeItem: jest.fn((key: string) => {
+    removeItem: vi.fn((key: string) => {
       delete store[key];
     }),
-    clear: jest.fn(() => {
+    clear: vi.fn(() => {
       store = {};
     }),
     // Helper method to reset storage between tests
@@ -42,38 +42,38 @@ Object.defineProperty(window, 'localStorage', {
 });
 
 // Mock Tauri APIs
-jest.mock('@tauri-apps/api/core', () => ({
-  invoke: jest.fn(),
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
 }));
 
-jest.mock('@tauri-apps/plugin-fs', () => ({
-  readTextFile: jest.fn(),
-  writeTextFile: jest.fn(),
-  mkdir: jest.fn(),
-  remove: jest.fn(),
-  exists: jest.fn(),
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  readTextFile: vi.fn(),
+  writeTextFile: vi.fn(),
+  mkdir: vi.fn(),
+  remove: vi.fn(),
+  exists: vi.fn(),
   BaseDirectory: {
     AppLocalData: 'AppLocalData',
   },
 }));
 
-jest.mock('@tauri-apps/plugin-http', () => ({
-  fetch: jest.fn(),
+vi.mock('@tauri-apps/plugin-http', () => ({
+  fetch: vi.fn(),
 }));
 
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,
-  log: jest.fn(),
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+  log: vi.fn(),
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
 };
 
 // Reset all mocks before each test
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   (localStorageMock as any)._reset();
   localStorageMock.getItem.mockClear();
   localStorageMock.setItem.mockClear();

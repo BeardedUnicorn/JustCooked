@@ -6,7 +6,7 @@ import { getLocalImageUrl } from '@services/imageService';
 // Mock the image service
 vi.mock('@services/imageService');
 
-const mockGetLocalImageUrl = getLocalImageUrl as vi.MockedFunction<typeof getLocalImageUrl>;
+const mockGetLocalImageUrl = vi.mocked(getLocalImageUrl);
 
 describe('useImageUrl', () => {
   beforeEach(() => {

@@ -1,9 +1,8 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, afterEach, describe, it, expect } from 'vitest';
 import ProductSearchModal from '../ProductSearchModal';
-import { Product, ProductSearchResult, PantryItem } from '../../types';
+import { Product, ProductSearchResult } from '../../types';
 
 
 // Mock the Tauri API
@@ -433,7 +432,6 @@ describe('ProductSearchModal', () => {
     });
 
     it('fills search field with scanned barcode', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderModal();
 
       // Just simulate setting the search input directly
@@ -548,7 +546,6 @@ describe('ProductSearchModal', () => {
     }, 8000);
 
     it('closes barcode scanner after successful scan', async () => {
-      const user = userEvent.setup();
       renderModal();
 
       const scannerButton = screen.getByTestId('barcode-scanner-button');

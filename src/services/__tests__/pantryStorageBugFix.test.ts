@@ -8,7 +8,7 @@ import {
 import { PantryItem } from '@app-types';
 
 // Mock Tauri invoke
-const mockInvoke = vi.fn() as vi.MockedFunction<any>;
+const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: any[]) => mockInvoke(...args),
 }));

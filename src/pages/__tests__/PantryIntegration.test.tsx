@@ -1,5 +1,5 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import Pantry from '../Pantry';
 import { PantryItem } from '@app-types';
 
@@ -11,11 +11,9 @@ vi.mock('@services/pantryStorage', () => ({
   deletePantryItem: vi.fn(),
 }));
 
-import { getPantryItems, addPantryItem, updatePantryItem, deletePantryItem } from '@services/pantryStorage';
+import { getPantryItems } from '@services/pantryStorage';
 const mockGetPantryItems = vi.mocked(getPantryItems);
-const mockAddPantryItem = vi.mocked(addPantryItem);
-const mockUpdatePantryItem = vi.mocked(updatePantryItem);
-const mockDeletePantryItem = vi.mocked(deletePantryItem);
+
 
 // Mock time utils
 vi.mock('@utils/timeUtils', () => ({
@@ -26,8 +24,7 @@ vi.mock('@utils/timeUtils', () => ({
 vi.mock('@components/ProductSearchModal', () => ({
   default: function MockProductSearchModal({
     open,
-    onClose,
-    onAddProduct
+    onClose
   }: {
     open: boolean;
     onClose: () => void;
@@ -62,8 +59,7 @@ vi.mock('@services/productIngredientMappingService', () => ({
 vi.mock('@components/IngredientAssociationModal', () => ({
   default: function MockIngredientAssociationModal({
     open,
-    onClose,
-    onAssociate
+    onClose
   }: {
     open: boolean;
     onClose: () => void;
