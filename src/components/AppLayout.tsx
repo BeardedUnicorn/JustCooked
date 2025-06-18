@@ -9,17 +9,15 @@ import { styled } from '@mui/system';
 import { useNavigate, useLocation } from 'react-router-dom';
 import darkTheme from '@styles/theme';
 import HomeIcon from '@mui/icons-material/Home';
-import AddIcon from '@mui/icons-material/Add';
-import SearchIcon from '@mui/icons-material/Search';
+
 import KitchenIcon from '@mui/icons-material/Kitchen';
-import InventoryIcon from '@mui/icons-material/Inventory';
-import CollectionsIcon from '@mui/icons-material/Collections';
+
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import BookIcon from '@mui/icons-material/Book';
 import MenuIcon from '@mui/icons-material/Menu';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import SettingsIcon from '@mui/icons-material/Settings';
-import SearchBar from './SearchBar';
+
 import QueueStatusButton from './QueueStatusButton';
 import QueueManagementPopup from './QueueManagementPopup';
 
@@ -54,14 +52,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const drawerWidth = darkTheme.navigation.drawerWidth;
 
   const menuItems = [
-    { text: 'Home', icon: <HomeIcon />, path: '/', label: 'Home' },
-    { text: 'Import Recipe', icon: <AddIcon />, path: '/import', label: 'Import' },
-    { text: 'Search Recipes', icon: <SearchIcon />, path: '/search', label: 'Search' },
-    { text: 'Smart Cookbook', icon: <BookIcon />, path: '/smart-cookbook', label: 'Smart' },
-    { text: 'Collections', icon: <CollectionsIcon />, path: '/collections', label: 'Collections' },
-    { text: 'Meal Plans', icon: <CalendarMonthIcon />, path: '/meal-plans', label: 'Meal Plans' },
+    { text: 'Dashboard', icon: <HomeIcon />, path: '/', label: 'Dashboard' },
+    { text: 'Cookbook', icon: <BookIcon />, path: '/cookbook', label: 'Cookbook' },
+    { text: 'Planner', icon: <CalendarMonthIcon />, path: '/planner', label: 'Planner' },
     { text: 'Pantry', icon: <KitchenIcon />, path: '/pantry', label: 'Pantry' },
-    { text: 'Ingredients', icon: <InventoryIcon />, path: '/ingredients', label: 'Ingredients' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', label: 'Settings' },
   ];
 
@@ -101,14 +95,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
   const breadcrumbs = generateBreadcrumbs();
 
-  // Handle search functionality
-  const handleSearch = (searchTerm: string) => {
-    if (searchTerm.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchTerm.trim())}`);
-    } else {
-      navigate('/search');
-    }
-  };
+
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -135,13 +122,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             <Typography variant="h6" noWrap component="div">
               JustCooked
             </Typography>
-          </Box>
-          <Box sx={{ width: '40%', minWidth: 300 }}>
-            <SearchBar
-              onSearch={handleSearch}
-              placeholder="Search recipes..."
-              data-testid="app-layout-search-bar"
-            />
           </Box>
           <Box sx={{ flexGrow: 1 }} />
           <QueueStatusButton onClick={() => setQueuePopupOpen(true)} />

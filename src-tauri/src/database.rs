@@ -2339,6 +2339,33 @@ impl Database {
         Ok(())
     }
 
+    pub async fn get_all_shopping_lists(&self) -> Result<Vec<ShoppingList>> {
+        let rows = sqlx::query("SELECT * FROM shopping_lists ORDER BY date_created DESC")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch all shopping lists")?;
+
+        let mut shopping_lists = Vec::new();
+        for row in rows {
+            let shopping_list = ShoppingList {
+                id: row.get("id"),
+                meal_plan_id: row.get("meal_plan_id"),
+                name: row.get("name"),
+                date_range_start: row.get("date_range_start"),
+                date_range_end: row.get("date_range_end"),
+                date_created: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_created"))
+                    .context("Failed to parse date_created")?
+                    .with_timezone(&Utc),
+                date_modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_modified"))
+                    .context("Failed to parse date_modified")?
+                    .with_timezone(&Utc),
+            };
+            shopping_lists.push(shopping_list);
+        }
+
+        Ok(shopping_lists)
+    }
+
     pub async fn get_shopping_lists_by_meal_plan(&self, meal_plan_id: &str) -> Result<Vec<ShoppingList>> {
         let rows = sqlx::query("SELECT * FROM shopping_lists WHERE meal_plan_id = ? ORDER BY date_created DESC")
             .bind(meal_plan_id)

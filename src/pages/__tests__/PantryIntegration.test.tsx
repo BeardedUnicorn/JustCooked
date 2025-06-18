@@ -1,6 +1,9 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import Pantry from '../Pantry';
+import PantryHub from '../PantryHub';
+
+// Use PantryHub as Pantry for the tests
+const Pantry = PantryHub;
 import { PantryItem } from '@app-types';
 
 // Mock pantryStorage service

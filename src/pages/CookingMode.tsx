@@ -4,7 +4,7 @@ import {
   Box, Typography, Button, IconButton, LinearProgress, Paper,
   List, ListItem, ListItemText, Checkbox,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Chip, useTheme, useMediaQuery
+  Chip, useTheme, useMediaQuery, Drawer, Fab
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -17,6 +17,9 @@ import {
   Stop as StopIcon,
   Fullscreen as FullscreenIcon,
   FullscreenExit as FullscreenExitIcon,
+  Restaurant as RestaurantIcon,
+
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { Recipe } from '@app-types';
 import { getRecipeById } from '@services/recipeStorage';
@@ -37,6 +40,7 @@ const CookingMode: React.FC = () => {
   const [timer, setTimer] = useState<number | null>(null);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerDialogOpen, setTimerDialogOpen] = useState(false);
+  const [ingredientsDrawerOpen, setIngredientsDrawerOpen] = useState(false);
 
 
   useEffect(() => {
@@ -231,37 +235,39 @@ const CookingMode: React.FC = () => {
       )}
 
       <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 3 }}>
-        {/* Ingredients Panel */}
-        <Paper sx={{ 
-          flex: isMobile ? 'none' : '0 0 300px', 
-          p: 2, 
-          height: 'fit-content',
-          position: isMobile ? 'static' : 'sticky',
-          top: isMobile ? 'auto' : '120px',
-        }}>
-          <Typography variant="h6" gutterBottom>
-            Ingredients
-          </Typography>
-          <List dense>
-            {recipe.ingredients.map((ingredient, index) => (
-              <ListItem key={index} dense data-testid={`cooking-mode-ingredient-${index}`}>
-                <Checkbox
-                  checked={checkedIngredients.has(index)}
-                  onChange={() => handleIngredientCheck(index)}
-                  size="small"
-                  data-testid={`cooking-mode-ingredient-checkbox-${index}`}
-                />
-                <ListItemText
-                  primary={formatIngredientForDisplay(ingredient)}
-                  sx={{
-                    textDecoration: checkedIngredients.has(index) ? 'line-through' : 'none',
-                    opacity: checkedIngredients.has(index) ? 0.6 : 1,
-                  }}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
+        {/* Ingredients Panel - Desktop */}
+        {!isMobile && (
+          <Paper sx={{
+            flex: '0 0 300px',
+            p: 2,
+            height: 'fit-content',
+            position: 'sticky',
+            top: '120px',
+          }}>
+            <Typography variant="h6" gutterBottom>
+              Ingredients
+            </Typography>
+            <List dense>
+              {recipe.ingredients.map((ingredient, index) => (
+                <ListItem key={index} dense data-testid={`cooking-mode-ingredient-${index}`}>
+                  <Checkbox
+                    checked={checkedIngredients.has(index)}
+                    onChange={() => handleIngredientCheck(index)}
+                    size="small"
+                    data-testid={`cooking-mode-ingredient-checkbox-${index}`}
+                  />
+                  <ListItemText
+                    primary={formatIngredientForDisplay(ingredient)}
+                    sx={{
+                      textDecoration: checkedIngredients.has(index) ? 'line-through' : 'none',
+                      opacity: checkedIngredients.has(index) ? 0.6 : 1,
+                    }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        )}
 
         {/* Instructions Panel */}
         <Box sx={{ flex: 1 }}>
@@ -277,10 +283,11 @@ const CookingMode: React.FC = () => {
               />
             </Box>
             
-            <Typography variant="body1" sx={{ 
-              fontSize: isMobile ? '1.1rem' : '1.25rem',
-              lineHeight: 1.6,
+            <Typography variant="body1" sx={{
+              fontSize: isMobile ? '1.3rem' : '1.5rem',
+              lineHeight: isMobile ? 1.7 : 1.8,
               mb: 3,
+              fontWeight: 500,
             }}>
               {recipe.instructions[currentStep]}
             </Typography>
@@ -328,6 +335,72 @@ const CookingMode: React.FC = () => {
           </Paper>
         </Box>
       </Box>
+
+      {/* Mobile Ingredients FAB */}
+      {isMobile && (
+        <Fab
+          color="primary"
+          aria-label="show ingredients"
+          onClick={() => setIngredientsDrawerOpen(true)}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            zIndex: 1000,
+          }}
+          data-testid="cooking-mode-ingredients-fab"
+        >
+          <RestaurantIcon />
+        </Fab>
+      )}
+
+      {/* Mobile Ingredients Drawer */}
+      <Drawer
+        anchor="bottom"
+        open={ingredientsDrawerOpen}
+        onClose={() => setIngredientsDrawerOpen(false)}
+        data-testid="cooking-mode-ingredients-drawer"
+        PaperProps={{
+          sx: {
+            maxHeight: '70vh',
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+          }
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              Ingredients
+            </Typography>
+            <IconButton
+              onClick={() => setIngredientsDrawerOpen(false)}
+              data-testid="cooking-mode-ingredients-drawer-close"
+            >
+              <ExpandMoreIcon />
+            </IconButton>
+          </Box>
+          <List dense>
+            {recipe.ingredients.map((ingredient, index) => (
+              <ListItem key={index} dense data-testid={`cooking-mode-ingredient-mobile-${index}`}>
+                <Checkbox
+                  checked={checkedIngredients.has(index)}
+                  onChange={() => handleIngredientCheck(index)}
+                  size="small"
+                  data-testid={`cooking-mode-ingredient-mobile-checkbox-${index}`}
+                />
+                <ListItemText
+                  primary={formatIngredientForDisplay(ingredient)}
+                  sx={{
+                    textDecoration: checkedIngredients.has(index) ? 'line-through' : 'none',
+                    opacity: checkedIngredients.has(index) ? 0.6 : 1,
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Drawer>
 
       {/* Timer Dialog */}
       <Dialog open={timerDialogOpen} onClose={() => setTimerDialogOpen(false)} data-testid="cooking-mode-timer-dialog">

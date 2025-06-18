@@ -1493,6 +1493,14 @@ async fn db_save_shopping_list(
 }
 
 #[tauri::command]
+async fn db_get_all_shopping_lists(app: tauri::AppHandle) -> Result<Vec<FrontendShoppingList>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let shopping_lists = db.get_all_shopping_lists().await.map_err(|e| e.to_string())?;
+    let frontend_shopping_lists = shopping_lists.into_iter().map(convert_db_to_frontend_shopping_list).collect();
+    Ok(frontend_shopping_lists)
+}
+
+#[tauri::command]
 async fn db_get_shopping_lists_by_meal_plan(
     app: tauri::AppHandle,
     meal_plan_id: String,
@@ -1981,6 +1989,7 @@ pub fn run() {
             db_get_meal_plan_recipes,
             db_delete_meal_plan_recipe,
             db_save_shopping_list,
+            db_get_all_shopping_lists,
             db_get_shopping_lists_by_meal_plan,
             db_get_shopping_list_by_id,
             db_delete_shopping_list,

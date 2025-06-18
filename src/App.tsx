@@ -7,17 +7,11 @@ import { useEffect } from 'react';
 import { store } from '@store';
 import darkTheme from '@styles/theme';
 import AppLayout from '@components/AppLayout';
-import Home from '@pages/Home';
-import Import from '@pages/Import';
-import Search from '@pages/Search';
-import SmartCookbook from '@pages/SmartCookbook';
-import Collections from '@pages/Collections';
-import CollectionView from '@pages/CollectionView';
-import MealPlans from '@pages/MealPlans';
+import Dashboard from '@pages/Dashboard';
+import Cookbook from '@pages/Cookbook';
+import Planner from '@pages/Planner';
+import PantryHub from '@pages/PantryHub';
 import MealPlanView from '@pages/MealPlanView';
-import ShoppingListPage from '@pages/ShoppingListPage';
-import Pantry from '@pages/Pantry';
-import Ingredients from '@pages/Ingredients';
 import RecipeView from '@pages/RecipeView';
 import CookingMode from '@pages/CookingMode';
 import Settings from '@pages/Settings';
@@ -52,18 +46,15 @@ function App() {
             <Route path="/*" element={
               <AppLayout>
                 <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/import" element={<Import />} />
-                  <Route path="/search" element={<Search />} />
-                  <Route path="/smart-cookbook" element={<SmartCookbook />} />
-                  <Route path="/collections" element={<Collections />} />
-                  <Route path="/collections/:id" element={<CollectionView />} />
-                  <Route path="/meal-plans" element={<MealPlans />} />
-                  <Route path="/meal-plans/:id" element={<MealPlanView />} />
-                  <Route path="/shopping-lists/:id" element={<ShoppingListPage />} />
-                  <Route path="/pantry" element={<Pantry />} />
-                  <Route path="/ingredients" element={<Ingredients />} />
+                  {/* Hub Routes */}
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/cookbook" element={<Cookbook />} />
+                  <Route path="/planner" element={<Planner />} />
+                  <Route path="/pantry" element={<PantryHub />} />
                   <Route path="/settings" element={<Settings />} />
+
+                  {/* Individual Item Routes */}
+                  <Route path="/meal-plans/:id" element={<MealPlanView />} />
                   <Route path="/recipe/:id" element={<RecipeView />} />
                 </Routes>
               </AppLayout>

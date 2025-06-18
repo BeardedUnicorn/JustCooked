@@ -5,8 +5,7 @@ import { autoDetectIngredients } from '@services/ingredientStorage';
 import { processRecipeImage } from '@services/imageService';
 import { createLogger } from '@services/loggingService';
 import {
-  parseIngredientsWithIngredientCrate,
-  parseIngredients
+  parseIngredientsWithIngredientCrate
 } from '@utils/ingredientUtils';
 import { isSupportedUrl } from '@utils/urlUtils';
 import { parseTags, decodeAllHtmlEntities } from '@utils/stringUtils';

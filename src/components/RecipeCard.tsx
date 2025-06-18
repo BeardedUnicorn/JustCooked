@@ -3,7 +3,9 @@ import {
   Card, CardContent, CardMedia, Typography, Box, Chip,
   CardActionArea, IconButton, CardActions, Dialog,
   DialogTitle, DialogContent, DialogActions, Button,
-  Rating, Tooltip, Menu, MenuItem, ListItemIcon, ListItemText
+  Rating, Tooltip, Menu, MenuItem, ListItemIcon, ListItemText,
+  FormControl, InputLabel, Select, TextField, Divider,
+  CircularProgress, Alert
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -15,9 +17,13 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import ShareIcon from '@mui/icons-material/Share';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StarIcon from '@mui/icons-material/Star';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 
-import { Recipe } from '@app-types';
+import { Recipe, MealPlan, RecipeCollection } from '@app-types';
 import { deleteRecipe, updateRecipe } from '@services/recipeStorage';
+import { getAllMealPlans, createNewMealPlanRecipe, saveMealPlanRecipe } from '@services/mealPlanStorage';
+import { getAllCollections, addRecipeToCollection } from '@services/recipeCollectionStorage';
 import { useImageUrl } from '@hooks/useImageUrl';
 import { calculateTotalTime } from '@utils/timeUtils';
 
@@ -31,6 +37,16 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [mealPlanDialogOpen, setMealPlanDialogOpen] = useState(false);
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
+  const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
+  const [collections, setCollections] = useState<RecipeCollection[]>([]);
+  const [selectedMealPlan, setSelectedMealPlan] = useState<string>('');
+  const [selectedCollection, setSelectedCollection] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedMealType, setSelectedMealType] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
   const { imageUrl } = useImageUrl(recipe.image);
 
   // Helper functions
@@ -132,6 +148,91 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
       alert(`Failed to delete recipe: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleAddToMealPlanClick = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const mealPlansData = await getAllMealPlans();
+      setMealPlans(mealPlansData);
+      setMealPlanDialogOpen(true);
+      // Set default date to today
+      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedMealType('dinner'); // Default meal type
+    } catch (error) {
+      console.error('Failed to load meal plans:', error);
+      setError('Failed to load meal plans');
+    } finally {
+      setLoading(false);
+    }
+    handleMenuClose();
+  };
+
+  const handleAddToCollectionClick = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const collectionsData = await getAllCollections();
+      setCollections(collectionsData);
+      setCollectionDialogOpen(true);
+    } catch (error) {
+      console.error('Failed to load collections:', error);
+      setError('Failed to load collections');
+    } finally {
+      setLoading(false);
+    }
+    handleMenuClose();
+  };
+
+  const handleConfirmAddToMealPlan = async () => {
+    if (!selectedMealPlan || !selectedDate || !selectedMealType) {
+      setError('Please select a meal plan, date, and meal type');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const mealPlanRecipe = createNewMealPlanRecipe(
+        selectedMealPlan,
+        recipe.id,
+        selectedDate,
+        selectedMealType,
+        1.0 // Default serving multiplier
+      );
+      await saveMealPlanRecipe(mealPlanRecipe);
+      setMealPlanDialogOpen(false);
+      // Reset form
+      setSelectedMealPlan('');
+      setSelectedDate('');
+      setSelectedMealType('');
+    } catch (error) {
+      console.error('Failed to add recipe to meal plan:', error);
+      setError('Failed to add recipe to meal plan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmAddToCollection = async () => {
+    if (!selectedCollection) {
+      setError('Please select a collection');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      await addRecipeToCollection(selectedCollection, recipe.id);
+      setCollectionDialogOpen(false);
+      setSelectedCollection('');
+    } catch (error) {
+      console.error('Failed to add recipe to collection:', error);
+      setError('Failed to add recipe to collection');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -389,6 +490,20 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           </ListItemIcon>
           <ListItemText>Share Recipe</ListItemText>
         </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleAddToMealPlanClick} data-testid={`recipe-card-${recipe.id}-menu-add-to-meal-plan`}>
+          <ListItemIcon>
+            <CalendarTodayIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add to Meal Plan</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleAddToCollectionClick} data-testid={`recipe-card-${recipe.id}-menu-add-to-collection`}>
+          <ListItemIcon>
+            <CollectionsBookmarkIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add to Collection</ListItemText>
+        </MenuItem>
+        <Divider />
         <MenuItem onClick={handleDeleteClick} data-testid={`recipe-card-${recipe.id}-menu-delete`}>
           <ListItemIcon>
             <DeleteOutlineIcon fontSize="small" />
@@ -417,6 +532,134 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           </Button>
           <Button onClick={handleConfirmDelete} color="error" variant="contained" data-testid={`recipe-card-${recipe.id}-delete-confirm`}>
             Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add to Meal Plan Dialog */}
+      <Dialog
+        open={mealPlanDialogOpen}
+        onClose={() => setMealPlanDialogOpen(false)}
+        aria-labelledby="meal-plan-dialog-title"
+        maxWidth="sm"
+        fullWidth
+        data-testid={`recipe-card-${recipe.id}-meal-plan-dialog`}
+      >
+        <DialogTitle id="meal-plan-dialog-title">Add "{recipe.title}" to Meal Plan</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Meal Plan</InputLabel>
+            <Select
+              value={selectedMealPlan}
+              onChange={(e) => setSelectedMealPlan(e.target.value)}
+              label="Meal Plan"
+              data-testid={`recipe-card-${recipe.id}-meal-plan-select`}
+            >
+              {mealPlans.map((mealPlan) => (
+                <MenuItem key={mealPlan.id} value={mealPlan.id}>
+                  {mealPlan.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Date"
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            data-testid={`recipe-card-${recipe.id}-date-input`}
+          />
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Meal Type</InputLabel>
+            <Select
+              value={selectedMealType}
+              onChange={(e) => setSelectedMealType(e.target.value)}
+              label="Meal Type"
+              data-testid={`recipe-card-${recipe.id}-meal-type-select`}
+            >
+              <MenuItem value="breakfast">Breakfast</MenuItem>
+              <MenuItem value="lunch">Lunch</MenuItem>
+              <MenuItem value="dinner">Dinner</MenuItem>
+              <MenuItem value="snacks">Snacks</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setMealPlanDialogOpen(false)}
+            data-testid={`recipe-card-${recipe.id}-meal-plan-cancel`}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmAddToMealPlan}
+            variant="contained"
+            disabled={loading || !selectedMealPlan || !selectedDate || !selectedMealType}
+            data-testid={`recipe-card-${recipe.id}-meal-plan-confirm`}
+          >
+            {loading ? <CircularProgress size={20} /> : 'Add to Meal Plan'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add to Collection Dialog */}
+      <Dialog
+        open={collectionDialogOpen}
+        onClose={() => setCollectionDialogOpen(false)}
+        aria-labelledby="collection-dialog-title"
+        maxWidth="sm"
+        fullWidth
+        data-testid={`recipe-card-${recipe.id}-collection-dialog`}
+      >
+        <DialogTitle id="collection-dialog-title">Add "{recipe.title}" to Collection</DialogTitle>
+        <DialogContent>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel>Collection</InputLabel>
+            <Select
+              value={selectedCollection}
+              onChange={(e) => setSelectedCollection(e.target.value)}
+              label="Collection"
+              data-testid={`recipe-card-${recipe.id}-collection-select`}
+            >
+              {collections.map((collection) => (
+                <MenuItem key={collection.id} value={collection.id}>
+                  {collection.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setCollectionDialogOpen(false)}
+            data-testid={`recipe-card-${recipe.id}-collection-cancel`}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmAddToCollection}
+            variant="contained"
+            disabled={loading || !selectedCollection}
+            data-testid={`recipe-card-${recipe.id}-collection-confirm`}
+          >
+            {loading ? <CircularProgress size={20} /> : 'Add to Collection'}
           </Button>
         </DialogActions>
       </Dialog>

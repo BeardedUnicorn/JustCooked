@@ -12,6 +12,15 @@ export async function saveShoppingList(shoppingList: ShoppingList): Promise<void
   }
 }
 
+export async function getAllShoppingLists(): Promise<ShoppingList[]> {
+  try {
+    return await invoke<ShoppingList[]>('db_get_all_shopping_lists');
+  } catch (error) {
+    console.error('Failed to get all shopping lists:', error);
+    return [];
+  }
+}
+
 export async function getShoppingListsByMealPlan(mealPlanId: string): Promise<ShoppingList[]> {
   try {
     return await invoke<ShoppingList[]>('db_get_shopping_lists_by_meal_plan', { mealPlanId });
