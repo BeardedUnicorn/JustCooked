@@ -184,6 +184,32 @@ export async function getExistingRecipeUrls(): Promise<string[]> {
   }
 }
 
+// Check if a recipe with the given URL already exists
+export async function recipeExistsByUrl(sourceUrl: string): Promise<boolean> {
+  try {
+    return await invoke<boolean>('db_recipe_exists_by_url', { sourceUrl });
+  } catch (error) {
+    console.error('Failed to check if recipe exists by URL:', error);
+    return false;
+  }
+}
+
+// Get recipe by source URL
+export async function getRecipeByUrl(sourceUrl: string): Promise<Recipe | null> {
+  try {
+    const frontendRecipe = await invoke<any | null>('db_get_recipe_by_url', { sourceUrl });
+
+    if (!frontendRecipe) {
+      return null;
+    }
+
+    return convertTauriToFrontendRecipe(frontendRecipe);
+  } catch (error) {
+    console.warn(`Recipe not found by URL: ${sourceUrl}`, error);
+    return null;
+  }
+}
+
 // Search recipes
 export async function searchRecipes(query: string): Promise<Recipe[]> {
   try {

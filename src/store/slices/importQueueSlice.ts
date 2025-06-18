@@ -62,13 +62,18 @@ export const addMultipleToQueue = createAsyncThunk(
   'importQueue/addMultipleToQueue',
   async ({
     urls,
-    options
+    options,
+    onProgress
   }: {
     urls: string[];
-    options?: { maxRecipes?: number; maxDepth?: number }
+    options?: { maxRecipes?: number; maxDepth?: number };
+    onProgress?: (progress: { processed: number; total: number; currentUrl?: string }) => void;
   }, { rejectWithValue }) => {
     try {
-      const result = await importQueueService.addMultipleToQueue(urls, options);
+      const result = await importQueueService.addMultipleToQueue(urls, {
+        ...options,
+        onProgress
+      });
       return result;
     } catch (error) {
       console.error('Failed to add multiple tasks to queue:', error);

@@ -448,10 +448,35 @@ async fn db_get_favorite_recipes(app: tauri::AppHandle) -> Result<Vec<FrontendRe
 #[tauri::command]
 async fn db_get_existing_recipe_urls(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
-    
+
     let urls = db.get_existing_recipe_urls().await.map_err(|e| e.to_string())?;
-    
+
     Ok(urls)
+}
+
+#[tauri::command]
+async fn db_recipe_exists_by_url(
+    app: tauri::AppHandle,
+    source_url: String,
+) -> Result<bool, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+
+    let exists = db.recipe_exists_by_url(&source_url).await.map_err(|e| e.to_string())?;
+
+    Ok(exists)
+}
+
+#[tauri::command]
+async fn db_get_recipe_by_url(
+    app: tauri::AppHandle,
+    source_url: String,
+) -> Result<Option<FrontendRecipe>, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+
+    let recipe = db.get_recipe_by_url(&source_url).await.map_err(|e| e.to_string())?;
+    let frontend_recipe = recipe.map(convert_db_to_frontend_recipe);
+
+    Ok(frontend_recipe)
 }
 
 #[tauri::command]
@@ -1955,6 +1980,8 @@ pub fn run() {
             db_get_recipes_by_tag,
             db_get_favorite_recipes,
             db_get_existing_recipe_urls,
+            db_recipe_exists_by_url,
+            db_get_recipe_by_url,
             db_migrate_json_recipes,
             db_save_ingredient,
             db_get_all_ingredients,

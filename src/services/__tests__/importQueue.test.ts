@@ -120,9 +120,9 @@ describe('ImportQueueService', () => {
       expect(result.errors).toHaveLength(0);
       expect(mockInvoke).toHaveBeenCalledTimes(3);
 
-      // Verify each call includes the options
-      urls.forEach((url, index) => {
-        expect(mockInvoke).toHaveBeenNthCalledWith(index + 1, 'add_to_import_queue', {
+      // Verify each call includes the options (order may vary due to concurrent processing)
+      urls.forEach((url) => {
+        expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', {
           description: expect.stringContaining('AllRecipes'),
           request: expect.objectContaining({
             startUrl: url,
@@ -181,9 +181,9 @@ describe('ImportQueueService', () => {
       expect(result.totalAdded).toBe(2);
       expect(mockInvoke).toHaveBeenCalledTimes(2);
 
-      // Verify calls don't include maxRecipes/maxDepth when not provided
-      urls.forEach((url, index) => {
-        expect(mockInvoke).toHaveBeenNthCalledWith(index + 1, 'add_to_import_queue', {
+      // Verify calls don't include maxRecipes/maxDepth when not provided (order may vary due to concurrent processing)
+      urls.forEach((url) => {
+        expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', {
           description: expect.stringContaining('AllRecipes'),
           request: expect.objectContaining({
             startUrl: url,
@@ -191,6 +191,29 @@ describe('ImportQueueService', () => {
           }),
         });
       });
+    });
+
+    it('should call progress callback during concurrent processing', async () => {
+      const urls = [
+        'https://allrecipes.com/recipes/desserts/',
+        'https://allrecipes.com/recipes/main-dish/',
+      ];
+
+      mockInvoke.mockResolvedValue('task-123');
+      const progressCallback = vi.fn();
+
+      const result = await queueService.addMultipleToQueue(urls, { onProgress: progressCallback });
+
+      expect(result.totalAdded).toBe(2);
+      expect(progressCallback).toHaveBeenCalled();
+
+      // Should be called at least once with final progress
+      expect(progressCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processed: 2,
+          total: 2,
+        })
+      );
     });
   });
 

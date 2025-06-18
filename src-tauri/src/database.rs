@@ -489,6 +489,12 @@ impl Database {
         .await
         .context("Failed to create shopping_list_items table")?;
 
+        // Add unique constraint to source_url for existing databases
+        // First, check if the constraint already exists by trying to create a unique index
+        let _ = sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_source_url_unique ON recipes(source_url)")
+            .execute(&self.pool)
+            .await; // Ignore errors if constraint already exists or if there are duplicate URLs
+
         // Create indexes for better performance
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title)")
             .execute(&self.pool)
@@ -725,6 +731,31 @@ impl Database {
             .context("Failed to check if recipe exists")?;
 
         Ok(count > 0)
+    }
+
+    /// Check if a recipe with the given source URL already exists
+    pub async fn recipe_exists_by_url(&self, source_url: &str) -> Result<bool> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM recipes WHERE source_url = ?")
+            .bind(source_url)
+            .fetch_one(&self.pool)
+            .await
+            .context("Failed to check if recipe exists by URL")?;
+
+        Ok(count > 0)
+    }
+
+    /// Get recipe by source URL
+    pub async fn get_recipe_by_url(&self, source_url: &str) -> Result<Option<Recipe>> {
+        let row = sqlx::query("SELECT * FROM recipes WHERE source_url = ?")
+            .bind(source_url)
+            .fetch_optional(&self.pool)
+            .await
+            .context("Failed to fetch recipe by URL")?;
+
+        match row {
+            Some(row) => Ok(Some(self.row_to_recipe(row)?)),
+            None => Ok(None),
+        }
     }
 
     pub async fn migrate_json_recipes(&self, app_handle: &tauri::AppHandle) -> Result<usize> {

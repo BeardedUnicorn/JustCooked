@@ -54,48 +54,109 @@ export class ImportQueueService {
   }
 
   /**
-   * Add multiple batch import tasks to the queue
+   * Add multiple batch import tasks to the queue with concurrent processing
    */
   async addMultipleToQueue(
     urls: string[],
     options?: {
       maxRecipes?: number;
       maxDepth?: number;
+      onProgress?: (progress: { processed: number; total: number; currentUrl?: string }) => void;
     }
   ): Promise<{ taskIds: string[]; totalAdded: number; errors: Array<{ url: string; error: string }> }> {
     const taskIds: string[] = [];
     const errors: Array<{ url: string; error: string }> = [];
+    const CONCURRENT_THREADS = 5; // Number of concurrent queue additions
+    const CHUNK_SIZE = 10; // Process URLs in chunks to avoid overwhelming the system
 
     try {
-      await logger.info('Adding multiple tasks to import queue', { urlCount: urls.length });
+      await logger.info('Adding multiple tasks to import queue with concurrent processing', {
+        urlCount: urls.length,
+        concurrentThreads: CONCURRENT_THREADS,
+        chunkSize: CHUNK_SIZE
+      });
 
       // Get existing recipe URLs once for all tasks
       const existingUrls = await getExistingRecipeUrls();
 
-      // Process each URL
-      for (const url of urls) {
-        try {
-          const request: BatchImportRequest = {
-            startUrl: url,
-            maxRecipes: options?.maxRecipes,
-            maxDepth: options?.maxDepth,
-            existingUrls,
-          };
+      // Process URLs in chunks with concurrent processing
+      const chunks = this.chunkArray(urls, CHUNK_SIZE);
+      let processedCount = 0;
 
-          const description = this.getTaskDescription(request);
-          const taskId = await this.addToQueue(description, request);
-          taskIds.push(taskId);
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          errors.push({ url, error: errorMessage });
-          await logger.logError(error, 'Failed to add individual task to queue', { url });
+      for (const chunk of chunks) {
+        // Process each chunk concurrently
+        const chunkPromises = chunk.map(async (url): Promise<{ success: true; taskId: string; url: string } | { success: false; error: string; url: string }> => {
+          try {
+            // Report progress
+            if (options?.onProgress) {
+              options.onProgress({
+                processed: processedCount,
+                total: urls.length,
+                currentUrl: url
+              });
+            }
+
+            const request: BatchImportRequest = {
+              startUrl: url,
+              maxRecipes: options?.maxRecipes,
+              maxDepth: options?.maxDepth,
+              existingUrls,
+            };
+
+            const description = this.getTaskDescription(request);
+            const taskId = await this.addToQueue(description, request);
+
+            processedCount++;
+
+            // Report progress after completion
+            if (options?.onProgress) {
+              options.onProgress({
+                processed: processedCount,
+                total: urls.length
+              });
+            }
+
+            return { success: true, taskId, url };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            await logger.logError(error, 'Failed to add individual task to queue', { url });
+            processedCount++;
+
+            // Report progress even on error
+            if (options?.onProgress) {
+              options.onProgress({
+                processed: processedCount,
+                total: urls.length
+              });
+            }
+
+            return { success: false, error: errorMessage, url };
+          }
+        });
+
+        // Wait for all tasks in this chunk to complete
+        const chunkResults = await Promise.all(chunkPromises);
+
+        // Process results
+        for (const result of chunkResults) {
+          if (result.success) {
+            taskIds.push(result.taskId);
+          } else {
+            errors.push({ url: result.url, error: result.error });
+          }
+        }
+
+        // Add a small delay between chunks to avoid overwhelming the system
+        if (chunks.indexOf(chunk) < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
       await logger.info('Completed adding multiple tasks to queue', {
         totalRequested: urls.length,
         totalAdded: taskIds.length,
-        totalErrors: errors.length
+        totalErrors: errors.length,
+        processingMethod: 'concurrent'
       });
 
       return {
@@ -107,6 +168,17 @@ export class ImportQueueService {
       await logger.logError(error, 'Failed to add multiple tasks to queue');
       throw new Error(`Failed to add multiple tasks to queue: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Utility function to split array into chunks
+   */
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box, TextField, InputAdornment, IconButton,
   Popover, List, ListItem, ListItemText, Typography
@@ -6,29 +6,50 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import HistoryIcon from '@mui/icons-material/History';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { RecentSearch } from '@app-types';
+import { getRecentSearches, saveSearch } from '@services/searchHistoryStorage';
 
 
 
 interface SearchBarProps {
   onSearch: (term: string) => void;
+  onAdvancedSearch?: () => void;
   placeholder?: string;
   'data-testid'?: string;
 }
 
-const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search...', 'data-testid': testId }) => {
+const SearchBar: React.FC<SearchBarProps> = ({ onSearch, onAdvancedSearch, placeholder = 'Search...', 'data-testid': testId }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [searchHistory, setSearchHistory] = useState<RecentSearch[]>([]);
   const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
 
-  const handleSearch = () => {
+  // Load search history on component mount
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const history = await getRecentSearches(5);
+        setSearchHistory(history);
+      } catch (error) {
+        console.error('Failed to load search history:', error);
+      }
+    };
+    loadHistory();
+  }, []);
+
+  const handleSearch = async () => {
     const trimmedTerm = searchTerm.trim();
     if (trimmedTerm) {
       onSearch(trimmedTerm);
 
-      // Add to history if not already there
-      if (!searchHistory.includes(trimmedTerm)) {
-        const newHistory = [trimmedTerm, ...searchHistory].slice(0, 5);
-        setSearchHistory(newHistory);
+      // Save to search history
+      try {
+        await saveSearch(trimmedTerm);
+        // Reload search history to get updated list
+        const updatedHistory = await getRecentSearches(5);
+        setSearchHistory(updatedHistory);
+      } catch (error) {
+        console.error('Failed to save search to history:', error);
       }
     }
   };
@@ -54,9 +75,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
     setAnchorEl(null);
   };
 
-  const handleHistoryItemClick = (term: string) => {
-    setSearchTerm(term);
-    onSearch(term);
+  const handleHistoryItemClick = (search: RecentSearch) => {
+    setSearchTerm(search.query);
+    onSearch(search.query);
     handleClose();
   };
 
@@ -79,11 +100,24 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
               <SearchIcon />
             </InputAdornment>
           ),
-          endAdornment: searchTerm && (
+          endAdornment: (
             <InputAdornment position="end">
-              <IconButton size="small" onClick={handleClear} aria-label="clear" data-testid="search-bar-clear-button">
-                <ClearIcon fontSize="small" />
-              </IconButton>
+              {onAdvancedSearch && (
+                <IconButton
+                  size="small"
+                  onClick={onAdvancedSearch}
+                  aria-label="advanced search"
+                  data-testid="search-bar-advanced-button"
+                  sx={{ mr: searchTerm ? 0.5 : 0 }}
+                >
+                  <FilterListIcon fontSize="small" />
+                </IconButton>
+              )}
+              {searchTerm && (
+                <IconButton size="small" onClick={handleClear} aria-label="clear" data-testid="search-bar-clear-button">
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              )}
             </InputAdornment>
           ),
         }}
@@ -113,14 +147,17 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, placeholder = 'Search..
               Recent Searches
             </Typography>
           </ListItem>
-          {searchHistory.map((term, index) => (
+          {searchHistory.map((search, index) => (
             <ListItem
-              key={index}
-              onClick={() => handleHistoryItemClick(term)}
+              key={search.id}
+              onClick={() => handleHistoryItemClick(search)}
               data-testid={`search-history-item-${index}`}
               sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
             >
-              <ListItemText primary={term} />
+              <ListItemText
+                primary={search.query}
+                secondary={new Date(search.timestamp).toLocaleDateString()}
+              />
             </ListItem>
           ))}
         </List>

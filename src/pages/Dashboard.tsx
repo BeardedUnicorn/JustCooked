@@ -2,21 +2,19 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box, Typography, Grid, Card, CardContent, Button, Chip,
   CircularProgress, List, ListItem, ListItemText, ListItemIcon,
-  Divider, Alert
+  Divider, Alert, Paper
 } from '@mui/material';
 import {
   Add as AddIcon,
   Kitchen as KitchenIcon,
   CalendarToday as CalendarIcon,
-  ShoppingCart as ShoppingCartIcon,
   Warning as WarningIcon,
-
   Restaurant as RestaurantIcon,
   EventNote as EventNoteIcon,
   ImportContacts as ImportIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { MealPlanRecipe, ShoppingList, PantryItem } from '@app-types';
+import { MealPlanRecipe, PantryItem } from '@app-types';
 import { useAppDispatch, useAppSelector } from '@store';
 import { loadAllRecipes, selectRecipes, selectRecipesLoading } from '@store/slices/recipesSlice';
 import { getAllMealPlans, getMealPlanRecipes, groupMealPlanRecipesByDate } from '@services/mealPlanStorage';
@@ -32,7 +30,6 @@ const Dashboard: React.FC = () => {
 
   // State for dashboard data
   const [todaysMealPlanRecipes, setTodaysMealPlanRecipes] = useState<MealPlanRecipe[]>([]);
-  const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
   const [expiringItems, setExpiringItems] = useState<PantryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,12 +49,11 @@ const Dashboard: React.FC = () => {
         setLoading(true);
 
         // Load all data in parallel
-        const [mealPlansData, shoppingListsData, expiringItemsData] = await Promise.all([
+        const [mealPlansData, , expiringItemsData] = await Promise.all([
           getAllMealPlans(),
           getAllShoppingLists(),
           getExpiringItems(7) // Items expiring within 7 days
         ]);
-        setShoppingLists(shoppingListsData);
         setExpiringItems(expiringItemsData);
 
         // Find today's meal plan recipes
@@ -120,8 +116,57 @@ const Dashboard: React.FC = () => {
       )}
 
       <Grid container spacing={3}>
+        {/* What's for Dinner? Widget */}
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+                <RestaurantIcon sx={{ mr: 1 }} />
+                What's for Dinner?
+              </Typography>
+              {(() => {
+                const dinnerRecipe = todaysMealPlanRecipes.find(recipe => recipe.mealType === 'dinner');
+                if (dinnerRecipe) {
+                  return (
+                    <Box>
+                      <Typography variant="body1" sx={{ mb: 2 }}>
+                        Recipe ID: {dinnerRecipe.recipeId.slice(0, 8)}...
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Servings: {dinnerRecipe.servingMultiplier}x
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate(`/recipe/${dinnerRecipe.recipeId}`)}
+                        data-testid="dashboard-dinner-recipe-button"
+                      >
+                        View Recipe
+                      </Button>
+                    </Box>
+                  );
+                } else {
+                  return (
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        No dinner planned for today
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate('/cookbook?q=dinner')}
+                        data-testid="dashboard-find-dinner-recipe-button"
+                      >
+                        Find a Recipe
+                      </Button>
+                    </Box>
+                  );
+                }
+              })()}
+            </CardContent>
+          </Card>
+        </Grid>
+
         {/* Quick Actions Widget */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
@@ -129,40 +174,82 @@ const Dashboard: React.FC = () => {
                 Quick Actions
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<ImportIcon />}
+                <Paper
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    },
+                  }}
                   onClick={() => navigate('/cookbook')}
-                  fullWidth
-                  data-testid="dashboard-import-recipe-button"
+                  data-testid="dashboard-import-recipe-card"
                 >
-                  Import Recipe
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<KitchenIcon />}
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <ImportIcon sx={{ mr: 2, fontSize: '2rem', color: 'primary.main' }} />
+                    <Box>
+                      <Typography variant="h6">Import Recipe</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Add new recipes to your collection
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
+                <Paper
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    },
+                  }}
                   onClick={() => navigate('/pantry')}
-                  fullWidth
-                  data-testid="dashboard-add-to-pantry-button"
+                  data-testid="dashboard-add-to-pantry-card"
                 >
-                  Add to Pantry
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<EventNoteIcon />}
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <KitchenIcon sx={{ mr: 2, fontSize: '2rem', color: 'secondary.main' }} />
+                    <Box>
+                      <Typography variant="h6">Add to Pantry</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Manage your pantry items
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
+                <Paper
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    },
+                  }}
                   onClick={() => navigate('/planner')}
-                  fullWidth
-                  data-testid="dashboard-create-meal-plan-button"
+                  data-testid="dashboard-meal-planning-card"
                 >
-                  Create Meal Plan
-                </Button>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <EventNoteIcon sx={{ mr: 2, fontSize: '2rem', color: 'success.main' }} />
+                    <Box>
+                      <Typography variant="h6">Meal Planning</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Plan your weekly meals
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Paper>
               </Box>
             </CardContent>
           </Card>
         </Grid>
 
         {/* Today's Plan Widget */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
@@ -182,66 +269,26 @@ const Dashboard: React.FC = () => {
                       />
                     </ListItem>
                   ))}
-                  {todaysMealPlanRecipes.length > 4 && (
-                    <ListItem sx={{ px: 0 }}>
-                      <ListItemText
-                        primary={`+${todaysMealPlanRecipes.length - 4} more meals`}
-                        sx={{ fontStyle: 'italic', color: 'text.secondary' }}
-                      />
-                    </ListItem>
-                  )}
                 </List>
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                <Typography variant="body2" color="text.secondary">
                   No meals planned for today
                 </Typography>
               )}
               <Button
-                size="small"
+                variant="text"
                 onClick={() => navigate('/planner')}
+                sx={{ mt: 1 }}
                 data-testid="dashboard-view-meal-plan-button"
               >
-                View Meal Plan
-              </Button>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Shopping List Preview Widget */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-                <ShoppingCartIcon sx={{ mr: 1 }} />
-                Shopping List Preview
-              </Typography>
-              {shoppingLists.length > 0 ? (
-                <Box sx={{ py: 2 }}>
-                  <Typography variant="body2" color="text.primary">
-                    {shoppingLists[0].name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {shoppingLists[0].dateRangeStart} to {shoppingLists[0].dateRangeEnd}
-                  </Typography>
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                  No shopping lists yet
-                </Typography>
-              )}
-              <Button
-                size="small"
-                onClick={() => navigate('/planner')}
-                data-testid="dashboard-view-shopping-lists-button"
-              >
-                View Shopping Lists
+                View Full Plan
               </Button>
             </CardContent>
           </Card>
         </Grid>
 
         {/* Pantry At-a-Glance Widget */}
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
@@ -287,7 +334,7 @@ const Dashboard: React.FC = () => {
         </Grid>
 
         {/* Recently Added Recipes Widget */}
-        <Grid size={{ xs: 12, lg: 8 }}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>

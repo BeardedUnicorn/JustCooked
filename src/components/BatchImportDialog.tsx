@@ -17,6 +17,8 @@ import {
   ListItemText,
   ListItemButton,
   Divider,
+  LinearProgress,
+  Chip,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -48,6 +50,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   const [maxDepth, setMaxDepth] = useState<number | ''>('');
   const [isAddingToQueue, setIsAddingToQueue] = useState(false);
   const [isLoadingPopularCategories, setIsLoadingPopularCategories] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState<{ processed: number; total: number; currentUrl?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -61,6 +64,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       setMaxDepth('');
       setIsAddingToQueue(false);
       setIsLoadingPopularCategories(false);
+      setLoadingProgress(null);
       setError(null);
       setSuccessMessage(null);
     }
@@ -117,6 +121,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
     setError(null);
     setSuccessMessage(null);
     setIsLoadingPopularCategories(true);
+    setLoadingProgress({ processed: 0, total: 0 });
 
     try {
       const popularUrls = batchImportService.getPopularCategoryUrls();
@@ -126,7 +131,16 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
         maxDepth: maxDepth ? Number(maxDepth) : undefined,
       };
 
-      const result = await dispatch(addMultipleToQueue({ urls: popularUrls, options })).unwrap();
+      // Set up progress tracking
+      const onProgress = (progress: { processed: number; total: number; currentUrl?: string }) => {
+        setLoadingProgress(progress);
+      };
+
+      const result = await dispatch(addMultipleToQueue({
+        urls: popularUrls,
+        options,
+        onProgress
+      })).unwrap();
 
       // Show success message
       const successMsg = `Successfully added ${result.totalAdded} popular categories to the queue!`;
@@ -150,6 +164,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       setError(err instanceof Error ? err.message : 'Failed to add popular categories to queue');
     } finally {
       setIsLoadingPopularCategories(false);
+      setLoadingProgress(null);
     }
   };
 
@@ -248,8 +263,36 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                 Quick Start
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Load 20 popular AllRecipes categories to get started quickly. This will add all categories to the import queue using your current settings.
+                Load popular AllRecipes categories to get started quickly. This will add all categories to the import queue using your current settings.
               </Typography>
+
+              {/* Progress Display */}
+              {isLoadingPopularCategories && loadingProgress && (
+                <Box sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Adding categories to queue...
+                    </Typography>
+                    <Chip
+                      label={`${loadingProgress.processed}/${loadingProgress.total}`}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={loadingProgress.total > 0 ? (loadingProgress.processed / loadingProgress.total) * 100 : 0}
+                    sx={{ mb: 1 }}
+                  />
+                  {loadingProgress.currentUrl && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      Processing: {new URL(loadingProgress.currentUrl).pathname.split('/').pop() || 'category'}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
               <Button
                 variant="outlined"
                 onClick={handleLoadPopularCategories}

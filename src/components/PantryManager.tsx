@@ -9,6 +9,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import LinkIcon from '@mui/icons-material/Link';
 import { PantryItem, ProductIngredientMapping } from '@app-types';
 import { formatAmountForDisplay } from '@services/recipeImport';
 import ProductSearchModal from './ProductSearchModal';
@@ -291,13 +292,27 @@ const PantryManager: React.FC<PantryManagerProps> = ({
                           </Box>
                           {/* Ingredient mapping display */}
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              data-testid={`pantry-item-${item.id}-ingredient-mapping`}
-                            >
-                              Ingredient: {ingredientMapping || 'No ingredient mapped'}
-                            </Typography>
+                            {ingredientMapping ? (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                data-testid={`pantry-item-${item.id}-ingredient-mapping`}
+                              >
+                                Ingredient: {ingredientMapping}
+                              </Typography>
+                            ) : (
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setPendingPantryItem(item);
+                                  setShowIngredientModal(true);
+                                }}
+                                sx={{ color: 'text.secondary' }}
+                                data-testid={`pantry-item-${item.id}-link-ingredient-button`}
+                              >
+                                <LinkIcon fontSize="small" />
+                              </IconButton>
+                            )}
                           </Box>
                         </Box>
                       }

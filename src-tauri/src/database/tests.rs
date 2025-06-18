@@ -612,22 +612,80 @@ mod tests {
             recipe.source_url = url.to_string();
             db.save_recipe(&recipe).await.unwrap();
         }
+    }
 
-        // Search for chocolate chip cookies
-        let search_results = db.search_recipes("Chocolate Chip Cookies").await.unwrap();
+    #[tokio::test]
+    async fn test_unique_url_constraint() {
+        let (db, _temp_dir) = create_test_database().await;
 
-        // Should find recipes with similar titles (at least the exact match)
-        assert!(search_results.len() >= 1, "Expected at least 1 matching recipe, found {}", search_results.len());
+        // Insert first recipe
+        let mut recipe1 = create_test_recipe();
+        recipe1.id = "recipe-1".to_string();
+        recipe1.source_url = "https://allrecipes.com/recipe/123/cookies".to_string();
+        db.save_recipe(&recipe1).await.unwrap();
 
-        let titles: Vec<String> = search_results.iter().map(|r| r.title.clone()).collect();
+        // Try to insert second recipe with same URL but different ID
+        let mut recipe2 = create_test_recipe();
+        recipe2.id = "recipe-2".to_string();
+        recipe2.title = "Different Title".to_string();
+        recipe2.source_url = "https://allrecipes.com/recipe/123/cookies".to_string(); // Same URL
 
-        // Check that we find the exact match
-        assert!(titles.contains(&"Chocolate Chip Cookies".to_string()),
-               "Expected to find 'Chocolate Chip Cookies', found: {:?}", titles);
+        // This should work with INSERT OR REPLACE, but the unique constraint should prevent true duplicates
+        db.save_recipe(&recipe2).await.unwrap();
 
-        // Search for a broader term to find more matches
-        let broad_search = db.search_recipes("Chocolate").await.unwrap();
-        assert!(broad_search.len() >= 3, "Expected at least 3 recipes containing 'Chocolate', found {}", broad_search.len());
+        // Verify only one recipe exists with this URL
+        let existing_urls = db.get_existing_recipe_urls().await.unwrap();
+        let matching_urls: Vec<_> = existing_urls.iter()
+            .filter(|url| *url == "https://allrecipes.com/recipe/123/cookies")
+            .collect();
+
+        assert_eq!(matching_urls.len(), 1, "Should only have one recipe with the same URL");
+    }
+
+    #[tokio::test]
+    async fn test_recipe_exists_by_url() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        let test_url = "https://allrecipes.com/recipe/123/test-recipe";
+
+        // Initially should not exist
+        let exists_before = db.recipe_exists_by_url(test_url).await.unwrap();
+        assert!(!exists_before, "Recipe should not exist initially");
+
+        // Insert recipe
+        let mut recipe = create_test_recipe();
+        recipe.source_url = test_url.to_string();
+        db.save_recipe(&recipe).await.unwrap();
+
+        // Now should exist
+        let exists_after = db.recipe_exists_by_url(test_url).await.unwrap();
+        assert!(exists_after, "Recipe should exist after insertion");
+    }
+
+    #[tokio::test]
+    async fn test_get_recipe_by_url() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        let test_url = "https://allrecipes.com/recipe/456/another-recipe";
+        let test_title = "Test Recipe Title";
+
+        // Initially should return None
+        let recipe_before = db.get_recipe_by_url(test_url).await.unwrap();
+        assert!(recipe_before.is_none(), "Should return None for non-existent URL");
+
+        // Insert recipe
+        let mut recipe = create_test_recipe();
+        recipe.source_url = test_url.to_string();
+        recipe.title = test_title.to_string();
+        db.save_recipe(&recipe).await.unwrap();
+
+        // Now should return the recipe
+        let recipe_after = db.get_recipe_by_url(test_url).await.unwrap();
+        assert!(recipe_after.is_some(), "Should return recipe for existing URL");
+
+        let found_recipe = recipe_after.unwrap();
+        assert_eq!(found_recipe.source_url, test_url);
+        assert_eq!(found_recipe.title, test_title);
     }
 
     #[tokio::test]

@@ -104,18 +104,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
     }
   };
 
-  const handleFavoriteMenuClick = async () => {
-    try {
-      const updatedRecipe = { ...recipe, isFavorite: !recipe.isFavorite };
-      await updateRecipe(updatedRecipe);
-      if (onUpdate) {
-        onUpdate();
-      }
-    } catch (error) {
-      console.error('Failed to update favorite status:', error);
-    }
-    handleMenuClose();
-  };
+
 
   const handleShareMenuClick = () => {
     handleShareClick();
@@ -238,49 +227,53 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
 
   return (
     <>
-      <Card
-        data-testid={`recipe-card-${recipe.id}`}
-        sx={{
-          maxWidth: 345,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative',
-          transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-          }
-        }}>
-        {/* Favorite Badge */}
-        {recipe.isFavorite && (
-          <Box
+      <Box data-testid={`recipe-card-${recipe.id}`}>
+        <Card
+          sx={{
+            maxWidth: 345,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative',
+            transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+            '&:hover': {
+              transform: 'translateY(-4px)',
+            }
+          }}>
+
+          {/* Favorite IconButton */}
+          <IconButton
+            onClick={handleFavoriteClick}
             sx={{
               position: 'absolute',
               top: 8,
               right: 8,
-              zIndex: 1,
-              backgroundColor: 'rgba(244, 67, 54, 0.9)',
-              borderRadius: '50%',
-              p: 0.5,
+              zIndex: 2,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              color: 'white',
+              '&:hover': {
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              },
             }}
+            size="small"
+            data-testid={`recipe-card-${recipe.id}-favorite-button`}
           >
-            <FavoriteIcon sx={{ color: 'white', fontSize: '1rem' }} />
-          </Box>
-        )}
+            {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
+          </IconButton>
 
-        <Box sx={{ position: 'relative' }}>
-          <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }} data-testid={`recipe-card-${recipe.id}-main-area`}>
-            <CardMedia
-              component="img"
-              sx={{
-                height: 180,
-                objectFit: 'cover',
-                objectPosition: 'center',
-              }}
-              image={imageUrl}
-              alt={recipe.title}
-              data-testid={`recipe-card-${recipe.id}-image`}
-            />
+          <Box sx={{ position: 'relative' }}>
+            <CardActionArea onClick={handleClick} sx={{ flexGrow: 1 }} data-testid={`recipe-card-${recipe.id}-main-area`}>
+              <CardMedia
+                component="img"
+                sx={{
+                  height: 180,
+                  objectFit: 'cover',
+                  objectPosition: 'center',
+                }}
+                image={imageUrl}
+                alt={recipe.title}
+                data-testid={`recipe-card-${recipe.id}-image`}
+              />
 
             <CardContent sx={{ flexGrow: 1, pb: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -419,23 +412,6 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           </Box>
 
           <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title={recipe.isFavorite ? "Remove from favorites" : "Add to favorites"}>
-              <IconButton
-                size="small"
-                onClick={handleFavoriteClick}
-                aria-label={recipe.isFavorite ? "remove from favorites" : "add to favorites"}
-                data-testid={`recipe-card-${recipe.id}-favorite-button`}
-                sx={{
-                  color: recipe.isFavorite ? 'error.main' : 'text.secondary',
-                  '&:hover': {
-                    color: recipe.isFavorite ? 'error.dark' : 'error.light',
-                  },
-                }}
-              >
-                {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
-
             <Tooltip title="Share recipe">
               <IconButton
                 size="small"
@@ -461,7 +437,8 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
             </Tooltip>
           </Box>
         </CardActions>
-      </Card>
+        </Card>
+      </Box>
 
       {/* More Options Menu */}
       <Menu
@@ -478,12 +455,6 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleFavoriteMenuClick} data-testid={`recipe-card-${recipe.id}-menu-favorite`}>
-          <ListItemIcon>
-            {recipe.isFavorite ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
-          </ListItemIcon>
-          <ListItemText>{recipe.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}</ListItemText>
-        </MenuItem>
         <MenuItem onClick={handleShareMenuClick} data-testid={`recipe-card-${recipe.id}-menu-share`}>
           <ListItemIcon>
             <ShareIcon fontSize="small" />

@@ -2,18 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Tabs, Tab, Fab, Menu, MenuItem, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Button, Paper, CircularProgress,
-  Alert, Snackbar, List, ListItem, ListItemText, Card, CardContent,
+  Alert, Snackbar, Card, CardContent,
   CardActions, Grid, IconButton, Chip, Accordion, AccordionSummary,
   AccordionDetails, Slider, FormControl, InputLabel, Select, Rating,
-  InputAdornment
+
 } from '@mui/material';
 import {
   Add as AddIcon,
   ExpandMore as ExpandMoreIcon,
   FilterList as FilterListIcon,
-  Clear as ClearIcon,
-  History as HistoryIcon,
-  Search as SearchIcon,
+
   Download as DownloadIcon,
   CloudDownload as CloudDownloadIcon,
   Collections as CollectionsIcon,
@@ -24,7 +22,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import { Recipe, SearchFilters, RecipeCollection } from '@app-types';
 import { getRecipesPaginated, getRecipeCount, searchRecipesPaginated, getSearchRecipesCount, getAllRecipes } from '@services/recipeStorage';
-import { getRecentSearches, saveSearch } from '@services/searchHistoryStorage';
+import { saveSearch } from '@services/searchHistoryStorage';
 import { getAllCollections, createCollection, deleteCollection, saveCollection } from '@services/recipeCollectionStorage';
 import { importRecipeFromUrl } from '@services/recipeImport';
 import { getPantryItems } from '@services/pantryStorage';
@@ -32,6 +30,8 @@ import { getPantryItems } from '@services/pantryStorage';
 import { cleanIngredientName } from '@utils/ingredientUtils';
 import RecipeCard from '@components/RecipeCard';
 import BatchImportDialog from '@components/BatchImportDialog';
+import AdvancedSearchModal from '@components/AdvancedSearchModal';
+import SearchBar from '@components/SearchBar';
 
 const PAGE_SIZE = 24; // Number of recipes per page
 
@@ -100,8 +100,8 @@ const Cookbook: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<any[]>([]);
-  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
+
+  const [advancedSearchOpen, setAdvancedSearchOpen] = useState(false);
 
   // Collections tab state
   const [collections, setCollections] = useState<RecipeCollection[]>([]);
@@ -144,17 +144,9 @@ const Cookbook: React.FC = () => {
 
     // Load initial data for All Recipes tab
     fetchRecipes(1, false, query);
-    loadRecentSearches();
   }, [searchParams]);
 
-  const loadRecentSearches = async () => {
-    try {
-      const searches = await getRecentSearches();
-      setRecentSearches(searches);
-    } catch (error) {
-      console.error('Failed to load recent searches:', error);
-    }
-  };
+
 
   const fetchRecipes = useCallback(async (page: number, append: boolean = false, searchQuery?: string) => {
     try {
@@ -280,82 +272,20 @@ const Cookbook: React.FC = () => {
       {/* All Recipes Tab */}
       <TabPanel value={tabValue} index={0}>
         {/* Search Bar */}
-        <Box sx={{ position: 'relative', mb: 3 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search recipes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                fetchRecipes(1, false);
-                if (searchTerm.trim()) {
-                  saveSearch(searchTerm, { ...filters, query: searchTerm, tags: selectedTags });
-                  loadRecentSearches();
-                }
-                setShowSearchSuggestions(false);
+        <Box sx={{ mb: 3 }}>
+          <SearchBar
+            onSearch={(term) => {
+              setSearchTerm(term);
+              fetchRecipes(1, false, term);
+              if (term.trim()) {
+                saveSearch(term, { ...filters, query: term, tags: selectedTags });
               }
             }}
-            onFocus={() => setShowSearchSuggestions(true)}
-            data-testid="cookbook-search-input"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-              endAdornment: searchTerm && (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => {
-                    setSearchTerm('');
-                    fetchRecipes(1, false, '');
-                  }} aria-label="clear" data-testid="cookbook-search-clear-button">
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
+            onAdvancedSearch={() => setAdvancedSearchOpen(true)}
+            placeholder="Search recipes..."
+            data-testid="cookbook-search-bar"
           />
 
-          {/* Search Suggestions */}
-          {showSearchSuggestions && recentSearches.length > 0 && (
-            <Paper
-              sx={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                right: 0,
-                zIndex: 1000,
-                mt: 1,
-                maxHeight: 200,
-                overflow: 'auto',
-              }}
-            >
-              <List dense>
-                <ListItem>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                    <HistoryIcon fontSize="small" sx={{ mr: 0.5 }} />
-                    Recent Searches
-                  </Typography>
-                </ListItem>
-                {recentSearches.map((search, index) => (
-                  <ListItem
-                    key={index}
-                    onClick={() => {
-                      setSearchTerm(search.query);
-                      setShowSearchSuggestions(false);
-                      fetchRecipes(1, false, search.query);
-                    }}
-                    data-testid={`cookbook-search-history-item-${index}`}
-                    sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
-                  >
-                    <ListItemText primary={search.query} />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          )}
         </Box>
 
         {/* Advanced Filters */}
@@ -434,6 +364,33 @@ const Cookbook: React.FC = () => {
             </Grid>
           </AccordionDetails>
         </Accordion>
+
+        {/* Quick Filters */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Quick Filters
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {['Easy', 'Medium', 'Hard'].map((difficulty) => (
+              <Chip
+                key={difficulty}
+                label={difficulty}
+                clickable
+                variant={filters.difficulty?.includes(difficulty) ? 'filled' : 'outlined'}
+                color={filters.difficulty?.includes(difficulty) ? 'primary' : 'default'}
+                onClick={() => {
+                  const currentDifficulty = filters.difficulty || [];
+                  const newDifficulty = currentDifficulty.includes(difficulty)
+                    ? currentDifficulty.filter(d => d !== difficulty)
+                    : [...currentDifficulty, difficulty];
+                  setFilters(prev => ({ ...prev, difficulty: newDifficulty }));
+                  fetchRecipes(1, false);
+                }}
+                data-testid={`cookbook-quick-filter-${difficulty.toLowerCase()}`}
+              />
+            ))}
+          </Box>
+        </Box>
 
         {/* Results Summary */}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1073,6 +1030,17 @@ const Cookbook: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Advanced Search Modal */}
+      <AdvancedSearchModal
+        open={advancedSearchOpen}
+        onClose={() => setAdvancedSearchOpen(false)}
+        onSearch={(searchFilters) => {
+          setFilters(searchFilters);
+          fetchRecipes(1, false);
+        }}
+        initialFilters={filters}
+      />
     </Box>
   );
 };

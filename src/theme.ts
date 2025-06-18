@@ -119,6 +119,7 @@ const darkTheme = createTheme({
           transition: 'box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out',
           '&:hover': {
             boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+            transform: 'translateY(-4px)',
           },
         }),
       },
