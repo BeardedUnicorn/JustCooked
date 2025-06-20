@@ -254,7 +254,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth data-testid="productSearchModal-dialog-main">
       <DialogTitle>Add Product to Pantry</DialogTitle>
       <DialogContent>
         <Box sx={{ mt: 1 }}>
@@ -286,14 +286,14 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
 
           {/* Loading Indicator */}
           {loading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }} data-testid="productSearchModal-loading-search">
               <CircularProgress size={24} />
             </Box>
           )}
 
           {/* Error Message */}
           {error && (
-            <Alert severity="error" sx={{ my: 2 }}>
+            <Alert severity="error" sx={{ my: 2 }} data-testid="productSearchModal-alert-error">
               {error}
             </Alert>
           )}
@@ -336,7 +336,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
 
           {/* Selected Product Details */}
           {selectedProduct && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 2 }} data-testid="productSearchModal-display-selectedProduct">
               <Typography variant="h6" gutterBottom>
                 Selected Product
               </Typography>
@@ -425,7 +425,7 @@ const ProductSearchModal: React.FC<ProductSearchModalProps> = ({
 
           {/* No Results Message */}
           {searchQuery.trim() && !loading && searchResults.length === 0 && !error && (
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Box sx={{ mt: 2, textAlign: 'center' }} data-testid="productSearchModal-text-noResults">
               <Typography variant="body1" color="text.secondary">
                 No products found for "{searchQuery}". Try a different search term.
               </Typography>

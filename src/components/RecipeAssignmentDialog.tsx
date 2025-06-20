@@ -166,7 +166,7 @@ const RecipeAssignmentDialog: React.FC<RecipeAssignmentDialogProps> = ({
 
       <DialogContent>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2 }} data-testid="recipeAssignmentDialog-alert-error">
             {error}
           </Alert>
         )}
@@ -232,7 +232,7 @@ const RecipeAssignmentDialog: React.FC<RecipeAssignmentDialogProps> = ({
           {/* Recipe Selection */}
           <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
             {filteredRecipes.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Box sx={{ textAlign: 'center', py: 4 }} data-testid="recipeAssignmentDialog-text-noRecipes">
                 <RestaurantIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
                 <Typography variant="body1" color="text.secondary">
                   {searchQuery ? 'No recipes found matching your search' : 'No recipes available'}

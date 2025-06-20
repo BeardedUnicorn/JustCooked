@@ -132,13 +132,81 @@ describe('SectionedIngredients', () => {
       { name: 'item2', amount: 1, unit: 'cup', section: undefined },
       { name: 'item3', amount: 1, unit: 'cup' },
     ];
-    
+
     renderWithTheme(<SectionedIngredients ingredients={mixedIngredients} />);
-    
+
     // All should be grouped under "Ingredients"
     expect(screen.getByTestId('ingredient-section-table-ingredients')).toBeInTheDocument();
     expect(screen.getByText('item1')).toBeInTheDocument();
     expect(screen.getByText('item2')).toBeInTheDocument();
     expect(screen.getByText('item3')).toBeInTheDocument();
+  });
+
+  it('handles more than 20 ingredients correctly', () => {
+    // Create 25 ingredients across 3 sections to test large ingredient lists
+    const manyIngredients = Array.from({ length: 25 }, (_, index) => ({
+      name: `ingredient ${index + 1}`,
+      amount: index + 1,
+      unit: index % 3 === 0 ? 'cups' : index % 3 === 1 ? 'tablespoons' : 'teaspoons',
+      category: null,
+      section: index < 8 ? 'Section A' : index < 16 ? 'Section B' : 'Section C',
+    }));
+
+    renderWithTheme(<SectionedIngredients ingredients={manyIngredients} />);
+
+    // Check that all section headers are present
+    expect(screen.getByText('Section A')).toBeInTheDocument();
+    expect(screen.getByText('Section B')).toBeInTheDocument();
+    expect(screen.getByText('Section C')).toBeInTheDocument();
+
+    // Check that first, middle, and last ingredients are present
+    expect(screen.getByText('ingredient 1')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 12')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 25')).toBeInTheDocument();
+
+    // Verify that all 25 ingredients are rendered by checking table rows
+    const allIngredientRows = screen.getAllByRole('row').filter(row =>
+      row.getAttribute('data-testid')?.includes('ingredient-row')
+    );
+    expect(allIngredientRows).toHaveLength(25);
+
+    // Verify that we have 3 tables (one for each section)
+    const tables = screen.getAllByRole('table');
+    expect(tables).toHaveLength(3);
+  });
+
+  it('handles 50+ ingredients without performance issues', () => {
+    // Create 50 ingredients to test performance with very large lists
+    const manyIngredients = Array.from({ length: 50 }, (_, index) => ({
+      name: `ingredient ${index + 1}`,
+      amount: (index + 1) * 0.5,
+      unit: index % 4 === 0 ? 'cups' : index % 4 === 1 ? 'tablespoons' : index % 4 === 2 ? 'teaspoons' : 'ounces',
+      category: null,
+      section: index < 12 ? 'Base' : index < 25 ? 'Seasonings' : index < 37 ? 'Garnishes' : 'Optional',
+    }));
+
+    const startTime = performance.now();
+    renderWithTheme(<SectionedIngredients ingredients={manyIngredients} />);
+    const endTime = performance.now();
+
+    // Rendering should complete quickly (less than 100ms for 50 ingredients)
+    expect(endTime - startTime).toBeLessThan(100);
+
+    // Check that all sections are present
+    expect(screen.getByText('Base')).toBeInTheDocument();
+    expect(screen.getByText('Seasonings')).toBeInTheDocument();
+    expect(screen.getByText('Garnishes')).toBeInTheDocument();
+    expect(screen.getByText('Optional')).toBeInTheDocument();
+
+    // Verify key ingredients are present
+    expect(screen.getByText('ingredient 1')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 25')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 50')).toBeInTheDocument();
+
+    // Verify all 50 ingredients are rendered
+    const allIngredientRows = screen.getAllByRole('row').filter(row =>
+      row.getAttribute('data-testid')?.includes('ingredient-row')
+    );
+    expect(allIngredientRows).toHaveLength(50);
   });
 });

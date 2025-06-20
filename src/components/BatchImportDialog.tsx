@@ -25,13 +25,15 @@ import {
   Queue as QueueIcon,
   Info as InfoIcon,
   PlaylistAdd as PlaylistAddIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { BatchImportRequest } from '@app-types';
+import { BatchImportRequest, ReImportRequest } from '@app-types';
 import { batchImportService } from '@services/batchImport';
+import { reImportService } from '@services/reImportService';
+import { importQueueService } from '@services/importQueue';
 import { getExistingRecipeUrls } from '@services/recipeStorage';
 import { useAppDispatch } from '@store';
 import { addToQueue, addMultipleToQueue } from '@store/slices/importQueueSlice';
-import { importQueueService } from '@services/importQueue';
 
 interface BatchImportDialogProps {
   open: boolean;
@@ -53,6 +55,8 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   const [loadingProgress, setLoadingProgress] = useState<{ processed: number; total: number; currentUrl?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [reImportableCount, setReImportableCount] = useState<number>(0);
+  const [isLoadingReImportCount, setIsLoadingReImportCount] = useState(false);
 
   const suggestedUrls = batchImportService.getSuggestedCategoryUrls();
 
@@ -67,8 +71,30 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       setLoadingProgress(null);
       setError(null);
       setSuccessMessage(null);
+      setReImportableCount(0);
+      setIsLoadingReImportCount(false);
     }
   }, [open]);
+
+  // Load re-importable recipes count when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadReImportableCount();
+    }
+  }, [open]);
+
+  const loadReImportableCount = async () => {
+    setIsLoadingReImportCount(true);
+    try {
+      const count = await reImportService.getReImportableRecipesCount();
+      setReImportableCount(count);
+    } catch (err) {
+      console.error('Failed to load re-importable recipes count:', err);
+      setReImportableCount(0);
+    } finally {
+      setIsLoadingReImportCount(false);
+    }
+  };
 
   const handleAddToQueue = async () => {
     const trimmedUrl = url.trim();
@@ -108,6 +134,43 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add task to queue');
+    } finally {
+      setIsAddingToQueue(false);
+    }
+  };
+
+  const handleReImportExisting = async () => {
+    if (reImportableCount === 0) {
+      setError('No recipes with source URLs found for re-import');
+      return;
+    }
+
+    setError(null);
+    setIsAddingToQueue(true);
+
+    try {
+      // Create the re-import request
+      const request: ReImportRequest = {
+        maxRecipes: maxRecipes ? Number(maxRecipes) : undefined,
+        // No specific recipe IDs - re-import all existing recipes
+      };
+
+      // Generate description for the task
+      const description = reImportService.getTaskDescription(request);
+
+      // Add to queue
+      const taskId = await reImportService.addToQueue(description, request);
+
+      // Notify parent component
+      if (onTaskAdded) {
+        onTaskAdded(taskId);
+      }
+
+      // Close dialog immediately on success
+      onClose();
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add re-import task to queue');
     } finally {
       setIsAddingToQueue(false);
     }
@@ -191,7 +254,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
       onClose={handleClose}
       maxWidth="md"
       fullWidth
-      data-testid="batch-import-dialog"
+      data-testid="batchImportDialog-dialog-main"
       PaperProps={{
         sx: { minHeight: '500px' }
       }}
@@ -217,7 +280,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://www.allrecipes.com/recipes/79/desserts"
                 error={url.length > 0 && !isValidUrl(url)}
-                data-testid="batch-import-url-input"
+                data-testid="batchImportDialog-input-url"
                 helperText={
                   url.length > 0 && !isValidUrl(url)
                     ? 'Please enter a valid AllRecipes category URL'
@@ -239,7 +302,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                   onChange={(e) => setMaxRecipes(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="No limit"
                   inputProps={{ min: 1, max: 10000 }}
-                  data-testid="batch-import-max-recipes-input"
+                  data-testid="batchImportDialog-input-maxRecipes"
                   helperText="Limit the number of recipes to import"
                   sx={{ flex: 1 }}
                 />
@@ -250,11 +313,33 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                   onChange={(e) => setMaxDepth(e.target.value === '' ? '' : Number(e.target.value))}
                   placeholder="No limit"
                   inputProps={{ min: 1, max: 10 }}
-                  data-testid="batch-import-max-depth-input"
+                  data-testid="batchImportDialog-input-maxDepth"
                   helperText="Limit category crawling depth"
                   sx={{ flex: 1 }}
                 />
               </Box>
+            </Box>
+
+            {/* Re-import Existing Recipes */}
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Re-import Existing Recipes
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Re-import all existing recipes that have source URLs to fix ingredient parsing issues with the latest parsing logic.
+                {isLoadingReImportCount ? ' Loading count...' : ` Found ${reImportableCount} recipes available for re-import.`}
+              </Typography>
+
+              <Button
+                variant="outlined"
+                onClick={handleReImportExisting}
+                disabled={reImportableCount === 0 || isAddingToQueue || isLoadingPopularCategories || isLoadingReImportCount}
+                startIcon={<RefreshIcon />}
+                data-testid="batchImportDialog-button-reimportExisting"
+                sx={{ mb: 2 }}
+              >
+                {isAddingToQueue ? 'Adding Re-import to Queue...' : `Re-import ${reImportableCount} Existing Recipes`}
+              </Button>
             </Box>
 
             {/* Quick Start - Popular Categories */}
@@ -268,7 +353,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
 
               {/* Progress Display */}
               {isLoadingPopularCategories && loadingProgress && (
-                <Box sx={{ mb: 2 }}>
+                <Box sx={{ mb: 2 }} data-testid="batchImportDialog-progress-popular">
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
                       Adding categories to queue...
@@ -298,7 +383,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                 onClick={handleLoadPopularCategories}
                 disabled={isLoadingPopularCategories || isAddingToQueue}
                 startIcon={<PlaylistAddIcon />}
-                data-testid="batch-import-load-popular-categories-button"
+                data-testid="batchImportDialog-button-loadPopular"
                 sx={{ mb: 1 }}
               >
                 {isLoadingPopularCategories ? 'Adding Popular Categories...' : 'Load Popular Categories'}
@@ -306,7 +391,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
             </Box>
 
             {/* Suggested URLs */}
-            <Accordion>
+            <Accordion data-testid="batchImportDialog-accordion-suggested">
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Typography variant="h6">Suggested Categories</Typography>
               </AccordionSummary>
@@ -314,7 +399,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
                 <List dense>
                   {suggestedUrls.map((suggestion, index) => (
                     <React.Fragment key={suggestion.url}>
-                      <ListItem disablePadding>
+                      <ListItem disablePadding data-testid={`batchImportDialog-listItem-suggested-${index}`}>
                         <ListItemButton onClick={() => handleUrlSelect(suggestion.url)}>
                           <ListItemText
                             primary={suggestion.name}
@@ -340,14 +425,14 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
 
             {/* Success Message */}
             {successMessage && (
-              <Alert severity="success">
+              <Alert severity="success" data-testid="batchImportDialog-alert-success">
                 {successMessage}
               </Alert>
             )}
 
             {/* Error Message */}
             {error && (
-              <Alert severity="error">
+              <Alert severity="error" data-testid="batchImportDialog-alert-error">
                 {error}
               </Alert>
             )}
@@ -358,7 +443,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
         <Button
           onClick={handleClose}
           disabled={isAddingToQueue || isLoadingPopularCategories}
-          data-testid="batch-import-cancel-button"
+          data-testid="batchImportDialog-button-cancel"
         >
           Cancel
         </Button>
@@ -367,7 +452,7 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
           onClick={handleAddToQueue}
           disabled={!url.trim() || !isValidUrl(url) || isAddingToQueue || isLoadingPopularCategories}
           startIcon={<QueueIcon />}
-          data-testid="batch-import-add-to-queue-button"
+          data-testid="batchImportDialog-button-addToQueue"
         >
           {isAddingToQueue ? 'Adding to Queue...' : 'Add to Queue'}
         </Button>

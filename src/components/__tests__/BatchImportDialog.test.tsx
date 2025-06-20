@@ -332,7 +332,7 @@ describe('BatchImportDialog', () => {
     await user.type(maxRecipesInput, '50');
     await user.type(maxDepthInput, '2');
 
-    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
+    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
     await user.click(loadButton);
 
     await waitFor(() => {

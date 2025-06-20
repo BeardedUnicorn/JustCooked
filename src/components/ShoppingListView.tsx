@@ -195,7 +195,7 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
 
   if (loading) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box sx={{ p: 3 }} data-testid="shoppingListView-loading-main">
         <LinearProgress />
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           Loading shopping list...
@@ -211,9 +211,9 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   );
 
   return (
-    <Box>
+    <Box data-testid="shoppingListView-container-main">
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2 }} data-testid="shoppingListView-alert-error">
           {error}
         </Alert>
       )}
@@ -222,10 +222,10 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
       <Paper sx={{ p: 3, mb: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box>
-            <Typography variant="h5" component="h1" gutterBottom>
+            <Typography variant="h5" component="h1" gutterBottom data-testid="shoppingListView-text-name">
               {shoppingList.name}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" data-testid="shoppingListView-text-dateRange">
               {formatDateRange()}
             </Typography>
           </Box>
@@ -255,7 +255,7 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
         {/* Progress */}
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" data-testid="shoppingListView-text-progress">
               Progress: {progress.completed} of {progress.total} items
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -266,6 +266,7 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
             variant="determinate"
             value={progress.percentage}
             sx={{ height: 8, borderRadius: 4 }}
+            data-testid="shoppingListView-progressBar-main"
           />
         </Box>
 
@@ -288,7 +289,7 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
 
       {/* Shopping List Items */}
       {sortedCategories.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+        <Paper sx={{ p: 4, textAlign: 'center' }} data-testid="shoppingListView-text-empty">
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No items in this shopping list
           </Typography>
@@ -329,7 +330,13 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                     variant="outlined"
                   />
                 </Box>
-                {isCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+                <IconButton
+                  size="small"
+                  data-testid={`shoppingListView-category-toggle-${category}`}
+                  sx={{ pointerEvents: 'none' }} // Prevent double-click handling
+                >
+                  {isCollapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+                </IconButton>
               </Box>
 
               {/* Category Items */}
@@ -357,11 +364,20 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
                         
                         <ListItemText
                           primary={
-                            <Typography variant="body1">
-                              {formatQuantity(item.quantity, item.unit)} {item.ingredientName}
-                            </Typography>
+                            <Box>
+                              <Typography variant="body1" component="span" data-testid={`shoppingListView-text-itemQuantity-${item.id}`}>
+                                {formatQuantity(item.quantity, item.unit)}
+                              </Typography>
+                              <Typography variant="body1" component="span" data-testid={`shoppingListView-text-itemName-${item.id}`} sx={{ ml: 1 }}>
+                                {item.ingredientName}
+                              </Typography>
+                            </Box>
                           }
-                          secondary={item.notes}
+                          secondary={item.notes ? (
+                            <Typography variant="body2" data-testid={`shoppingListView-text-itemNotes-${item.id}`}>
+                              {item.notes}
+                            </Typography>
+                          ) : null}
                         />
                         
                         <ListItemSecondaryAction>

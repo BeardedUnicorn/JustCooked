@@ -60,7 +60,7 @@ const QueueStatusButton: React.FC<QueueStatusButtonProps> = ({ onClick }) => {
   const getQueueIcon = () => {
     if (queueState.isProcessing) {
       return (
-        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+        <Box sx={{ position: 'relative', display: 'inline-flex' }} data-testid="queueStatusButton-icon-status">
           <QueueIcon />
           <CircularProgress
             size={20}
@@ -76,14 +76,14 @@ const QueueStatusButton: React.FC<QueueStatusButtonProps> = ({ onClick }) => {
     }
 
     if (queueSummary.failed > 0) {
-      return <ErrorIcon color="error" />;
+      return <ErrorIcon color="error" data-testid="queueStatusButton-icon-status" />;
     }
 
     if (queueSummary.completed > 0 && queueSummary.pending === 0) {
-      return <CompletedIcon color="success" />;
+      return <CompletedIcon color="success" data-testid="queueStatusButton-icon-status" />;
     }
 
-    return <QueueIcon />;
+    return <QueueIcon data-testid="queueStatusButton-icon-status" />;
   };
 
   // Get tooltip text

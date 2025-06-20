@@ -504,37 +504,75 @@ pub fn is_valid_ingredient_name(name: &str) -> bool {
         return false;
     }
 
-    // Reject obviously invalid names
-    let invalid_names = [
+    // Extract the core ingredient name by removing common suffixes
+    let core_ingredient = extract_core_ingredient_name(trimmed);
+
+    // If the core ingredient is empty after cleaning, reject
+    if core_ingredient.is_empty() {
+        return false;
+    }
+
+    // Reject names that are ONLY preparation instructions (no actual ingredient)
+    let invalid_only_names = [
         "chopped", "sliced", "diced", "minced", "beaten", "melted", "softened",
         "divided", "taste", "needed", "desired", "optional", "garnish",
         "spray", "leaf", "leaves", "caps", "whites", "yolks", "cubed",
         "halved", "quartered", "peeled", "seeded", "trimmed", "baby doll",
         "chopsticks for handles", "with flour", "for rolling", "juiced",
-        "mashed", "crushed", "ground", "fresh", "dried", "frozen",
-        "or more to taste", "or as needed", "to taste", "as needed"
+        "mashed", "crushed", "fresh", "dried", "frozen"
     ];
 
-    let lower_name = trimmed.to_lowercase();
-    if invalid_names.iter().any(|&invalid| lower_name == invalid) {
+    let lower_core = core_ingredient.to_lowercase();
+    if invalid_only_names.iter().any(|&invalid| lower_core == invalid) {
         return false;
     }
 
-    // Reject names that are just preparation instructions
-    if regex::Regex::new(r"^(finely\s+)?(chopped|diced|sliced|minced|grated|shredded|crushed|ground|beaten|melted|softened|peeled|seeded|trimmed|halved|quartered)(\s+.*)?$")
+    // Check if it's ONLY a preparation method (like "ground" by itself)
+    // But allow ingredients that contain preparation methods (like "ground black pepper")
+    if regex::Regex::new(r"^(finely\s+)?(chopped|diced|sliced|minced|grated|shredded|crushed|ground|beaten|melted|softened|peeled|seeded|trimmed|halved|quartered)$")
         .unwrap()
-        .is_match(&lower_name) {
+        .is_match(&lower_core) {
         return false;
     }
 
     // Reject names that start with measurements without ingredient
     if regex::Regex::new(r"^[\d\s\/¼½¾⅓⅔⅛⅜⅝⅞\.]+\s*(ounce|pound|cup|tablespoon|teaspoon|gram|kilogram|liter|milliliter|inch)\s*$")
         .unwrap()
-        .is_match(&lower_name) {
+        .is_match(&lower_core) {
         return false;
     }
 
     true
+}
+
+/// Extract the core ingredient name by removing common suffixes like "to taste", "as needed", etc.
+pub fn extract_core_ingredient_name(name: &str) -> String {
+    let mut cleaned = name.trim().to_string();
+
+    // Remove common suffixes that indicate preparation or serving suggestions
+    let suffixes_to_remove = [
+        ", to taste",
+        " to taste",
+        ", as needed",
+        " as needed",
+        ", or to taste",
+        " or to taste",
+        ", or as needed",
+        " or as needed",
+        ", divided",
+        " divided",
+        ", optional",
+        " optional"
+    ];
+
+    for suffix in &suffixes_to_remove {
+        if cleaned.to_lowercase().ends_with(suffix) {
+            let end_pos = cleaned.len() - suffix.len();
+            cleaned = cleaned[..end_pos].trim().to_string();
+        }
+    }
+
+    cleaned
 }
 
 // Extract ingredients with section information from HTML

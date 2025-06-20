@@ -100,7 +100,14 @@ mod tests {
         assert!(is_valid_ingredient_name("chicken breast"));
         assert!(is_valid_ingredient_name("olive oil"));
         assert!(is_valid_ingredient_name("salt"));
-        
+
+        // Valid ingredient names with "to taste" - should now be valid
+        assert!(is_valid_ingredient_name("salt, to taste"));
+        assert!(is_valid_ingredient_name("ground black pepper, to taste"));
+        assert!(is_valid_ingredient_name("pepper to taste"));
+        assert!(is_valid_ingredient_name("garlic powder, as needed"));
+        assert!(is_valid_ingredient_name("olive oil, or as needed"));
+
         // Invalid ingredient names (just preparation methods)
         assert!(!is_valid_ingredient_name("chopped"));
         assert!(!is_valid_ingredient_name("sliced"));
@@ -109,20 +116,51 @@ mod tests {
         assert!(!is_valid_ingredient_name("melted"));
         assert!(!is_valid_ingredient_name("to taste"));
         assert!(!is_valid_ingredient_name("as needed"));
-        
+
         // Invalid ingredient names (parsing artifacts)
         assert!(!is_valid_ingredient_name("spray"));
         assert!(!is_valid_ingredient_name("leaf"));
         assert!(!is_valid_ingredient_name("caps"));
         assert!(!is_valid_ingredient_name("baby doll"));
-        
+
         // Empty or whitespace-only
         assert!(!is_valid_ingredient_name(""));
         assert!(!is_valid_ingredient_name("   "));
-        
+
         // Must contain at least one letter
         assert!(!is_valid_ingredient_name("123"));
         assert!(!is_valid_ingredient_name("1/2"));
+    }
+
+    #[test]
+    fn test_extract_core_ingredient_name() {
+        use crate::recipe_import::extract_core_ingredient_name;
+
+        // Test removing "to taste" suffixes
+        assert_eq!(extract_core_ingredient_name("salt, to taste"), "salt");
+        assert_eq!(extract_core_ingredient_name("ground black pepper, to taste"), "ground black pepper");
+        assert_eq!(extract_core_ingredient_name("pepper to taste"), "pepper");
+
+        // Test removing "as needed" suffixes
+        assert_eq!(extract_core_ingredient_name("cooking spray, as needed"), "cooking spray");
+        assert_eq!(extract_core_ingredient_name("flour as needed"), "flour");
+
+        // Test removing "or to taste" suffixes
+        assert_eq!(extract_core_ingredient_name("salt, or to taste"), "salt");
+        assert_eq!(extract_core_ingredient_name("pepper or to taste"), "pepper");
+
+        // Test removing "divided" suffixes
+        assert_eq!(extract_core_ingredient_name("butter, divided"), "butter");
+        assert_eq!(extract_core_ingredient_name("sugar divided"), "sugar");
+
+        // Test removing "optional" suffixes
+        assert_eq!(extract_core_ingredient_name("parsley, optional"), "parsley");
+        assert_eq!(extract_core_ingredient_name("garnish optional"), "garnish");
+
+        // Test ingredients without suffixes (should remain unchanged)
+        assert_eq!(extract_core_ingredient_name("all-purpose flour"), "all-purpose flour");
+        assert_eq!(extract_core_ingredient_name("chicken breast"), "chicken breast");
+        assert_eq!(extract_core_ingredient_name("olive oil"), "olive oil");
     }
 
     #[test]

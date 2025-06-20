@@ -21,10 +21,11 @@ mod e2e_tests;
 
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
-use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress};
+use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress, ReImporter, ReImportRequest};
 use import_queue::{ImportQueue, ImportQueueStatus};
 use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, ProductSearchResult, ProductIngredientMapping};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
+use chrono::Utc;
 use ingredient_parsing::{get_ingredient_parser, ParsingMetrics};
 
 use parsing_feedback::{ParsingFeedback, ParsingCorrection, FeedbackStatistics, get_parsing_feedback_manager};
@@ -36,7 +37,7 @@ use tauri::Manager;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FrontendRecipe {
+pub struct FrontendRecipe {
     id: String,
     title: String,
     description: String,
@@ -60,7 +61,7 @@ struct FrontendRecipe {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FrontendIngredient {
+pub struct FrontendIngredient {
     name: String,
     amount: f64,
     unit: String,
@@ -184,6 +185,33 @@ async fn delete_recipe_image(local_path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    info!("Opening external URL: {}", url);
+
+    // Validate URL format
+    if url.is_empty() {
+        return Err("URL cannot be empty".to_string());
+    }
+
+    // Check if URL is valid HTTP/HTTPS
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL must start with http:// or https://".to_string());
+    }
+
+    // Use Tauri opener plugin to open URL in default browser
+    match tauri_plugin_opener::open_url(&url, None::<&str>) {
+        Ok(_) => {
+            info!("Successfully opened URL: {}", url);
+            Ok(())
+        },
+        Err(e) => {
+            error!("Failed to open URL {}: {}", url, e);
+            Err(format!("Failed to open URL: {}", e))
+        }
+    }
+}
+
 /// Parse ingredients using the ingredient crate with fallback to regex parsing
 async fn parse_ingredients_with_ingredient_crate(ingredient_strings: &[String]) -> Vec<FrontendIngredient> {
     let parser = get_ingredient_parser();
@@ -304,8 +332,63 @@ async fn save_imported_recipe(
     Ok(recipe_id)
 }
 
+#[tauri::command]
+async fn re_import_recipe(
+    app: tauri::AppHandle,
+    recipe_id: String,
+    source_url: String,
+) -> Result<String, String> {
+    info!("Re-importing recipe with ID: {} from URL: {}", recipe_id, source_url);
+
+    // Get the existing recipe to preserve user data
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let existing_recipe = db.get_recipe_by_id(&recipe_id).await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Recipe with ID {} not found", recipe_id))?;
+
+    // Import fresh recipe data from the source URL
+    let imported_recipe = match import_recipe_from_url(&source_url).await {
+        Ok(recipe) => {
+            info!("Successfully re-imported recipe: {} from {}", recipe.name, source_url);
+            recipe
+        },
+        Err(e) => {
+            error!("Failed to re-import recipe from {}: {} ({})", source_url, e.message, e.error_type);
+            return Err(format!("Failed to re-import recipe: {}", e.message));
+        },
+    };
+
+    // Convert imported recipe to frontend format
+    let mut frontend_recipe = conversions::convert_imported_recipe_to_frontend_async(imported_recipe.clone()).await;
+
+    // Preserve the original recipe ID and user data
+    frontend_recipe.id = recipe_id.clone();
+    frontend_recipe.date_added = existing_recipe.date_added.to_rfc3339();
+    frontend_recipe.date_modified = Utc::now().to_rfc3339();
+
+    // Preserve user-specific data
+    frontend_recipe.rating = existing_recipe.rating.map(|r| r as u32);
+    frontend_recipe.personal_notes = existing_recipe.personal_notes;
+    frontend_recipe.is_favorite = existing_recipe.is_favorite;
+    frontend_recipe.collections = Some(existing_recipe.collections);
+
+    // Convert to database recipe and save
+    let db_recipe = conversions::convert_frontend_to_db_recipe(frontend_recipe);
+    db.save_recipe(&db_recipe).await.map_err(|e| e.to_string())?;
+
+    // Capture raw ingredients for analysis
+    conversions::capture_raw_ingredients(&db, &imported_recipe, Some(&recipe_id)).await
+        .map_err(|e| format!("Failed to capture raw ingredients: {}", e))?;
+
+    info!("Successfully re-imported and saved recipe: {} with ID: {}", imported_recipe.name, recipe_id);
+    Ok(recipe_id)
+}
+
 // Global state for batch import
 type BatchImporterMap = Arc<Mutex<HashMap<String, Arc<BatchImporter>>>>;
+
+// Global state for re-import
+type ReImporterMap = Arc<Mutex<HashMap<String, Arc<ReImporter>>>>;
 
 // Global state for import queue
 type ImportQueueState = Arc<ImportQueue>;
@@ -1346,6 +1429,78 @@ async fn cancel_batch_import(
     }
 }
 
+// Re-import commands
+#[tauri::command]
+async fn start_re_import(
+    app: tauri::AppHandle,
+    request: ReImportRequest,
+    state: tauri::State<'_, ReImporterMap>,
+) -> Result<String, String> {
+    let import_id = uuid::Uuid::new_v4().to_string();
+    let importer = Arc::new(ReImporter::new());
+
+    // Store the importer in the global state
+    {
+        let mut importers = state.lock().unwrap();
+        importers.insert(import_id.clone(), importer.clone());
+    }
+
+    // Start the re-import in a background task
+    let importer_clone = importer.clone();
+    let import_id_clone = import_id.clone();
+    let state_clone = state.inner().clone();
+
+    tokio::spawn(async move {
+        let _result = importer_clone.start_re_import(app, request).await;
+
+        // Keep the importer in state for a short time after completion
+        // to allow the frontend to fetch final progress before cleanup
+        tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
+        // Clean up the importer from state
+        {
+            let mut importers = state_clone.lock().unwrap();
+            importers.remove(&import_id_clone);
+        }
+    });
+
+    Ok(import_id)
+}
+
+#[tauri::command]
+async fn get_re_import_progress(
+    import_id: String,
+    state: tauri::State<'_, ReImporterMap>,
+) -> Result<BatchImportProgress, String> {
+    let importers = state.lock().unwrap();
+    if let Some(importer) = importers.get(&import_id) {
+        Ok(importer.get_progress())
+    } else {
+        Err(format!("Re-import with ID {} not found", import_id))
+    }
+}
+
+#[tauri::command]
+async fn cancel_re_import(
+    import_id: String,
+    state: tauri::State<'_, ReImporterMap>,
+) -> Result<(), String> {
+    let importers = state.lock().unwrap();
+    if let Some(importer) = importers.get(&import_id) {
+        importer.cancel();
+        Ok(())
+    } else {
+        Err(format!("Re-import with ID {} not found", import_id))
+    }
+}
+
+#[tauri::command]
+async fn get_recipes_with_source_urls_count(app: tauri::AppHandle) -> Result<usize, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    let recipes = db.get_recipes_with_source_urls().await.map_err(|e| e.to_string())?;
+    Ok(recipes.len())
+}
+
 // Import Queue Commands
 #[tauri::command]
 async fn add_to_import_queue(
@@ -1365,7 +1520,7 @@ async fn add_to_import_queue(
     info!("Current queue status: processing={}, pending={}, completed={}, failed={}",
           queue_status.is_processing, queue_status.total_pending, queue_status.total_completed, queue_status.total_failed);
 
-    let task_id = queue_state.add_task(description.clone(), request.clone())?;
+    let task_id = queue_state.add_batch_import_task(description.clone(), request.clone())?;
     info!("Task added with ID: {}", task_id);
 
     // Start queue processing if not already started
@@ -1378,6 +1533,39 @@ async fn add_to_import_queue(
     });
 
     info!("add_to_import_queue returning task_id: {}", task_id);
+    Ok(task_id)
+}
+
+#[tauri::command]
+async fn add_re_import_to_queue(
+    app: tauri::AppHandle,
+    description: String,
+    request: ReImportRequest,
+    queue_state: tauri::State<'_, ImportQueueState>,
+) -> Result<String, String> {
+    info!("=== ADD_RE_IMPORT_TO_QUEUE CALLED ===");
+    info!("Adding re-import task to import queue: {}", description);
+    info!("Request details: max_recipes={:?}, recipe_ids_count={}",
+          request.max_recipes, request.recipe_ids.as_ref().map_or(0, |ids| ids.len()));
+
+    // Debug: Check if queue is processing
+    let queue_status = queue_state.get_status();
+    info!("Current queue status: processing={}, pending={}, completed={}, failed={}",
+          queue_status.is_processing, queue_status.total_pending, queue_status.total_completed, queue_status.total_failed);
+
+    let task_id = queue_state.add_re_import_task(description.clone(), request.clone())?;
+    info!("Re-import task added with ID: {}", task_id);
+
+    // Start queue processing if not already started
+    info!("Starting queue processing for re-import task: {}", task_id);
+    let queue_state_clone = queue_state.inner().clone();
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        queue_state_clone.process_queue(app_clone).await;
+    });
+
+    info!("add_re_import_to_queue returning task_id: {}", task_id);
     Ok(task_id)
 }
 
@@ -1923,6 +2111,7 @@ async fn export_parsing_feedback_data() -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let batch_importers: BatchImporterMap = Arc::new(Mutex::new(HashMap::new()));
+    let re_importers: ReImporterMap = Arc::new(Mutex::new(HashMap::new()));
     let import_queue: ImportQueueState = Arc::new(ImportQueue::new());
 
     tauri::Builder::default()
@@ -1951,19 +2140,28 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(batch_importers)
+        .manage(re_importers)
         .manage(import_queue)
         .invoke_handler(tauri::generate_handler![
             import_recipe,
             download_recipe_image,
             get_local_image,
             delete_recipe_image,
+            open_external_url,
             save_imported_recipe,
+            re_import_recipe,
             parse_ingredients_with_ingredient_crate_command,
             start_batch_import,
             get_batch_import_progress,
             cancel_batch_import,
+            start_re_import,
+            get_re_import_progress,
+            cancel_re_import,
+            get_recipes_with_source_urls_count,
             add_to_import_queue,
+            add_re_import_to_queue,
             start_queue_processing,
             get_import_queue_status,
             remove_from_import_queue,

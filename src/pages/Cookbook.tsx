@@ -261,7 +261,7 @@ const Cookbook: React.FC = () => {
         Cookbook
       </Typography>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }} data-testid="cookbookPage-tabs-main">
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="cookbook tabs">
           <Tab label="All Recipes" {...a11yProps(0)} data-testid="cookbook-tab-all-recipes" />
           <Tab label="Collections" {...a11yProps(1)} data-testid="cookbook-tab-collections" />
@@ -394,7 +394,7 @@ const Cookbook: React.FC = () => {
 
         {/* Results Summary */}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="body1" color="text.secondary">
+          <Typography variant="body1" color="text.secondary" data-testid="cookbookPage-allRecipes-text-resultsSummary">
             {loading ? 'Loading...' : `${recipes.length} of ${totalCount} recipe${totalCount !== 1 ? 's' : ''} shown`}
           </Typography>
 
@@ -406,13 +406,20 @@ const Cookbook: React.FC = () => {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: 3 }} data-testid="cookbookPage-alert-error">
             {error}
           </Alert>
         )}
 
+        {/* Loading Indicator */}
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }} data-testid="cookbookPage-allRecipes-loading">
+            <CircularProgress />
+          </Box>
+        )}
+
         {/* Results Grid */}
-        <Grid container spacing={3}>
+        <Grid container spacing={3} data-testid="cookbookPage-allRecipes-grid-recipes">
           {recipes.length > 0 ? (
             recipes.map(recipe => (
               <Grid size={{ xs: 12, sm: 6, md: 4 }} key={recipe.id}>
@@ -425,7 +432,7 @@ const Cookbook: React.FC = () => {
             ))
           ) : !loading ? (
             <Grid size={12}>
-              <Paper sx={{ p: 6, textAlign: 'center' }}>
+              <Paper sx={{ p: 6, textAlign: 'center' }} data-testid="cookbookPage-allRecipes-text-noResults">
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No recipes found
                 </Typography>
@@ -484,7 +491,7 @@ const Cookbook: React.FC = () => {
             </Typography>
 
             {collectionRecipes.length > 0 ? (
-              <Grid container spacing={3}>
+              <Grid container spacing={3} data-testid="cookbookPage-collections-grid-recipes">
                 {collectionRecipes.map(recipe => (
                   <Grid size={{ xs: 12, sm: 6, md: 4 }} key={recipe.id}>
                     <RecipeCard
@@ -516,7 +523,7 @@ const Cookbook: React.FC = () => {
                 ))}
               </Grid>
             ) : (
-              <Paper sx={{ p: 6, textAlign: 'center' }}>
+              <Paper sx={{ p: 6, textAlign: 'center' }} data-testid="cookbookPage-collections-text-noRecipesInCollection">
                 <CollectionsIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="h6" color="text.secondary" gutterBottom>
                   No recipes in this collection
@@ -551,7 +558,7 @@ const Cookbook: React.FC = () => {
             )}
 
             {collectionsLoading ? (
-              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px" data-testid="cookbookPage-collections-loading">
                 <CircularProgress />
               </Box>
             ) : collections.length > 0 ? (
@@ -652,7 +659,7 @@ const Cookbook: React.FC = () => {
                 ))}
               </Grid>
             ) : (
-              <Card>
+              <Card data-testid="cookbookPage-collections-text-noCollections">
                 <CardContent sx={{ textAlign: 'center', py: 8 }}>
                   <CollectionsIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
                   <Typography variant="h5" color="text.secondary" gutterBottom>
@@ -687,11 +694,11 @@ const Cookbook: React.FC = () => {
         </Typography>
 
         {smartLoading ? (
-          <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Box sx={{ textAlign: 'center', py: 6 }} data-testid="cookbookPage-smartCookbook-loading">
             <CircularProgress />
           </Box>
         ) : smartRecipes.length === 0 ? (
-          <Paper sx={{ p: 6, textAlign: 'center' }}>
+          <Paper sx={{ p: 6, textAlign: 'center' }} data-testid="cookbookPage-smartCookbook-text-noResults">
             <Typography variant="h6" color="text.secondary" gutterBottom>
               No matching recipes
             </Typography>
@@ -700,7 +707,7 @@ const Cookbook: React.FC = () => {
             </Typography>
           </Paper>
         ) : (
-          <Grid container spacing={3}>
+          <Grid container spacing={3} data-testid="cookbookPage-smartCookbook-grid-recipes">
             {smartRecipes.map((recipe) => {
               // Calculate missing ingredients
               const pantrySet = new Set(pantryItems.map((item: any) => cleanIngredientName(item.name).toLowerCase()));
@@ -773,7 +780,7 @@ const Cookbook: React.FC = () => {
       </Menu>
 
       {/* Single Import Dialog */}
-      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="sm" fullWidth data-testid="cookbookPage-dialog-singleImport">
         <DialogTitle>Import Recipe from URL</DialogTitle>
         <DialogContent>
           <TextField
@@ -855,10 +862,11 @@ const Cookbook: React.FC = () => {
         autoHideDuration={5000}
         onClose={() => setImportSuccess(false)}
         message="Recipe imported successfully!"
+        data-testid="cookbookPage-snackbar-importSuccess"
       />
 
       {/* Create Collection Dialog */}
-      <Dialog open={createCollectionDialogOpen} onClose={() => setCreateCollectionDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={createCollectionDialogOpen} onClose={() => setCreateCollectionDialogOpen(false)} maxWidth="sm" fullWidth data-testid="cookbookPage-dialog-createCollection">
         <DialogTitle>Create New Collection</DialogTitle>
         <DialogContent>
           <TextField
@@ -923,7 +931,7 @@ const Cookbook: React.FC = () => {
       </Dialog>
 
       {/* Edit Collection Dialog */}
-      <Dialog open={editCollectionDialogOpen} onClose={() => setEditCollectionDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={editCollectionDialogOpen} onClose={() => setEditCollectionDialogOpen(false)} maxWidth="sm" fullWidth data-testid="cookbookPage-dialog-editCollection">
         <DialogTitle>Edit Collection</DialogTitle>
         <DialogContent>
           <TextField

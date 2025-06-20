@@ -111,20 +111,20 @@ const SectionedIngredients: React.FC<SectionedIngredientsProps> = ({
                       sx={{ '&:hover': { bgcolor: 'action.hover' } }}
                       data-testid={`ingredient-row-${section.name.toLowerCase().replace(/\s+/g, '-')}-${index}`}
                     >
-                      <TableCell sx={{ verticalAlign: 'top' }}>
+                      <TableCell sx={{ verticalAlign: 'top' }} data-testid={`sectionedIngredients-cell-amount-${section.name}-${index}`}>
                         <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
                           {amountWithUnit}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ verticalAlign: 'top' }}>
+                      <TableCell sx={{ verticalAlign: 'top' }} data-testid={`sectionedIngredients-cell-name-${section.name}-${index}`}>
                         <Typography variant="body2">
                           {ingredientName}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ verticalAlign: 'top' }}>
-                        <Typography 
-                          variant="body2" 
-                          color="text.secondary" 
+                      <TableCell sx={{ verticalAlign: 'top' }} data-testid={`sectionedIngredients-cell-preparation-${section.name}-${index}`}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
                           sx={{ fontStyle: preparation ? 'italic' : 'normal' }}
                         >
                           {preparation || '—'}

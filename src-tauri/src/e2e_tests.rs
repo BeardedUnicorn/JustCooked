@@ -53,26 +53,15 @@ mod e2e_tests {
 
         println!("Testing ingredient parsing for {} ingredients...", ingredient_strings.len());
         
-        let parsed_ingredients = match parser.parse_ingredients_batch(&ingredient_strings).await {
-            Ok(ingredients) => {
-                println!("✓ Successfully parsed {}/{} ingredients", 
-                    ingredients.len(), ingredient_strings.len());
-                ingredients
+        // Parse ingredients individually (since parse_ingredients_batch was removed)
+        let mut parsed_ingredients = Vec::new();
+        for ingredient_str in &ingredient_strings {
+            if let Ok(Some(ingredient)) = parser.parse_ingredient(ingredient_str, None).await {
+                parsed_ingredients.push(ingredient);
             }
-            Err(e) => {
-                println!("✗ Batch parsing failed: {}", e);
-                // Fallback to individual parsing
-                let mut individual_results = Vec::new();
-                for ingredient_str in &ingredient_strings {
-                    if let Ok(Some(ingredient)) = parser.parse_ingredient(ingredient_str, None).await {
-                        individual_results.push(ingredient);
-                    }
-                }
-                println!("✓ Fallback parsing succeeded for {}/{} ingredients", 
-                    individual_results.len(), ingredient_strings.len());
-                individual_results
-            }
-        };
+        }
+        println!("✓ Successfully parsed {}/{} ingredients",
+            parsed_ingredients.len(), ingredient_strings.len());
 
         // Verify parsing quality
         assert!(!parsed_ingredients.is_empty(), "No ingredients were parsed successfully");
@@ -133,16 +122,16 @@ mod e2e_tests {
         for i in 0..test_urls.len() {
             let batch_start = Instant::now();
             
-            match parser.parse_ingredients_batch(&test_ingredients).await {
-                Ok(ingredients) => {
-                    total_processed += ingredients.len();
-                    println!("Batch {} processed {} ingredients in {}ms", 
-                        i + 1, ingredients.len(), batch_start.elapsed().as_millis());
-                }
-                Err(e) => {
-                    println!("Batch {} failed: {}", i + 1, e);
+            // Parse ingredients individually
+            let mut batch_ingredients = Vec::new();
+            for ingredient_str in &test_ingredients {
+                if let Ok(Some(ingredient)) = parser.parse_ingredient(ingredient_str, None).await {
+                    batch_ingredients.push(ingredient);
                 }
             }
+            total_processed += batch_ingredients.len();
+            println!("Batch {} processed {} ingredients in {}ms",
+                i + 1, batch_ingredients.len(), batch_start.elapsed().as_millis());
             
             // Small delay between batches
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -182,8 +171,15 @@ mod e2e_tests {
                 "2 tsp baking powder".to_string(),
                 "1/2 tsp salt".to_string(),
             ];
-            
-            parser.parse_ingredients_batch(&ingredients).await
+
+            // Parse ingredients individually
+            let mut parsed_ingredients = Vec::new();
+            for ingredient_str in &ingredients {
+                if let Ok(Some(ingredient)) = parser.parse_ingredient(ingredient_str, None).await {
+                    parsed_ingredients.push(ingredient);
+                }
+            }
+            Ok::<Vec<crate::database::Ingredient>, String>(parsed_ingredients)
         };
 
         // Simulate UI operations

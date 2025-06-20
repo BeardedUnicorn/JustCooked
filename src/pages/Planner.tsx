@@ -141,29 +141,29 @@ const Planner: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom data-testid="planner-title">
+      <Typography variant="h4" component="h1" gutterBottom data-testid="plannerPage-title-main">
         Planner
       </Typography>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }} data-testid="plannerPage-tabs-main">
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="planner tabs">
-          <Tab label="Meal Plan" {...a11yProps(0)} data-testid="planner-tab-meal-plan" />
-          <Tab label="Shopping Lists" {...a11yProps(1)} data-testid="planner-tab-shopping-lists" />
+          <Tab label="Meal Plan" {...a11yProps(0)} data-testid="plannerPage-tab-mealPlan" />
+          <Tab label="Shopping Lists" {...a11yProps(1)} data-testid="plannerPage-tab-shoppingLists" />
         </Tabs>
       </Box>
 
       {/* Meal Plan Tab */}
       <TabPanel value={tabValue} index={0}>
         {mealPlansLoading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px" data-testid="plannerPage-mealPlan-loading">
             <CircularProgress />
           </Box>
         ) : mealPlansError ? (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: 3 }} data-testid="plannerPage-mealPlan-alert-error">
             {mealPlansError}
           </Alert>
         ) : mealPlans.length === 0 ? (
-          <Card>
+          <Card data-testid="plannerPage-mealPlans-text-noPlans">
             <CardContent sx={{ textAlign: 'center', py: 8 }}>
               <EventNoteIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h5" color="text.secondary" gutterBottom>
@@ -177,7 +177,7 @@ const Planner: React.FC = () => {
                 size="large"
                 startIcon={<AddIcon />}
                 onClick={() => navigate('/meal-plans')}
-                data-testid="planner-create-first-meal-plan-button"
+                data-testid="plannerPage-mealPlan-button-createFirst"
               >
                 Create Meal Plan
               </Button>
@@ -196,7 +196,7 @@ const Planner: React.FC = () => {
                     setSelectedMealPlan(plan || null);
                   }}
                   label="Select Meal Plan"
-                  data-testid="planner-meal-plan-selector"
+                  data-testid="plannerPage-mealPlan-select-plan"
                 >
                   {mealPlans.map((plan) => (
                     <MenuItem key={plan.id} value={plan.id}>
@@ -213,7 +213,7 @@ const Planner: React.FC = () => {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => navigate('/meal-plans')}
-                data-testid="planner-create-meal-plan-button"
+                data-testid="plannerPage-mealPlan-button-createNewPlan"
               >
                 Create New Plan
               </Button>
@@ -229,7 +229,7 @@ const Planner: React.FC = () => {
                 <MealPlanView />
               </Box>
             ) : (
-              <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Paper sx={{ p: 4, textAlign: 'center' }} data-testid="plannerPage-mealPlans-text-selectPlan">
                 <Typography variant="h6" color="text.secondary">
                   Select a meal plan to view details
                 </Typography>
@@ -248,7 +248,7 @@ const Planner: React.FC = () => {
               <Button
                 onClick={() => setSelectedShoppingList(null)}
                 startIcon={<CalendarIcon />}
-                data-testid="planner-shopping-lists-back-button"
+                data-testid="plannerPage-shoppingLists-button-back"
               >
                 Back to Shopping Lists
               </Button>
@@ -276,24 +276,24 @@ const Planner: React.FC = () => {
               <Button
                 variant="outlined"
                 onClick={() => setTabValue(0)}
-                data-testid="planner-create-shopping-list-button"
+                data-testid="plannerPage-shoppingLists-button-createFromMealPlan"
               >
                 Create from Meal Plan
               </Button>
             </Box>
 
             {shoppingListsError && (
-              <Alert severity="error" sx={{ mb: 3 }}>
+              <Alert severity="error" sx={{ mb: 3 }} data-testid="plannerPage-shoppingLists-alert-error">
                 {shoppingListsError}
               </Alert>
             )}
 
             {shoppingListsLoading ? (
-              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+              <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px" data-testid="plannerPage-shoppingLists-loading">
                 <CircularProgress />
               </Box>
             ) : shoppingLists.length === 0 ? (
-              <Card>
+              <Card data-testid="plannerPage-shoppingLists-text-noLists">
                 <CardContent sx={{ textAlign: 'center', py: 8 }}>
                   <ShoppingCartIcon sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
                   <Typography variant="h5" color="text.secondary" gutterBottom>
@@ -306,21 +306,21 @@ const Planner: React.FC = () => {
                     variant="contained"
                     size="large"
                     onClick={() => setTabValue(0)}
-                    data-testid="planner-create-first-shopping-list-button"
+                    data-testid="plannerPage-shoppingLists-button-goToMealPlans"
                   >
                     Go to Meal Plans
                   </Button>
                 </CardContent>
               </Card>
             ) : (
-              <Paper>
+              <Paper data-testid="plannerPage-shoppingLists-list-main">
                 <List>
                   {shoppingLists.map((list, index) => (
                     <React.Fragment key={list.id}>
                       <ListItem
                         component="button"
                         onClick={() => setSelectedShoppingList(list)}
-                        data-testid={`planner-shopping-list-${list.id}`}
+                        data-testid={`plannerPage-shoppingLists-listItem-${list.id}`}
                         sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
                       >
                         <ListItemText

@@ -185,14 +185,14 @@ const CookingMode: React.FC = () => {
           Exit Cooking
         </Button>
         
-        <Typography variant={isMobile ? 'h6' : 'h5'} sx={{ 
-          textAlign: 'center', 
-          flex: 1, 
+        <Typography variant={isMobile ? 'h6' : 'h5'} sx={{
+          textAlign: 'center',
+          flex: 1,
           mx: 2,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-        }}>
+        }} data-testid="cookingModePage-text-title">
           {recipe.title}
         </Typography>
         
@@ -203,19 +203,20 @@ const CookingMode: React.FC = () => {
 
       {/* Progress Bar */}
       <Box sx={{ mb: 3 }}>
-        <LinearProgress 
-          variant="determinate" 
-          value={getProgress()} 
+        <LinearProgress
+          variant="determinate"
+          value={getProgress()}
           sx={{ height: 8, borderRadius: 4 }}
+          data-testid="cookingModePage-progressBar-steps"
         />
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }} data-testid="cookingModePage-text-stepCounter">
           Step {currentStep + 1} of {recipe.instructions.length}
         </Typography>
       </Box>
 
       {/* Timer Display */}
       {timer !== null && (
-        <Paper sx={{ p: 2, mb: 3, textAlign: 'center', backgroundColor: timer <= 60 ? 'error.dark' : 'primary.dark' }}>
+        <Paper sx={{ p: 2, mb: 3, textAlign: 'center', backgroundColor: timer <= 60 ? 'error.dark' : 'primary.dark' }} data-testid="cookingModePage-container-timer">
           <Typography variant="h4" color="white">
             {formatTime(timer)}
           </Typography>
@@ -243,7 +244,7 @@ const CookingMode: React.FC = () => {
             height: 'fit-content',
             position: 'sticky',
             top: '120px',
-          }}>
+          }} data-testid="cookingModePage-panel-ingredients">
             <Typography variant="h6" gutterBottom>
               Ingredients
             </Typography>
@@ -271,24 +272,24 @@ const CookingMode: React.FC = () => {
 
         {/* Instructions Panel */}
         <Box sx={{ flex: 1 }}>
-          <Paper sx={{ p: 3, minHeight: '400px' }}>
+          <Paper sx={{ p: 3, minHeight: '400px' }} data-testid="cookingModePage-panel-instructions">
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
+              <Typography variant="h6" data-testid="cookingModePage-text-currentStep">
                 Step {currentStep + 1}
               </Typography>
-              <Chip 
+              <Chip
                 label={`${recipe.instructions.length - currentStep - 1} steps remaining`}
                 size="small"
                 color="primary"
               />
             </Box>
-            
+
             <Typography variant="body1" sx={{
               fontSize: isMobile ? '1.3rem' : '1.5rem',
               lineHeight: isMobile ? 1.7 : 1.8,
               mb: 3,
               fontWeight: 500,
-            }}>
+            }} data-testid="cookingModePage-text-stepInstruction">
               {recipe.instructions[currentStep]}
             </Typography>
 

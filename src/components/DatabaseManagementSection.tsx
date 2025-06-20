@@ -112,13 +112,13 @@ const DatabaseManagementSection: React.FC = () => {
 
         {/* Status Messages */}
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} data-testid="database-management-error">
+          <Alert severity="error" sx={{ mb: 2 }} data-testid="dbManagement-alert-error">
             {error}
           </Alert>
         )}
 
         {success && (
-          <Alert severity="success" sx={{ mb: 2 }} data-testid="database-management-success">
+          <Alert severity="success" sx={{ mb: 2 }} data-testid="dbManagement-alert-success">
             {success}
           </Alert>
         )}
@@ -133,10 +133,10 @@ const DatabaseManagementSection: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={isOperationLoading('export') ? <CircularProgress size={20} /> : <ExportIcon />}
+            startIcon={isOperationLoading('export') ? <CircularProgress size={20} data-testid="dbManagement-loading-export" /> : <ExportIcon />}
             onClick={handleExport}
             disabled={loading}
-            data-testid="database-export-button"
+            data-testid="dbManagement-button-export"
           >
             {isOperationLoading('export') ? 'Exporting...' : 'Export Database'}
           </Button>
@@ -163,7 +163,7 @@ const DatabaseManagementSection: React.FC = () => {
                   <Switch
                     checked={replaceExisting}
                     onChange={(e) => setReplaceExisting(e.target.checked)}
-                    data-testid="database-import-replace-switch"
+                    data-testid="dbManagement-switch-replaceExisting"
                   />
                 }
                 label="Replace existing data"
@@ -179,10 +179,10 @@ const DatabaseManagementSection: React.FC = () => {
 
           <Button
             variant="contained"
-            startIcon={isOperationLoading('import') ? <CircularProgress size={20} /> : <ImportIcon />}
+            startIcon={isOperationLoading('import') ? <CircularProgress size={20} data-testid="dbManagement-loading-import" /> : <ImportIcon />}
             onClick={() => setShowImportConfirm(true)}
             disabled={loading}
-            data-testid="database-import-button"
+            data-testid="dbManagement-button-import"
           >
             {isOperationLoading('import') ? 'Importing...' : 'Import Database'}
           </Button>
@@ -201,10 +201,10 @@ const DatabaseManagementSection: React.FC = () => {
           <Button
             variant="outlined"
             color="error"
-            startIcon={isOperationLoading('reset') ? <CircularProgress size={20} /> : <ResetIcon />}
+            startIcon={isOperationLoading('reset') ? <CircularProgress size={20} data-testid="dbManagement-loading-reset" /> : <ResetIcon />}
             onClick={() => setShowResetConfirm(true)}
             disabled={loading}
-            data-testid="database-reset-button"
+            data-testid="dbManagement-button-reset"
           >
             {isOperationLoading('reset') ? 'Resetting...' : 'Reset Database'}
           </Button>

@@ -285,12 +285,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       )}
 
       {/* Main Content */}
-      <Main open={open} isMobile={isMobile}>
+      <Main open={open} isMobile={isMobile} data-testid="appLayout-mainContent">
         {!isMobile && <Toolbar />}
 
         {/* Breadcrumbs */}
         {breadcrumbs.length > 0 && (
-          <Box sx={{ mb: theme.spacing(2) }}>
+          <Box sx={{ mb: theme.spacing(2) }} data-testid="appLayout-breadcrumbs-container">
             <Breadcrumbs
               separator={<NavigateNextIcon fontSize="small" />}
               aria-label="breadcrumb navigation"
@@ -309,6 +309,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                       e.preventDefault();
                       navigate(crumb.path);
                     }}
+                    data-testid={`appLayout-breadcrumbLink-${index}`}
                     sx={{
                       textDecoration: 'none',
                       '&:hover': { textDecoration: 'underline' },

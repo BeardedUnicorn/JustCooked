@@ -133,13 +133,13 @@ const IngredientAssociationModal: React.FC<IngredientAssociationModalProps> = ({
         />
 
         {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
+          <Alert severity="error" sx={{ mt: 2 }} data-testid="ingredientAssocModal-alert-error">
             {error}
           </Alert>
         )}
 
         {loading && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }} data-testid="ingredientAssocModal-loading-search">
             <CircularProgress size={24} />
           </Box>
         )}
@@ -175,7 +175,7 @@ const IngredientAssociationModal: React.FC<IngredientAssociationModalProps> = ({
         )}
 
         {selectedIngredient && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }} data-testid="ingredientAssocModal-display-selected">
             <Typography variant="subtitle2" gutterBottom>
               Selected Ingredient
             </Typography>

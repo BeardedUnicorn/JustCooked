@@ -162,7 +162,7 @@ const MealPlanView: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }} data-testid="mealPlanViewPage-loading-main">
         <CircularProgress />
       </Box>
     );
@@ -171,7 +171,7 @@ const MealPlanView: React.FC = () => {
   if (error || !mealPlan) {
     return (
       <Box sx={{ maxWidth: 1200, mx: 'auto', py: 3 }}>
-        <Alert severity="error">
+        <Alert severity="error" data-testid="mealPlanViewPage-alert-error">
           {error || 'Meal plan not found'}
         </Alert>
         <Button
@@ -207,19 +207,21 @@ const MealPlanView: React.FC = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-            <Typography variant="h4" component="h1">
+            <Typography variant="h4" component="h1" data-testid="mealPlanViewPage-text-title">
               {mealPlan.name}
             </Typography>
-            {getMealPlanStatusChip(mealPlan)}
+            <Box data-testid="mealPlanViewPage-chip-status">
+              {getMealPlanStatusChip(mealPlan)}
+            </Box>
           </Box>
-          
+
           {mealPlan.description && (
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }} data-testid="mealPlanViewPage-text-description">
               {mealPlan.description}
             </Typography>
           )}
 
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" data-testid="mealPlanViewPage-text-dateRange">
             {mealPlan.startDate} to {mealPlan.endDate} ({mealPlanDates.length} days)
           </Typography>
         </Box>

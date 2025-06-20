@@ -249,14 +249,14 @@ const PantryHub: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom data-testid="pantry-hub-title">
+      <Typography variant="h4" component="h1" gutterBottom data-testid="pantryHubPage-title-main">
         Pantry
       </Typography>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }} data-testid="pantryHubPage-tabs-main">
         <Tabs value={tabValue} onChange={handleTabChange} aria-label="pantry tabs">
-          <Tab label="My Pantry" {...a11yProps(0)} data-testid="pantry-tab-my-pantry" />
-          <Tab label="Ingredient Database" {...a11yProps(1)} data-testid="pantry-tab-ingredient-database" />
+          <Tab label="My Pantry" {...a11yProps(0)} data-testid="pantryHubPage-tab-myPantry" />
+          <Tab label="Ingredient Database" {...a11yProps(1)} data-testid="pantryHubPage-tab-ingredientDb" />
         </Tabs>
       </Box>
 
@@ -266,7 +266,7 @@ const PantryHub: React.FC = () => {
           Track ingredients you have at home and get recipe suggestions based on what's in your pantry.
         </Typography>
 
-        <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3 }} data-testid="pantryHubPage-myPantry-container-main">
           <PantryManager
             items={pantryItems}
             onAddItem={handleAddPantryItem}
@@ -279,7 +279,7 @@ const PantryHub: React.FC = () => {
         <Fab
           color="primary"
           aria-label="add pantry item"
-          data-testid="pantry-add-item-fab"
+          data-testid="pantryHubPage-myPantry-fab-addItem"
           sx={{
             position: 'fixed',
             bottom: 80, // Above bottom navigation on mobile
@@ -295,7 +295,7 @@ const PantryHub: React.FC = () => {
           anchorEl={addMenuAnchorEl}
           open={Boolean(addMenuAnchorEl)}
           onClose={() => setAddMenuAnchorEl(null)}
-          data-testid="pantry-add-item-menu"
+          data-testid="pantryHubPage-myPantry-menu-addItem"
         >
           <MenuItem
             onClick={() => {
@@ -335,14 +335,14 @@ const PantryHub: React.FC = () => {
 
       {/* Ingredient Database Tab */}
       <TabPanel value={tabValue} index={1}>
-        <Paper sx={{ p: 3, mb: 3 }}>
+        <Paper sx={{ p: 3, mb: 3 }} data-testid="pantryHubPage-ingredientDatabase-container-main">
           <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
             <TextField
               label="Search ingredients"
               variant="outlined"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              data-testid="pantry-ingredients-search-input"
+              data-testid="pantryHubPage-ingredientDb-input-search"
               InputProps={{
                 startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
               }}
@@ -355,7 +355,7 @@ const PantryHub: React.FC = () => {
                 value={selectedCategory}
                 label="Category"
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                data-testid="pantry-ingredients-category-select"
+                data-testid="pantryHubPage-ingredientDb-select-category"
               >
                 <MenuItem value="all">All Categories</MenuItem>
                 {INGREDIENT_CATEGORIES.map(category => (
@@ -367,11 +367,11 @@ const PantryHub: React.FC = () => {
             </FormControl>
           </Box>
 
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} data-testid="pantryHubPage-ingredientDb-text-resultsCount">
             {Array.isArray(filteredIngredients) ? filteredIngredients.length : 0} ingredient{(Array.isArray(filteredIngredients) ? filteredIngredients.length : 0) !== 1 ? 's' : ''} found
           </Typography>
 
-          <TableContainer>
+          <TableContainer data-testid="pantryHubPage-ingredientDb-table-main">
             <Table>
               <TableHead>
                 <TableRow>
@@ -383,7 +383,7 @@ const PantryHub: React.FC = () => {
               </TableHead>
               <TableBody>
                 {paginatedIngredients.map((ingredient) => (
-                  <TableRow key={ingredient.id} hover data-testid={`pantry-ingredient-row-${ingredient.id}`}>
+                  <TableRow key={ingredient.id} hover data-testid={`pantryHubPage-ingredientDb-row-${ingredient.id}`}>
                     <TableCell>
                       <Typography variant="body1" fontWeight="medium">
                         {ingredient.name}
@@ -425,7 +425,7 @@ const PantryHub: React.FC = () => {
                           <IconButton
                             size="small"
                             onClick={() => handleOpenIngredientDialog(ingredient)}
-                            data-testid={`pantry-ingredient-${ingredient.id}-edit-button`}
+                            data-testid={`pantryHubPage-ingredientDb-button-edit-${ingredient.id}`}
                           >
                             <EditIcon />
                           </IconButton>
@@ -435,7 +435,7 @@ const PantryHub: React.FC = () => {
                             size="small"
                             color="error"
                             onClick={() => handleDeleteIngredient(ingredient.id)}
-                            data-testid={`pantry-ingredient-${ingredient.id}-delete-button`}
+                            data-testid={`pantryHubPage-ingredientDb-button-delete-${ingredient.id}`}
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -459,6 +459,7 @@ const PantryHub: React.FC = () => {
               setPage(0);
             }}
             rowsPerPageOptions={[5, 10, 25, 50]}
+            data-testid="pantryHubPage-ingredientDb-pagination"
           />
         </Paper>
 
@@ -469,20 +470,20 @@ const PantryHub: React.FC = () => {
             aria-label="add ingredient"
             sx={{ position: 'fixed', bottom: 80, right: 16 }}
             onClick={() => handleOpenIngredientDialog()}
-            data-testid="pantry-ingredients-add-fab"
+            data-testid="pantryHubPage-ingredientDb-fab-add"
           >
             <AddIcon />
           </Fab>
         )}
 
         {/* Add/Edit Ingredient Dialog */}
-        <Dialog open={dialogOpen} onClose={handleCloseIngredientDialog} maxWidth="sm" fullWidth data-testid="pantry-ingredients-dialog">
+        <Dialog open={dialogOpen} onClose={handleCloseIngredientDialog} maxWidth="sm" fullWidth data-testid="pantryHubPage-dialog-ingredient">
           <DialogTitle>
             {editingIngredient ? 'Edit Ingredient' : 'Add New Ingredient'}
           </DialogTitle>
           <DialogContent>
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }} data-testid="pantryHubPage-ingredientDb-alert-error">
                 {error}
               </Alert>
             )}
@@ -494,7 +495,7 @@ const PantryHub: React.FC = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               margin="normal"
               required
-              data-testid="pantry-ingredients-dialog-name-input"
+              data-testid="pantryHubPage-dialog-ingredient-input-name"
             />
 
             <FormControl fullWidth margin="normal">
@@ -503,7 +504,7 @@ const PantryHub: React.FC = () => {
                 value={formData.category}
                 label="Category"
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                data-testid="pantry-ingredients-dialog-category-select"
+                data-testid="pantryHubPage-dialog-ingredient-select-category"
               >
                 {INGREDIENT_CATEGORIES.map(category => (
                   <MenuItem key={category.id} value={category.id}>
@@ -522,12 +523,12 @@ const PantryHub: React.FC = () => {
               helperText="Alternative names for this ingredient, separated by commas"
               multiline
               rows={2}
-              data-testid="pantry-ingredients-dialog-aliases-input"
+              data-testid="pantryHubPage-dialog-ingredient-input-aliases"
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseIngredientDialog} data-testid="pantry-ingredients-dialog-cancel-button">Cancel</Button>
-            <Button onClick={handleSaveIngredient} variant="contained" data-testid="pantry-ingredients-dialog-save-button">
+            <Button onClick={handleCloseIngredientDialog} data-testid="pantryHubPage-dialog-ingredient-button-cancel">Cancel</Button>
+            <Button onClick={handleSaveIngredient} variant="contained" data-testid="pantryHubPage-dialog-ingredient-button-save">
               {editingIngredient ? 'Update' : 'Add'}
             </Button>
           </DialogActions>

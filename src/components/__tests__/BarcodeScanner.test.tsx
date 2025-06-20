@@ -144,7 +144,7 @@ describe('BarcodeScanner', () => {
   it('renders when open', () => {
     renderBarcodeScanner();
     expect(screen.getByText('Scan Barcode')).toBeInTheDocument();
-    expect(screen.getByTestId('barcode-scanner-close')).toBeInTheDocument();
+    expect(screen.getByTestId('barcodeScanner-button-close')).toBeInTheDocument();
   });
 
   it('does not render when closed', () => {
@@ -156,7 +156,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
   });
 
@@ -164,7 +164,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
     
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Position the food product barcode within the camera view. Hold steady and ensure good lighting for best results.')).toBeInTheDocument();
@@ -210,7 +210,7 @@ describe('BarcodeScanner', () => {
 
     // Wait for the video element to be rendered
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Verify that the ZXing library methods are called
@@ -229,7 +229,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Wait a bit to ensure scanning attempts are made
@@ -244,7 +244,7 @@ describe('BarcodeScanner', () => {
     const user = userEvent.setup();
     renderBarcodeScanner();
 
-    const closeButton = screen.getByTestId('barcode-scanner-close');
+    const closeButton = screen.getByTestId('barcodeScanner-button-close');
     await user.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalled();
@@ -255,8 +255,8 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     // Find the manual input field and submit button
-    const input = screen.getByTestId('manual-barcode-input').querySelector('input') as HTMLInputElement;
-    const submitButton = screen.getByTestId('manual-barcode-submit');
+    const input = screen.getByTestId('barcodeScanner-input-manualBarcode').querySelector('input') as HTMLInputElement;
+    const submitButton = screen.getByTestId('barcodeScanner-button-manualSubmit');
 
     // Check placeholder text for food products
     expect(input).toHaveAttribute('placeholder', 'e.g., 041196912586 (12-13 digits)');
@@ -282,7 +282,7 @@ describe('BarcodeScanner', () => {
     const { rerender } = renderBarcodeScanner(true);
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Close the scanner
@@ -296,7 +296,7 @@ describe('BarcodeScanner', () => {
 
     // Wait for cleanup to complete - the video element should be removed
     await waitFor(() => {
-      expect(screen.queryByTestId('barcode-scanner-video')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('barcodeScanner-video-main')).not.toBeInTheDocument();
     }, { timeout: 1000 });
   });
 
@@ -315,14 +315,14 @@ describe('BarcodeScanner', () => {
     const { unmount } = renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     unmount();
 
     // Wait for cleanup to complete - component should be unmounted
     await waitFor(() => {
-      expect(screen.queryByTestId('barcode-scanner-video')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('barcodeScanner-video-main')).not.toBeInTheDocument();
     }, { timeout: 1000 });
   });
 
@@ -330,7 +330,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     // Get the dialog element
-    const dialog = screen.getByTestId('barcode-scanner-dialog');
+    const dialog = screen.getByTestId('barcodeScanner-dialog-main');
 
     // Simulate dialog close event (Escape key)
     fireEvent.keyDown(dialog, { key: 'Escape' });
@@ -345,11 +345,11 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Check that the scanning overlay is present (it's a styled Box)
-    const videoContainer = screen.getByTestId('barcode-scanner-video').parentElement;
+    const videoContainer = screen.getByTestId('barcodeScanner-video-main').parentElement;
     expect(videoContainer).toHaveStyle('position: relative');
   });
 
@@ -358,7 +358,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     // Find and click the test barcode button
-    const testButton = screen.getByTestId('test-barcode-button');
+    const testButton = screen.getByTestId('barcodeScanner-button-testBarcode');
     expect(testButton).toBeInTheDocument();
     expect(testButton).toHaveTextContent('Use Test Food Product (041196912586)');
 
@@ -373,7 +373,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Wait for some scanning attempts to occur
@@ -387,7 +387,7 @@ describe('BarcodeScanner', () => {
     renderBarcodeScanner();
 
     await waitFor(() => {
-      expect(screen.getByTestId('barcode-scanner-video')).toBeInTheDocument();
+      expect(screen.getByTestId('barcodeScanner-video-main')).toBeInTheDocument();
     });
 
     // Verify that the ZXing library was initialized with enhanced hints

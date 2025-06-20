@@ -45,6 +45,14 @@ export type {
 } from './batchImport';
 export { BatchImportStatus, DEFAULT_BATCH_IMPORT_CONFIG } from './batchImport';
 
+// Re-import types
+export type {
+  ReImportRequest,
+  ReImportProgress,
+  ReImportResult,
+  ReImportOptions
+} from './reImport';
+
 // Import queue types
 export type {
   ImportQueueTask,

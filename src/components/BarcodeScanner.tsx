@@ -516,13 +516,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       onClose={handleClose}
       maxWidth="sm"
       fullWidth
-      data-testid="barcode-scanner-dialog"
+      data-testid="barcodeScanner-dialog-main"
     >
       <DialogTitle>Scan Barcode</DialogTitle>
       <DialogContent>
         <Box sx={{ textAlign: 'center' }}>
           {hasPermission === null && isScanning && (
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: 2 }} data-testid="barcodeScanner-indicator-loading">
               <CircularProgress size={24} />
               <Typography variant="body2" sx={{ mt: 1 }}>
                 Requesting camera permission...
@@ -531,7 +531,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
           )}
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2 }} data-testid="barcodeScanner-alert-error">
               {error}
             </Alert>
           )}
@@ -551,7 +551,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
               {/* Scanning tip */}
               {showScanningTip && (
-                <Alert severity="info" sx={{ mb: 2, fontSize: '0.875rem' }}>
+                <Alert severity="info" sx={{ mb: 2, fontSize: '0.875rem' }} data-testid="barcodeScanner-alert-tip">
                   <strong>Scanning Tip:</strong> Hold the food product steady, ensure good lighting, and keep the barcode flat within the camera view. Try different angles if needed.
                 </Alert>
               )}
@@ -579,7 +579,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                     objectFit: 'cover',
                     backgroundColor: '#000',
                   }}
-                  data-testid="barcode-scanner-video"
+                  data-testid="barcodeScanner-video-main"
                   // Additional video attributes for better barcode scanning
                   playsInline
                   muted
@@ -588,6 +588,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
                 {/* Scanning overlay */}
                 <Box
+                  data-testid="barcodeScanner-overlay-scanFrame"
                   sx={{
                     position: 'absolute',
                     top: '50%',
@@ -636,7 +637,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                 value={manualBarcode}
                 onChange={(e) => setManualBarcode(e.target.value)}
                 onKeyPress={handleManualKeyPress}
-                data-testid="manual-barcode-input"
+                data-testid="barcodeScanner-input-manualBarcode"
                 size="small"
                 inputProps={{
                   pattern: '[0-9]*',
@@ -647,7 +648,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                 variant="contained"
                 onClick={handleManualSubmit}
                 disabled={!manualBarcode.trim()}
-                data-testid="manual-barcode-submit"
+                data-testid="barcodeScanner-button-manualSubmit"
               >
                 Submit
               </Button>
@@ -659,7 +660,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                 variant="outlined"
                 size="small"
                 onClick={handleTestBarcode}
-                data-testid="test-barcode-button"
+                data-testid="barcodeScanner-button-testBarcode"
                 sx={{ fontSize: '0.75rem' }}
               >
                 Use Test Food Product (041196912586)
@@ -669,7 +670,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} data-testid="barcode-scanner-close">
+        <Button onClick={handleClose} data-testid="barcodeScanner-button-close">
           Close
         </Button>
       </DialogActions>

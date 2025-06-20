@@ -183,11 +183,27 @@ pub struct RecentSearch {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchFilters {
+    pub query: Option<String>,
     pub tags: Option<Vec<String>>,
-    pub difficulty: Option<String>,
+    pub difficulty: Option<Vec<String>>,
+    #[serde(rename = "maxPrepTime")]
     pub max_prep_time: Option<i32>,
+    #[serde(rename = "maxCookTime")]
     pub max_cook_time: Option<i32>,
-    pub is_favorite: Option<bool>,
+    #[serde(rename = "maxTotalTime")]
+    pub max_total_time: Option<i32>,
+    #[serde(rename = "minRating")]
+    pub min_rating: Option<i32>,
+    #[serde(rename = "dietaryRestrictions")]
+    pub dietary_restrictions: Option<Vec<String>>,
+    #[serde(rename = "prepTime")]
+    pub prep_time: Option<String>,
+    #[serde(rename = "cookTime")]
+    pub cook_time: Option<String>,
+    #[serde(rename = "totalTime")]
+    pub total_time: Option<String>,
+    pub servings: Option<Vec<i32>>,
+    pub rating: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -720,6 +736,21 @@ impl Database {
             .collect();
 
         Ok(urls)
+    }
+
+    /// Get all recipes that have non-null source URLs for re-import
+    pub async fn get_recipes_with_source_urls(&self) -> Result<Vec<Recipe>> {
+        let rows = sqlx::query("SELECT * FROM recipes WHERE source_url != '' AND source_url IS NOT NULL ORDER BY date_added DESC")
+            .fetch_all(&self.pool)
+            .await
+            .context("Failed to fetch recipes with source URLs")?;
+
+        let mut recipes = Vec::new();
+        for row in rows {
+            recipes.push(self.row_to_recipe(row)?);
+        }
+
+        Ok(recipes)
     }
 
 

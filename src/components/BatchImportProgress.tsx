@@ -61,6 +61,9 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
       case BatchImportStatus.IMPORTING_RECIPES:
       case 'importingrecipes':
         return { label: 'Importing Recipes', color: 'primary' as const, icon: <DownloadIcon /> };
+      case BatchImportStatus.RE_IMPORTING_RECIPES:
+      case 'reimportingrecipes':
+        return { label: 'Re-importing Recipes', color: 'primary' as const, icon: <DownloadIcon /> };
       case BatchImportStatus.COMPLETED:
       case 'completed':
         return { label: 'Completed', color: 'success' as const, icon: <CheckCircleIcon /> };
@@ -135,9 +138,9 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} data-testid="batch-import-progress">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }} data-testid="batchImportProgress-container-main">
       {/* Status Header */}
-      <Card data-testid="batch-import-status-card">
+      <Card data-testid="batchImportProgress-card-status">
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             {statusInfo.icon}
@@ -148,12 +151,12 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
               label={statusInfo.label}
               color={statusInfo.color}
               variant="outlined"
-              data-testid="batch-import-status-chip"
+              data-testid="batchImportProgress-chip-status"
             />
           </Box>
 
           {progress.currentUrl && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }} data-testid="batchImportProgress-text-currentUrl">
               Current: {progress.currentUrl}
             </Typography>
           )}
@@ -170,7 +173,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
               variant="determinate"
               value={getOverallProgress()}
               sx={{ height: 8, borderRadius: 4 }}
-              data-testid="batch-import-overall-progress"
+              data-testid="batchImportProgress-linearProgress-overall"
             />
           </Box>
 
@@ -188,7 +191,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 value={getCategoryProgress()}
                 sx={{ height: 6, borderRadius: 3 }}
                 color="secondary"
-                data-testid="batch-import-category-progress"
+                data-testid="batchImportProgress-linearProgress-category"
               />
             </Box>
           )}
@@ -196,13 +199,13 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
       </Card>
 
       {/* Statistics */}
-      <Card data-testid="batch-import-statistics-card">
+      <Card data-testid="batchImportProgress-card-statistics">
         <CardContent>
           <Typography variant="h6" gutterBottom>
             Import Statistics
           </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'space-around', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-successful-count">
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batchImportProgress-text-successfulCount">
               <Typography variant="h4" color="success.main">
                 {progress.successfulImports}
               </Typography>
@@ -210,7 +213,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Successful
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-failed-count">
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batchImportProgress-text-failedCount">
               <Typography variant="h4" color="error.main">
                 {progress.failedImports}
               </Typography>
@@ -218,7 +221,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Failed
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-skipped-count">
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batchImportProgress-text-skippedCount">
               <Typography variant="h4" color="warning.main">
                 {progress.skippedRecipes}
               </Typography>
@@ -226,7 +229,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
                 Skipped
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batch-import-elapsed-time">
+            <Box sx={{ textAlign: 'center', minWidth: '120px' }} data-testid="batchImportProgress-text-elapsedTime">
               <Typography variant="h4" color="primary.main">
                 {formatDuration(progress.startTime)}
               </Typography>
@@ -238,7 +241,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
           
           {/* Time Information */}
           <Box sx={{ mt: 2, textAlign: 'center' }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" data-testid="batchImportProgress-text-estimatedTime">
               Estimated time remaining: {formatEstimatedTime(progress.estimatedTimeRemaining)}
             </Typography>
           </Box>
@@ -247,7 +250,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
 
       {/* Errors */}
       {progress.errors.length > 0 && (
-        <Accordion data-testid="batch-import-errors-accordion">
+        <Accordion data-testid="batchImportProgress-accordion-errors">
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ErrorIcon color="error" />
@@ -259,7 +262,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
           <AccordionDetails>
             <List dense>
               {progress.errors.slice(-10).map((error, index) => (
-                <ListItem key={index}>
+                <ListItem key={index} data-testid={`batchImportProgress-listItem-error-${index}`}>
                   <ListItemText
                     primary={error.message}
                     secondary={
@@ -293,7 +296,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
 
       {/* Completion Message */}
       {progress.status === BatchImportStatus.COMPLETED && (
-        <Alert severity="success">
+        <Alert severity="success" data-testid="batchImportProgress-alert-finalStatus">
           <Typography variant="body1">
             Batch import completed successfully!
           </Typography>
@@ -304,7 +307,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
       )}
 
       {progress.status === BatchImportStatus.CANCELLED && (
-        <Alert severity="warning">
+        <Alert severity="warning" data-testid="batchImportProgress-alert-finalStatus">
           <Typography variant="body1">
             Batch import was cancelled.
           </Typography>
@@ -315,7 +318,7 @@ const BatchImportProgressComponent: React.FC<BatchImportProgressProps> = ({ prog
       )}
 
       {progress.status === BatchImportStatus.ERROR && (
-        <Alert severity="error">
+        <Alert severity="error" data-testid="batchImportProgress-alert-finalStatus">
           <Typography variant="body1">
             Batch import encountered an error.
           </Typography>

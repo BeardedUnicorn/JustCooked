@@ -17,9 +17,9 @@ export async function getRecentSearches(limit: number = 10): Promise<RecentSearc
 // Save a search to history
 export async function saveSearch(query: string, filters?: SearchFilters): Promise<void> {
   try {
-    // Check if this exact search already exists
-    const existingSearches = await getRecentSearches(MAX_SEARCH_HISTORY);
-    const existingSearch = existingSearches.find(search => 
+    // Optimized: Check for existing search with a smaller limit first
+    const recentSearches = await getRecentSearches(10); // Only check recent 10 searches
+    const existingSearch = recentSearches.find(search =>
       search.query.toLowerCase() === query.toLowerCase()
     );
 
@@ -43,6 +43,7 @@ export async function saveSearch(query: string, filters?: SearchFilters): Promis
     }
   } catch (error) {
     console.error('Failed to save search:', error);
+    // Don't throw error to prevent blocking the search functionality
   }
 }
 

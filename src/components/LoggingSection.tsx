@@ -80,7 +80,7 @@ const LoggingSection: React.FC = () => {
             <LogIcon />
             <Typography variant="h6">Logging</Typography>
           </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }} data-testid="loggingSection-loading-initial">
             <CircularProgress size={24} />
           </Box>
         </CardContent>
@@ -158,7 +158,7 @@ const LoggingSection: React.FC = () => {
         <Box>
           <Button
             variant="contained"
-            startIcon={loading ? <CircularProgress size={20} /> : <OpenFolderIcon />}
+            startIcon={loading ? <CircularProgress size={20} data-testid="loggingSection-loading-openDir" /> : <OpenFolderIcon />}
             onClick={handleOpenLogDirectory}
             disabled={loading || !logDirectoryPath}
             data-testid="open-log-directory-button"

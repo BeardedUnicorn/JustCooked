@@ -51,9 +51,9 @@ describe('DatabaseManagementSection', () => {
     renderWithTheme(<DatabaseManagementSection />);
 
     expect(screen.getByText('Database Management')).toBeInTheDocument();
-    expect(screen.getByTestId('database-export-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-import-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-reset-button')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-export')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-import')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-reset')).toBeInTheDocument();
   });
 
   it('handles export database successfully', async () => {
@@ -61,7 +61,7 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const exportButton = screen.getByTestId('database-export-button');
+    const exportButton = screen.getByTestId('dbManagement-button-export');
     fireEvent.click(exportButton);
 
     await waitFor(() => {
@@ -69,7 +69,7 @@ describe('DatabaseManagementSection', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('database-management-success')).toBeInTheDocument();
+      expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
       expect(screen.getByText('Database exported successfully!')).toBeInTheDocument();
     });
   });
@@ -80,11 +80,11 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const exportButton = screen.getByTestId('database-export-button');
+    const exportButton = screen.getByTestId('dbManagement-button-export');
     fireEvent.click(exportButton);
 
     await waitFor(() => {
-      expect(screen.getByTestId('database-management-error')).toBeInTheDocument();
+      expect(screen.getByTestId('dbManagement-alert-error')).toBeInTheDocument();
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
     });
   });
@@ -92,7 +92,7 @@ describe('DatabaseManagementSection', () => {
   it('shows import confirmation dialog when import button is clicked', async () => {
     renderWithTheme(<DatabaseManagementSection />);
 
-    const importButton = screen.getByTestId('database-import-button');
+    const importButton = screen.getByTestId('dbManagement-button-import');
     fireEvent.click(importButton);
 
     await waitFor(() => {
@@ -123,7 +123,7 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const importButton = screen.getByTestId('database-import-button');
+    const importButton = screen.getByTestId('dbManagement-button-import');
     fireEvent.click(importButton);
 
     await waitFor(() => {
@@ -138,7 +138,7 @@ describe('DatabaseManagementSection', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('database-management-success')).toBeInTheDocument();
+      expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
     });
   });
 
@@ -165,10 +165,10 @@ describe('DatabaseManagementSection', () => {
     renderWithTheme(<DatabaseManagementSection />);
 
     // Toggle replace existing option
-    const replaceSwitch = screen.getByTestId('database-import-replace-switch');
+    const replaceSwitch = screen.getByTestId('dbManagement-switch-replaceExisting');
     fireEvent.click(replaceSwitch);
 
-    const importButton = screen.getByTestId('database-import-button');
+    const importButton = screen.getByTestId('dbManagement-button-import');
     fireEvent.click(importButton);
 
     await waitFor(() => {
@@ -186,7 +186,7 @@ describe('DatabaseManagementSection', () => {
   it('shows reset confirmation dialog when reset button is clicked', async () => {
     renderWithTheme(<DatabaseManagementSection />);
 
-    const resetButton = screen.getByTestId('database-reset-button');
+    const resetButton = screen.getByTestId('dbManagement-button-reset');
     fireEvent.click(resetButton);
 
     await waitFor(() => {
@@ -200,7 +200,7 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const resetButton = screen.getByTestId('database-reset-button');
+    const resetButton = screen.getByTestId('dbManagement-button-reset');
     fireEvent.click(resetButton);
 
     await waitFor(() => {
@@ -215,7 +215,7 @@ describe('DatabaseManagementSection', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('database-management-success')).toBeInTheDocument();
+      expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
       expect(screen.getByText('Database reset successfully! All data has been cleared.')).toBeInTheDocument();
     });
   });
@@ -226,7 +226,7 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const resetButton = screen.getByTestId('database-reset-button');
+    const resetButton = screen.getByTestId('dbManagement-button-reset');
     fireEvent.click(resetButton);
 
     await waitFor(() => {
@@ -237,7 +237,7 @@ describe('DatabaseManagementSection', () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(screen.getByTestId('database-management-error')).toBeInTheDocument();
+      expect(screen.getByTestId('dbManagement-alert-error')).toBeInTheDocument();
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
     });
   });
@@ -247,9 +247,9 @@ describe('DatabaseManagementSection', () => {
 
     renderWithTheme(<DatabaseManagementSection />);
 
-    const exportButton = screen.getByTestId('database-export-button');
-    const importButton = screen.getByTestId('database-import-button');
-    const resetButton = screen.getByTestId('database-reset-button');
+    const exportButton = screen.getByTestId('dbManagement-button-export');
+    const importButton = screen.getByTestId('dbManagement-button-import');
+    const resetButton = screen.getByTestId('dbManagement-button-reset');
 
     fireEvent.click(exportButton);
 

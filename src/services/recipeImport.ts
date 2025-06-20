@@ -128,5 +128,54 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
   }
 }
 
+export async function reImportRecipe(recipeId: string, sourceUrl: string): Promise<string> {
+  const startTime = performance.now();
+
+  try {
+    await logger.info('Starting recipe re-import', { recipeId, sourceUrl });
+
+    // Check if the URL is from a supported site
+    if (!isSupportedUrl(sourceUrl)) {
+      const error = new Error('Unsupported website. Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes.');
+      await logger.error('Unsupported website attempted for re-import', { recipeId, sourceUrl });
+      throw error;
+    }
+
+    await logger.debug('URL validation passed, calling backend re-import', { recipeId, sourceUrl });
+
+    // Call the Tauri backend command for re-importing
+    const updatedRecipeId: string = await invoke('re_import_recipe', {
+      recipeId,
+      sourceUrl
+    });
+
+    if (!updatedRecipeId) {
+      const error = new Error('Failed to re-import recipe from the URL');
+      await logger.error('Backend returned invalid response for re-import', { recipeId, sourceUrl });
+      throw error;
+    }
+
+    const duration = performance.now() - startTime;
+    await logger.logPerformance('Recipe re-import completed', duration, {
+      recipeId,
+      sourceUrl,
+      updatedRecipeId
+    });
+
+    await logger.info('Successfully re-imported recipe', {
+      recipeId,
+      sourceUrl,
+      updatedRecipeId
+    });
+
+    return updatedRecipeId;
+
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    await logger.logError(error, 'Failed to re-import recipe', { recipeId, sourceUrl, duration });
+    throw new Error(`Failed to re-import recipe: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 // Re-export utility functions for convenience
 export { formatAmountForDisplay } from '@utils/ingredientUtils';

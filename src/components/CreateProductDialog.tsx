@@ -91,7 +91,7 @@ const CreateProductDialog: React.FC<CreateProductDialogProps> = ({
           </Typography>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2 }} data-testid="createProductDialog-alert-error">
               {error}
             </Alert>
           )}

@@ -1,7 +1,7 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { importRecipeFromUrl } from '@services/recipeImport';
-import { formatIngredientForDisplay, parseIngredientsWithKalosm } from '@utils/ingredientUtils';
+import { formatIngredientForDisplay, parseIngredientsWithIngredientCrate } from '@utils/ingredientUtils';
 import { saveRecipe } from '@services/recipeStorage';
 import { autoDetectIngredients } from '@services/ingredientStorage';
 import { processRecipeImage } from '@services/imageService';
@@ -42,7 +42,7 @@ vi.mock('@utils/ingredientUtils', async () => {
   const actual = await vi.importActual('@utils/ingredientUtils');
   return {
     ...actual,
-    parseIngredientsWithKalosm: vi.fn(),
+    parseIngredientsWithIngredientCrate: vi.fn(),
   };
 });
 
@@ -62,7 +62,7 @@ const mockInvoke = vi.mocked(invoke);
 const mockSaveRecipe = vi.mocked(saveRecipe);
 const mockAutoDetectIngredients = vi.mocked(autoDetectIngredients);
 const mockProcessRecipeImage = vi.mocked(processRecipeImage);
-const mockParseIngredientsWithKalosm = vi.mocked(parseIngredientsWithKalosm);
+const mockParseIngredientsWithIngredientCrate = vi.mocked(parseIngredientsWithIngredientCrate);
 
 describe('recipeImport', () => {
   beforeEach(() => {
@@ -104,8 +104,8 @@ describe('recipeImport', () => {
       mockAutoDetectIngredients.mockResolvedValue([]);
       mockSaveRecipe.mockResolvedValue();
 
-      // Mock the Kalosm ingredient parsing to return parsed ingredients
-      mockParseIngredientsWithKalosm.mockResolvedValue([
+      // Mock the ingredient crate parsing to return parsed ingredients
+      mockParseIngredientsWithIngredientCrate.mockResolvedValue([
         { name: 'all-purpose flour', amount: 2, unit: 'cups' },
         { name: 'granulated sugar', amount: 1, unit: 'cup' },
         { name: 'eggs', amount: 2, unit: '' },
@@ -220,7 +220,7 @@ describe('recipeImport', () => {
       });
 
       // Mock empty ingredient parsing result
-      mockParseIngredientsWithKalosm.mockResolvedValue([]);
+      mockParseIngredientsWithIngredientCrate.mockResolvedValue([]);
 
       await importRecipeFromUrl(url);
 

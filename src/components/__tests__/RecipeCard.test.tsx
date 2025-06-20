@@ -137,20 +137,21 @@ describe('RecipeCard Component', () => {
       const moreButton = screen.getByRole('button', { name: /more actions/i });
       await user.click(moreButton);
 
-      expect(screen.getByText('Add to Favorites')).toBeInTheDocument();
       expect(screen.getByText('Share Recipe')).toBeInTheDocument();
+      expect(screen.getByText('Add to Meal Plan')).toBeInTheDocument();
+      expect(screen.getByText('Add to Collection')).toBeInTheDocument();
       expect(screen.getByText('Delete Recipe')).toBeInTheDocument();
     });
 
-    test('should show remove from favorites when recipe is favorite', async () => {
+    test('should show favorite button when recipe is not favorite', async () => {
       const user = userEvent.setup();
-      const favoriteRecipe = { ...mockRecipe, isFavorite: true };
-      renderRecipeCard(favoriteRecipe);
+      renderRecipeCard();
 
-      const moreButton = screen.getByRole('button', { name: /more actions/i });
-      await user.click(moreButton);
+      const favoriteButton = screen.getByTestId(`recipe-card-${mockRecipe.id}-favorite-button`);
+      expect(favoriteButton).toBeInTheDocument();
 
-      expect(screen.getByText('Remove from Favorites')).toBeInTheDocument();
+      // Should show unfilled heart icon for non-favorite
+      expect(favoriteButton.querySelector('[data-testid="FavoriteBorderIcon"]')).toBeInTheDocument();
     });
 
     test('should close menu when clicking outside', async () => {
@@ -160,28 +161,24 @@ describe('RecipeCard Component', () => {
       // Open menu
       const moreButton = screen.getByRole('button', { name: /more actions/i });
       await user.click(moreButton);
-      expect(screen.getByText('Add to Favorites')).toBeInTheDocument();
+      expect(screen.getByText('Share Recipe')).toBeInTheDocument();
 
       // Press Escape to close menu (more reliable than clicking outside)
       await user.keyboard('{Escape}');
       await waitFor(() => {
-        expect(screen.queryByText('Add to Favorites')).not.toBeInTheDocument();
+        expect(screen.queryByText('Share Recipe')).not.toBeInTheDocument();
       });
     });
   });
 
   describe('Favorite Toggle', () => {
-    test('should toggle favorite status when favorite action is clicked', async () => {
+    test('should toggle favorite status when favorite button is clicked', async () => {
       const user = userEvent.setup();
       renderRecipeCard();
 
-      // Open menu
-      const moreButton = screen.getByRole('button', { name: /more actions/i });
-      await user.click(moreButton);
-
-      // Click add to favorites
-      const favoriteAction = screen.getByText('Add to Favorites');
-      await user.click(favoriteAction);
+      // Click the favorite button directly
+      const favoriteButton = screen.getByTestId(`recipe-card-${mockRecipe.id}-favorite-button`);
+      await user.click(favoriteButton);
 
       // Should call updateRecipe with favorite status
       expect(mockUpdateRecipe).toHaveBeenCalledWith({

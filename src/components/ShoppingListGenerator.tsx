@@ -198,7 +198,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
 
         <DialogContent>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2 }} data-testid="shoppingListGenerator-alert-error">
               {error}
             </Alert>
           )}
@@ -249,7 +249,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
               variant="outlined"
               onClick={generatePreview}
               disabled={previewLoading || !name.trim()}
-              startIcon={previewLoading ? <CircularProgress size={20} /> : <RestaurantIcon />}
+              startIcon={previewLoading ? <CircularProgress size={20} data-testid="shoppingListGenerator-loading-preview" /> : <RestaurantIcon />}
               data-testid="shopping-list-preview-button"
             >
               {previewLoading ? 'Generating Preview...' : 'Preview Ingredients'}
@@ -257,7 +257,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
 
             {/* Preview Section */}
             {showPreview && consolidatedIngredients.length > 0 && (
-              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}>
+              <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }} data-testid="shoppingListGenerator-preview-container">
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">Shopping List Preview</Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
@@ -265,11 +265,13 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
                       label={`${consolidatedIngredients.length} ingredients`}
                       size="small"
                       color="primary"
+                      data-testid="shoppingListGenerator-preview-chip-ingredientsCount"
                     />
                     <Chip
                       label={`${getTotalRecipeCount()} recipes`}
                       size="small"
                       color="secondary"
+                      data-testid="shoppingListGenerator-preview-chip-recipesCount"
                     />
                   </Box>
                 </Box>
@@ -277,17 +279,17 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
                 <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
                   {groupIngredientsByCategory(consolidatedIngredients).map(({ category, items }) => (
                     <Box key={category} sx={{ mb: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }} data-testid={`shoppingListGenerator-preview-header-${category}`}>
                         <CategoryIcon fontSize="small" color="action" />
                         <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
                           {getCategoryDisplayName(category)}
                         </Typography>
                         <Chip label={items.length} size="small" variant="outlined" />
                       </Box>
-                      
+
                       <List dense sx={{ pl: 2 }}>
                         {items.map((ingredient, index) => (
-                          <ListItem key={index} sx={{ py: 0.5 }}>
+                          <ListItem key={index} sx={{ py: 0.5 }} data-testid={`shoppingListGenerator-preview-listItem-${ingredient.name}`}>
                             <ListItemText
                               primary={
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -314,7 +316,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
                           </ListItem>
                         ))}
                       </List>
-                      
+
                       {category !== 'other' && <Divider sx={{ mt: 1 }} />}
                     </Box>
                   ))}
@@ -332,7 +334,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
             onClick={handleCreateShoppingList}
             variant="contained"
             disabled={loading || !name.trim() || !showPreview || consolidatedIngredients.length === 0}
-            startIcon={loading ? <CircularProgress size={20} /> : <ShoppingCartIcon />}
+            startIcon={loading ? <CircularProgress size={20} data-testid="shoppingListGenerator-loading-main" /> : <ShoppingCartIcon />}
             data-testid="shopping-list-generator-create-button"
           >
             {loading ? 'Creating...' : 'Create Shopping List'}

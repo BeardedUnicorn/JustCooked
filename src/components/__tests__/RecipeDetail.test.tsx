@@ -6,9 +6,19 @@ import { ThemeProvider } from '@mui/material/styles';
 import RecipeDetail from '../RecipeDetail';
 import darkTheme from '../../theme';
 
+// Mock Tauri API
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}));
+
 // Mock the hooks and utils
 vi.mock('@hooks/useImageUrl', () => ({
   useImageUrl: () => ({ imageUrl: 'test-image-url.jpg' }),
+}));
+
+// Mock the re-import service
+vi.mock('@services/recipeImport', () => ({
+  reImportRecipe: vi.fn(),
 }));
 
 const mockNavigate = vi.fn();
@@ -123,11 +133,12 @@ describe('RecipeDetail', () => {
     expect(screen.getByText('dessert')).toBeInTheDocument();
     expect(screen.getByText('easy')).toBeInTheDocument();
     expect(screen.getByText('baking')).toBeInTheDocument();
-    
-    // A Button with an href renders an <a> tag, which has the 'link' role
-    const sourceLink = screen.getByRole('link', { name: /example.com/i });
+
+    // Check for the source URL button with testid
+    const sourceLink = screen.getByTestId('recipe-detail-source-link');
     expect(sourceLink).toBeInTheDocument();
-    expect(sourceLink).toHaveAttribute('href', 'https://example.com/recipe');
+    expect(sourceLink).toHaveTextContent('example.com');
+    expect(sourceLink).toHaveAttribute('aria-label', 'Open recipe source at example.com');
   });
 
   it('should call onEdit when the edit button is clicked', async () => {
@@ -137,6 +148,101 @@ describe('RecipeDetail', () => {
     const editButton = screen.getByRole('button', { name: /edit/i });
     await user.click(editButton);
     expect(mockOnEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call Tauri command when source URL link is clicked', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const mockInvoke = vi.mocked(invoke);
+    mockInvoke.mockResolvedValue(undefined);
+
+    const user = userEvent.setup();
+    renderWithProviders(<RecipeDetail recipe={mockRecipe} onEdit={mockOnEdit} />);
+
+    const sourceLink = screen.getByTestId('recipe-detail-source-link');
+    await user.click(sourceLink);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('open_external_url', {
+        url: 'https://example.com/recipe',
+      });
+    });
+  });
+
+  it('should fall back to window.open when Tauri command fails', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const mockInvoke = vi.mocked(invoke);
+    mockInvoke.mockRejectedValue(new Error('Tauri command failed'));
+
+    const mockWindowOpen = vi.fn();
+    Object.defineProperty(window, 'open', {
+      value: mockWindowOpen,
+      writable: true,
+    });
+
+    const user = userEvent.setup();
+    renderWithProviders(<RecipeDetail recipe={mockRecipe} onEdit={mockOnEdit} />);
+
+    const sourceLink = screen.getByTestId('recipe-detail-source-link');
+    await user.click(sourceLink);
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('open_external_url', {
+        url: 'https://example.com/recipe',
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockWindowOpen).toHaveBeenCalledWith(
+        'https://example.com/recipe',
+        '_blank',
+        'noopener,noreferrer'
+      );
+    });
+  });
+
+  it('should not display source URL when sourceUrl is empty', () => {
+    const recipeWithoutSource = { ...mockRecipe, sourceUrl: '' };
+    renderWithProviders(<RecipeDetail recipe={recipeWithoutSource} onEdit={mockOnEdit} />);
+
+    expect(screen.queryByTestId('recipe-detail-source-link')).not.toBeInTheDocument();
+  });
+
+  it('should display more than 20 ingredients correctly', () => {
+    // Create a recipe with 25 ingredients to test large ingredient lists
+    const manyIngredients = Array.from({ length: 25 }, (_, index) => ({
+      name: `ingredient ${index + 1}`,
+      amount: index + 1,
+      unit: index % 3 === 0 ? 'cups' : index % 3 === 1 ? 'tablespoons' : 'teaspoons',
+      section: index < 10 ? 'Main Ingredients' : index < 20 ? 'Spices' : 'Garnish',
+    }));
+
+    const recipeWithManyIngredients = {
+      ...mockRecipe,
+      ingredients: manyIngredients,
+    };
+
+    renderWithProviders(<RecipeDetail recipe={recipeWithManyIngredients} onEdit={mockOnEdit} />);
+
+    // Check that all ingredients are rendered
+    expect(screen.getByText('ingredient 1')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 10')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 20')).toBeInTheDocument();
+    expect(screen.getByText('ingredient 25')).toBeInTheDocument();
+
+    // Check that section headers are displayed
+    expect(screen.getByText('Main Ingredients')).toBeInTheDocument();
+    expect(screen.getByText('Spices')).toBeInTheDocument();
+    expect(screen.getByText('Garnish')).toBeInTheDocument();
+
+    // Verify that all 25 ingredients are present by checking the ingredient tables
+    const ingredientTables = screen.getAllByRole('table');
+    expect(ingredientTables).toHaveLength(3); // 3 sections
+
+    // Count total ingredient rows across all tables
+    const allIngredientRows = screen.getAllByRole('row').filter(row =>
+      row.getAttribute('data-testid')?.includes('ingredient-row')
+    );
+    expect(allIngredientRows).toHaveLength(25);
   });
 
   it('should adjust serving size and scale ingredients', async () => {
@@ -182,5 +288,73 @@ describe('RecipeDetail', () => {
     });
     
     expect(scaleIngredients).toHaveBeenCalledWith(mockRecipe.ingredients, 4, 10);
+  });
+
+  it('should show re-import button when recipe has source URL', () => {
+    renderWithProviders(<RecipeDetail recipe={mockRecipe} />);
+
+    const reImportButton = screen.getByTestId('recipe-detail-reimport-button');
+    expect(reImportButton).toBeInTheDocument();
+    expect(reImportButton).toHaveTextContent('Re-import Recipe');
+  });
+
+  it('should not show re-import button when recipe has no source URL', () => {
+    const recipeWithoutSource = { ...mockRecipe, sourceUrl: '' };
+    renderWithProviders(<RecipeDetail recipe={recipeWithoutSource} />);
+
+    expect(screen.queryByTestId('recipe-detail-reimport-button')).not.toBeInTheDocument();
+  });
+
+  it('should handle re-import success', async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const mockInvoke = vi.mocked(invoke);
+    const { reImportRecipe } = await import('@services/recipeImport');
+    const mockReImportRecipe = vi.mocked(reImportRecipe);
+
+    mockReImportRecipe.mockResolvedValue('test-recipe-id');
+    mockInvoke.mockResolvedValue(mockRecipe);
+
+    const mockOnRecipeUpdated = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <RecipeDetail recipe={mockRecipe} onRecipeUpdated={mockOnRecipeUpdated} />
+    );
+
+    const reImportButton = screen.getByTestId('recipe-detail-reimport-button');
+    await user.click(reImportButton);
+
+    await waitFor(() => {
+      expect(mockReImportRecipe).toHaveBeenCalledWith('test-recipe-id', 'https://example.com/recipe');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-detail-reimport-success-snackbar')).toBeInTheDocument();
+    });
+
+    expect(mockOnRecipeUpdated).toHaveBeenCalledWith(mockRecipe);
+  });
+
+  it('should handle re-import error', async () => {
+    const { reImportRecipe } = await import('@services/recipeImport');
+    const mockReImportRecipe = vi.mocked(reImportRecipe);
+    mockReImportRecipe.mockRejectedValue(new Error('Failed to re-import'));
+
+    const user = userEvent.setup();
+
+    renderWithProviders(<RecipeDetail recipe={mockRecipe} />);
+
+    const reImportButton = screen.getByTestId('recipe-detail-reimport-button');
+    await user.click(reImportButton);
+
+    await waitFor(() => {
+      expect(mockReImportRecipe).toHaveBeenCalledWith('test-recipe-id', 'https://example.com/recipe');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-detail-reimport-error-snackbar')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Failed to re-import')).toBeInTheDocument();
   });
 });

@@ -75,9 +75,13 @@ const RecipeView: React.FC = () => {
     }
   };
 
+  const handleRecipeUpdated = (updatedRecipe: Recipe) => {
+    setRecipe(updatedRecipe);
+  };
+
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }} data-testid="recipeViewPage-loading-main">
         <CircularProgress />
       </Box>
     );
@@ -85,13 +89,14 @@ const RecipeView: React.FC = () => {
 
   if (error || !recipe) {
     return (
-      <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
-        <Alert severity="error">{error || 'Recipe not found'}</Alert>
+      <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }} data-testid="recipeViewPage-error-container">
+        <Alert severity="error" data-testid="recipeViewPage-alert-error">{error || 'Recipe not found'}</Alert>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={handleBack}
           sx={{ mt: 2 }}
+          data-testid="recipeViewPage-button-goBack"
         >
           Go Back
         </Button>
@@ -100,7 +105,7 @@ const RecipeView: React.FC = () => {
   }
 
   return (
-    <Box sx={{ py: 2 }}>
+    <Box sx={{ py: 2 }} data-testid="recipeViewPage-container-main">
       <Box sx={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -108,12 +113,12 @@ const RecipeView: React.FC = () => {
         mb: 3,
         flexWrap: { xs: 'wrap', sm: 'nowrap' },
         gap: 2
-      }}>
+      }} data-testid="recipeViewPage-container-actions">
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={handleBack}
-          data-testid="recipe-view-back-button"
+          data-testid="recipeViewPage-button-back"
         >
           Back
         </Button>
@@ -130,7 +135,7 @@ const RecipeView: React.FC = () => {
             onClick={handleStartCooking}
             size="large"
             aria-label="start cooking mode"
-            data-testid="recipe-view-start-cooking-button"
+            data-testid="recipeViewPage-button-startCooking"
           >
             Start Cooking
           </Button>
@@ -138,7 +143,7 @@ const RecipeView: React.FC = () => {
             variant="outlined"
             startIcon={<PrintIcon />}
             onClick={handlePrint}
-            data-testid="recipe-view-print-button"
+            data-testid="recipeViewPage-button-print"
           >
             Print
           </Button>
@@ -147,19 +152,19 @@ const RecipeView: React.FC = () => {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={() => setDeleteDialogOpen(true)}
-            data-testid="recipe-view-delete-button"
+            data-testid="recipeViewPage-button-delete"
           >
             Delete
           </Button>
         </Box>
       </Box>
 
-      <RecipeDetail recipe={recipe} />
+      <RecipeDetail recipe={recipe} onRecipeUpdated={handleRecipeUpdated} />
 
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
-        data-testid="recipe-view-delete-dialog"
+        data-testid="recipeViewPage-dialog-deleteConfirm"
       >
         <DialogTitle>Delete Recipe</DialogTitle>
         <DialogContent>
@@ -168,8 +173,8 @@ const RecipeView: React.FC = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} data-testid="recipe-view-delete-cancel">Cancel</Button>
-          <Button onClick={handleDelete} color="error" data-testid="recipe-view-delete-confirm">Delete</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)} data-testid="recipeViewPage-dialog-deleteConfirm-button-cancel">Cancel</Button>
+          <Button onClick={handleDelete} color="error" data-testid="recipeViewPage-dialog-deleteConfirm-button-confirm">Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>

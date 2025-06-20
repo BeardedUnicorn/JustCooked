@@ -31,6 +31,13 @@ pub struct BatchImportRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReImportRequest {
+    pub max_recipes: Option<u32>,
+    pub recipe_ids: Option<Vec<String>>, // Optional: specific recipes to re-import
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BatchImportProgress {
     pub status: BatchImportStatus,
     pub current_url: Option<String>,
@@ -76,6 +83,7 @@ pub enum BatchImportStatus {
     ExtractingRecipes,
     FilteringExisting,
     ImportingRecipes,
+    ReImportingRecipes, // New status for re-import operations
     Completed,
     Cancelled,
     Error,
@@ -86,6 +94,7 @@ pub struct CategoryInfo {
     pub url: String,
 }
 
+#[derive(Debug)]
 pub struct BatchImporter {
     progress: Arc<Mutex<BatchImportProgress>>,
     client: reqwest::Client,
@@ -791,6 +800,330 @@ impl BatchImporter {
     }
 
 
+
+    fn build_result(&self, start_time: Instant) -> BatchImportResult {
+        let progress = self.progress.lock().unwrap();
+        let imported_ids = self.imported_recipe_ids.lock().unwrap();
+        BatchImportResult {
+            success: matches!(progress.status, BatchImportStatus::Completed),
+            total_processed: progress.processed_recipes,
+            successful_imports: progress.successful_imports,
+            failed_imports: progress.failed_imports,
+            skipped_recipes: progress.skipped_recipes,
+            errors: progress.errors.clone(),
+            imported_recipe_ids: imported_ids.clone(),
+            duration: start_time.elapsed().as_secs() as u32,
+        }
+    }
+}
+
+// Re-import functionality for existing recipes
+#[derive(Debug)]
+pub struct ReImporter {
+    progress: Arc<Mutex<BatchImportProgress>>,
+    cancelled: Arc<Mutex<bool>>,
+    start_time: Arc<Mutex<Option<Instant>>>,
+    imported_recipe_ids: Arc<Mutex<Vec<String>>>,
+    rate_limiter: Arc<Semaphore>,
+}
+
+impl ReImporter {
+    pub fn new() -> Self {
+        let progress = BatchImportProgress {
+            status: BatchImportStatus::Idle,
+            current_url: None,
+            processed_recipes: 0,
+            total_recipes: 0,
+            processed_categories: 0,
+            total_categories: 0,
+            successful_imports: 0,
+            failed_imports: 0,
+            skipped_recipes: 0,
+            errors: Vec::new(),
+            start_time: chrono::Utc::now().to_rfc3339(),
+            estimated_time_remaining: None,
+        };
+
+        Self {
+            progress: Arc::new(Mutex::new(progress)),
+            cancelled: Arc::new(Mutex::new(false)),
+            start_time: Arc::new(Mutex::new(None)),
+            imported_recipe_ids: Arc::new(Mutex::new(Vec::new())),
+            rate_limiter: Arc::new(Semaphore::new(RECIPE_IMPORT_CONCURRENT_THREADS)),
+        }
+    }
+
+    pub fn get_progress(&self) -> BatchImportProgress {
+        self.progress.lock().unwrap().clone()
+    }
+
+    pub fn cancel(&self) {
+        *self.cancelled.lock().unwrap() = true;
+        let mut progress = self.progress.lock().unwrap();
+        progress.status = BatchImportStatus::Cancelled;
+    }
+
+    fn is_cancelled(&self) -> bool {
+        *self.cancelled.lock().unwrap()
+    }
+
+    fn update_status(&self, status: BatchImportStatus) {
+        let mut progress = self.progress.lock().unwrap();
+        progress.status = status;
+    }
+
+    fn add_error(&self, url: String, message: String, error_type: String) {
+        let mut progress = self.progress.lock().unwrap();
+        progress.errors.push(BatchImportError {
+            url,
+            message,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            error_type,
+        });
+    }
+
+    #[instrument(skip_all, fields(max_recipes = ?request.max_recipes))]
+    pub async fn start_re_import(&self, app: tauri::AppHandle, request: ReImportRequest) -> Result<BatchImportResult, String> {
+        let start_time = Instant::now();
+
+        info!("=== STARTING RE-IMPORT OF EXISTING RECIPES ===");
+        if let Some(max) = request.max_recipes {
+            info!("Max recipes limit set to: {}", max);
+        }
+
+        // Store start time
+        {
+            let mut start_time_guard = self.start_time.lock().unwrap();
+            *start_time_guard = Some(start_time);
+        }
+
+        self.update_status(BatchImportStatus::Starting);
+
+        if self.is_cancelled() {
+            return Ok(self.build_result(start_time));
+        }
+
+        // Step 1: Get all recipes with source URLs from database
+        info!("=== STEP 1: RETRIEVING EXISTING RECIPES ===");
+        let database = match crate::database::Database::new(&app).await {
+            Ok(db) => db,
+            Err(e) => {
+                error!("Failed to connect to database: {}", e);
+                self.add_error(
+                    "database".to_string(),
+                    format!("Failed to connect to database: {}", e),
+                    "DatabaseError".to_string(),
+                );
+                self.update_status(BatchImportStatus::Error);
+                return Ok(self.build_result(start_time));
+            }
+        };
+
+        let recipes_to_reimport = match database.get_recipes_with_source_urls().await {
+            Ok(recipes) => recipes,
+            Err(e) => {
+                error!("Failed to retrieve recipes with source URLs: {}", e);
+                self.add_error(
+                    "database".to_string(),
+                    format!("Failed to retrieve recipes: {}", e),
+                    "DatabaseError".to_string(),
+                );
+                self.update_status(BatchImportStatus::Error);
+                return Ok(self.build_result(start_time));
+            }
+        };
+
+        info!("Found {} recipes with source URLs for re-import", recipes_to_reimport.len());
+
+        if recipes_to_reimport.is_empty() {
+            info!("No recipes with source URLs found, completing re-import");
+            self.update_status(BatchImportStatus::Completed);
+            return Ok(self.build_result(start_time));
+        }
+
+        // Filter by specific recipe IDs if provided
+        let final_recipes = if let Some(recipe_ids) = &request.recipe_ids {
+            let recipe_id_set: std::collections::HashSet<&String> = recipe_ids.iter().collect();
+            recipes_to_reimport.into_iter()
+                .filter(|recipe| recipe_id_set.contains(&recipe.id))
+                .collect()
+        } else {
+            recipes_to_reimport
+        };
+
+        // Apply max_recipes limit if specified
+        let limited_recipes = if let Some(max) = request.max_recipes {
+            let original_count = final_recipes.len();
+            let limited = final_recipes.into_iter().take(max as usize).collect::<Vec<_>>();
+            info!("Applied max_recipes limit: {} recipes (limited from {})", limited.len(), original_count);
+            limited
+        } else {
+            final_recipes
+        };
+
+        // Update progress with total count
+        {
+            let mut progress = self.progress.lock().unwrap();
+            progress.total_recipes = limited_recipes.len() as u32;
+        }
+
+        if self.is_cancelled() {
+            return Ok(self.build_result(start_time));
+        }
+
+        // Step 2: Re-import recipes
+        info!("=== STEP 2: RE-IMPORTING RECIPES ===");
+        info!("Starting re-import of {} recipes", limited_recipes.len());
+        self.update_status(BatchImportStatus::ReImportingRecipes);
+
+        self.re_import_recipes(app, limited_recipes).await;
+
+        // Check if re-import was cancelled
+        if self.is_cancelled() {
+            info!("Re-import was cancelled during processing");
+            return Ok(self.build_result(start_time));
+        }
+
+        // Complete the re-import
+        info!("=== RE-IMPORT COMPLETED ===");
+        self.update_status(BatchImportStatus::Completed);
+
+        let result = self.build_result(start_time);
+        info!("Re-import finished: {} successful, {} failed, {} total processed",
+              result.successful_imports, result.failed_imports, result.total_processed);
+
+        Ok(result)
+    }
+
+    async fn re_import_recipes(&self, app: tauri::AppHandle, recipes: Vec<crate::database::Recipe>) {
+        if recipes.is_empty() {
+            info!("No recipes to re-import");
+            return;
+        }
+
+        info!("Starting concurrent re-import of {} recipes with {} threads",
+              recipes.len(), RECIPE_IMPORT_CONCURRENT_THREADS);
+
+        // Test database connection to ensure it's working
+        info!("Testing database connection...");
+        match crate::database::Database::new(&app).await {
+            Ok(_) => {
+                info!("Database connection test successful");
+            },
+            Err(e) => {
+                error!("Failed to test database connection: {}", e);
+                self.add_error(
+                    "database".to_string(),
+                    format!("Failed to test database connection: {}", e),
+                    "DatabaseError".to_string(),
+                );
+                return;
+            }
+        }
+
+        // Create a JoinSet to manage concurrent tasks
+        let mut join_set = JoinSet::new();
+
+        // Create a counter for processed recipes (thread-safe)
+        let processed_counter = Arc::new(Mutex::new(0u32));
+
+        // Process recipes concurrently with rate limiting
+        for recipe in recipes.into_iter() {
+            if self.is_cancelled() {
+                break;
+            }
+
+            // Clone necessary data for the task
+            let recipe_clone = recipe.clone();
+            let progress_clone = self.progress.clone();
+            let cancelled_clone = self.cancelled.clone();
+            let rate_limiter_clone = self.rate_limiter.clone();
+            let processed_counter_clone = processed_counter.clone();
+            let imported_ids_clone = self.imported_recipe_ids.clone();
+
+            // Spawn a concurrent task for this recipe
+            join_set.spawn(async move {
+                // Acquire semaphore permit for rate limiting
+                let _permit = rate_limiter_clone.acquire().await.unwrap();
+
+                // Check for cancellation before processing
+                if *cancelled_clone.lock().unwrap() {
+                    return;
+                }
+
+                // Update current URL BEFORE processing
+                {
+                    let mut progress = progress_clone.lock().unwrap();
+                    progress.current_url = Some(recipe_clone.source_url.clone());
+                }
+
+                // Add delay to respect rate limits (distributed across threads)
+                sleep(Duration::from_millis(1000)).await;
+
+                // Re-import the recipe using the existing import functionality
+                match crate::recipe_import::import_recipe_from_url(&recipe_clone.source_url).await {
+                    Ok(imported_recipe) => {
+                        info!("Successfully re-imported recipe: {} from {}", imported_recipe.name, recipe_clone.source_url);
+
+                        // Update progress counters
+                        {
+                            let mut progress = progress_clone.lock().unwrap();
+                            progress.successful_imports += 1;
+                            progress.processed_recipes += 1;
+                        }
+
+                        // Store the imported recipe ID
+                        {
+                            let mut imported_ids = imported_ids_clone.lock().unwrap();
+                            imported_ids.push(recipe_clone.id.clone());
+                        }
+                    },
+                    Err(e) => {
+                        error!("Failed to re-import recipe from {}: {}", recipe_clone.source_url, e);
+
+                        // Update progress counters
+                        {
+                            let mut progress = progress_clone.lock().unwrap();
+                            progress.failed_imports += 1;
+                            progress.processed_recipes += 1;
+                            progress.errors.push(BatchImportError {
+                                url: recipe_clone.source_url.clone(),
+                                message: e.to_string(),
+                                timestamp: chrono::Utc::now().to_rfc3339(),
+                                error_type: "ReImportError".to_string(),
+                            });
+                        }
+                    }
+                }
+
+                // Update processed counter
+                {
+                    let mut counter = processed_counter_clone.lock().unwrap();
+                    *counter += 1;
+                }
+            });
+
+            // Limit the number of concurrent tasks to prevent overwhelming the system
+            if join_set.len() >= RECIPE_IMPORT_CONCURRENT_THREADS {
+                // Wait for at least one task to complete before spawning more
+                if let Some(result) = join_set.join_next().await {
+                    if let Err(e) = result {
+                        error!("Re-import task failed: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Wait for all remaining tasks to complete
+        info!("Waiting for all re-import tasks to complete...");
+        while let Some(result) = join_set.join_next().await {
+            if let Err(e) = result {
+                error!("Re-import task failed: {}", e);
+            }
+        }
+
+        info!("All re-import tasks completed");
+    }
 
     fn build_result(&self, start_time: Instant) -> BatchImportResult {
         let progress = self.progress.lock().unwrap();

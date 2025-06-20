@@ -277,16 +277,22 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
 
             <CardContent sx={{ flexGrow: 1, pb: 1 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-              <Typography gutterBottom variant="h6" component="div" sx={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                lineHeight: 1.2,
-                flex: 1,
-                mr: 1,
-              }}>
+              <Typography
+                gutterBottom
+                variant="h6"
+                component="div"
+                data-testid={`recipeCard-text-title-${recipe.id}`}
+                sx={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  lineHeight: 1.2,
+                  flex: 1,
+                  mr: 1,
+                }}
+              >
                 {recipe.title}
               </Typography>
 
@@ -308,7 +314,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
 
             {/* Rating */}
             {recipe.rating && (
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }} data-testid={`recipeCard-rating-${recipe.id}`}>
                 <Rating
                   value={recipe.rating}
                   readOnly
@@ -322,28 +328,33 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
               </Box>
             )}
 
-            <Typography variant="body2" color="text.secondary" sx={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              mb: 2,
-              minHeight: '2.5em',
-            }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              data-testid={`recipeCard-text-description-${recipe.id}`}
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                mb: 2,
+                minHeight: '2.5em',
+              }}
+            >
               {recipe.description}
             </Typography>
 
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
               <AccessTimeIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" data-testid={`recipeCard-text-time-${recipe.id}`}>
                 {calculateTotalTime(recipe.prepTime, recipe.cookTime, recipe.totalTime) || 'Time not specified'}
               </Typography>
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <RestaurantIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" data-testid={`recipeCard-text-servings-${recipe.id}`}>
                 {recipe.servings} servings
               </Typography>
             </Box>
@@ -392,12 +403,13 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
         </Box>
 
         <CardActions sx={{ p: 1, pt: 0, justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flexGrow: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flexGrow: 1, minWidth: 0 }} data-testid={`recipeCard-container-tags-${recipe.id}`}>
             {recipe.tags.slice(0, 2).map(tag => (
               <Chip
                 key={tag}
                 label={tag}
                 size="small"
+                data-testid={`recipeCard-chip-tag-${recipe.id}-${tag}`}
                 sx={{ fontSize: '0.7rem' }}
               />
             ))}
@@ -406,6 +418,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
                 label={`+${recipe.tags.length - 2}`}
                 size="small"
                 variant="outlined"
+                data-testid={`recipeCard-chip-tag-${recipe.id}-more`}
                 sx={{ fontSize: '0.7rem' }}
               />
             )}

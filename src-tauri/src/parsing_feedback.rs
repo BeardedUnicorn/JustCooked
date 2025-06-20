@@ -15,6 +15,7 @@ pub enum ConfidenceLevel {
 
 impl ConfidenceLevel {
     /// Convert a confidence score to a confidence level
+    #[allow(dead_code)]
     pub fn from_score(score: f64) -> Self {
         if score > 0.8 {
             ConfidenceLevel::High

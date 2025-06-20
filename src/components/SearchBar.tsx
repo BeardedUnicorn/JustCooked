@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, TextField, InputAdornment, IconButton,
   Popover, List, ListItem, ListItemText, Typography
@@ -22,27 +22,47 @@ interface SearchBarProps {
 const SearchBar: React.FC<SearchBarProps> = ({ onSearch, onAdvancedSearch, placeholder = 'Search...', 'data-testid': testId }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchHistory, setSearchHistory] = useState<RecentSearch[]>([]);
-  const [anchorEl, setAnchorEl] = useState<HTMLDivElement | null>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // Load search history on component mount
+  // Load search history on component mount with error handling
   useEffect(() => {
+    let isMounted = true;
+
     const loadHistory = async () => {
+      if (isLoadingHistory) return; // Prevent multiple concurrent loads
+
+      setIsLoadingHistory(true);
       try {
         const history = await getRecentSearches(5);
-        setSearchHistory(history);
+        if (isMounted) {
+          setSearchHistory(history);
+        }
       } catch (error) {
         console.error('Failed to load search history:', error);
+        if (isMounted) {
+          setSearchHistory([]); // Set empty array on error
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingHistory(false);
+        }
       }
     };
+
     loadHistory();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     const trimmedTerm = searchTerm.trim();
     if (trimmedTerm) {
       onSearch(trimmedTerm);
 
-      // Save to search history
+      // Save to search history asynchronously without blocking UI
       try {
         await saveSearch(trimmedTerm);
         // Reload search history to get updated list
@@ -50,36 +70,40 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, onAdvancedSearch, place
         setSearchHistory(updatedHistory);
       } catch (error) {
         console.error('Failed to save search to history:', error);
+        // Don't block the search if history save fails
       }
     }
-  };
+  }, [searchTerm, onSearch]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
     }
-  };
+  }, [handleSearch]);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setSearchTerm('');
     onSearch('');
-  };
+  }, [onSearch]);
 
-  const handleFocus = (event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (searchHistory.length > 0) {
-      setAnchorEl(event.currentTarget as HTMLDivElement);
+  const handleFocus = useCallback((event: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (searchHistory && searchHistory.length > 0 && !isLoadingHistory) {
+      setAnchorEl(event.currentTarget);
     }
-  };
+  }, [searchHistory, isLoadingHistory]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setAnchorEl(null);
-  };
+  }, []);
 
-  const handleHistoryItemClick = (search: RecentSearch) => {
+  const handleHistoryItemClick = useCallback((search: RecentSearch) => {
     setSearchTerm(search.query);
     onSearch(search.query);
-    handleClose();
-  };
+    // Use setTimeout to ensure the popover closes after the current event loop
+    setTimeout(() => {
+      setAnchorEl(null);
+    }, 0);
+  }, [onSearch]);
 
   const open = Boolean(anchorEl);
 
@@ -147,12 +171,20 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, onAdvancedSearch, place
               Recent Searches
             </Typography>
           </ListItem>
-          {searchHistory.map((search, index) => (
+          {searchHistory && searchHistory.map((search, index) => (
             <ListItem
               key={search.id}
+              component="button"
               onClick={() => handleHistoryItemClick(search)}
               data-testid={`search-history-item-${index}`}
-              sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
+              sx={{
+                cursor: 'pointer',
+                '&:hover': { backgroundColor: 'action.hover' },
+                border: 'none',
+                background: 'transparent',
+                width: '100%',
+                textAlign: 'left'
+              }}
             >
               <ListItemText
                 primary={search.query}

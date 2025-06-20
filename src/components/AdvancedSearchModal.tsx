@@ -75,12 +75,12 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
   ];
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
-      data-testid="advanced-search-modal"
+      data-testid="advancedSearchModal-dialog-main"
     >
       <DialogTitle>Advanced Search</DialogTitle>
       <DialogContent>
@@ -98,11 +98,16 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   renderValue={(selected) => (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {(selected as string[]).map((value) => (
-                        <Chip key={value} label={value} size="small" />
+                        <Chip
+                          key={value}
+                          label={value}
+                          size="small"
+                          data-testid={`advancedSearchModal-chip-difficulty-${value.toLowerCase()}`}
+                        />
                       ))}
                     </Box>
                   )}
-                  data-testid="advanced-search-difficulty"
+                  data-testid="advancedSearchModal-select-difficulty"
                 >
                   {difficultyOptions.map((option) => (
                     <MenuItem key={option} value={option}>
@@ -128,6 +133,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                       size="small"
                       {...getTagProps({ index })}
                       key={option}
+                      data-testid={`advancedSearchModal-chip-tag-${option}`}
                     />
                   ))
                 }
@@ -136,7 +142,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                     {...params}
                     label="Tags"
                     placeholder="Select tags..."
-                    data-testid="advanced-search-tags"
+                    data-testid="advancedSearchModal-autocomplete-tagsInput"
                   />
                 )}
               />
@@ -150,7 +156,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   value={filters.prepTime || ''}
                   onChange={(e) => handleFilterChange('prepTime', e.target.value)}
                   label="Prep Time"
-                  data-testid="advanced-search-prep-time"
+                  data-testid="advancedSearchModal-select-prepTime"
                 >
                   <MenuItem value="">Any</MenuItem>
                   {timeOptions.map((option) => (
@@ -170,7 +176,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   value={filters.cookTime || ''}
                   onChange={(e) => handleFilterChange('cookTime', e.target.value)}
                   label="Cook Time"
-                  data-testid="advanced-search-cook-time"
+                  data-testid="advancedSearchModal-select-cookTime"
                 >
                   <MenuItem value="">Any</MenuItem>
                   {timeOptions.map((option) => (
@@ -190,7 +196,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   value={filters.totalTime || ''}
                   onChange={(e) => handleFilterChange('totalTime', e.target.value)}
                   label="Total Time"
-                  data-testid="advanced-search-total-time"
+                  data-testid="advancedSearchModal-select-totalTime"
                 >
                   <MenuItem value="">Any</MenuItem>
                   {timeOptions.map((option) => (
@@ -216,7 +222,7 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   { value: 6, label: '6' },
                   { value: 12, label: '12+' },
                 ]}
-                data-testid="advanced-search-servings"
+                data-testid="advancedSearchModal-slider-servings"
               />
             </Grid>
 
@@ -235,23 +241,23 @@ const AdvancedSearchModal: React.FC<AdvancedSearchModalProps> = ({
                   { value: 2.5, label: '2.5' },
                   { value: 5, label: '5' },
                 ]}
-                data-testid="advanced-search-rating"
+                data-testid="advancedSearchModal-slider-rating"
               />
             </Grid>
           </Grid>
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleReset} data-testid="advanced-search-reset-button">
+        <Button onClick={handleReset} data-testid="advancedSearchModal-button-reset">
           Reset
         </Button>
-        <Button onClick={onClose} data-testid="advanced-search-cancel-button">
+        <Button onClick={onClose} data-testid="advancedSearchModal-button-cancel">
           Cancel
         </Button>
-        <Button 
-          onClick={handleSearch} 
-          variant="contained" 
-          data-testid="advanced-search-apply-button"
+        <Button
+          onClick={handleSearch}
+          variant="contained"
+          data-testid="advancedSearchModal-button-apply"
         >
           Apply Filters
         </Button>

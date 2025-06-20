@@ -97,7 +97,7 @@ const Dashboard: React.FC = () => {
 
   if (loading || recipesLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px" data-testid="dashboardPage-loading-main">
         <CircularProgress />
       </Box>
     );
@@ -105,12 +105,12 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
-      <Typography variant="h4" component="h1" gutterBottom data-testid="dashboard-title">
+      <Typography variant="h4" component="h1" gutterBottom data-testid="dashboardPage-title-main">
         Dashboard
       </Typography>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)} data-testid="dashboardPage-alert-error">
           {error}
         </Alert>
       )}
@@ -118,7 +118,7 @@ const Dashboard: React.FC = () => {
       <Grid container spacing={3}>
         {/* What's for Dinner? Widget */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%' }} data-testid="dashboardPage-widget-dinner">
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                 <RestaurantIcon sx={{ mr: 1 }} />
@@ -138,7 +138,7 @@ const Dashboard: React.FC = () => {
                       <Button
                         variant="contained"
                         onClick={() => navigate(`/recipe/${dinnerRecipe.recipeId}`)}
-                        data-testid="dashboard-dinner-recipe-button"
+                        data-testid="dashboardPage-widget-dinner-button-viewRecipe"
                       >
                         View Recipe
                       </Button>
@@ -153,7 +153,7 @@ const Dashboard: React.FC = () => {
                       <Button
                         variant="contained"
                         onClick={() => navigate('/cookbook?q=dinner')}
-                        data-testid="dashboard-find-dinner-recipe-button"
+                        data-testid="dashboardPage-widget-dinner-button-findRecipe"
                       >
                         Find a Recipe
                       </Button>
@@ -167,7 +167,7 @@ const Dashboard: React.FC = () => {
 
         {/* Quick Actions Widget */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%' }} data-testid="dashboardPage-widget-quickActions">
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                 <AddIcon sx={{ mr: 1 }} />
@@ -185,7 +185,7 @@ const Dashboard: React.FC = () => {
                     },
                   }}
                   onClick={() => navigate('/cookbook')}
-                  data-testid="dashboard-import-recipe-card"
+                  data-testid="dashboardPage-widget-quickActions-card-importRecipe"
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <ImportIcon sx={{ mr: 2, fontSize: '2rem', color: 'primary.main' }} />
@@ -208,7 +208,7 @@ const Dashboard: React.FC = () => {
                     },
                   }}
                   onClick={() => navigate('/pantry')}
-                  data-testid="dashboard-add-to-pantry-card"
+                  data-testid="dashboardPage-widget-quickActions-card-addToPantry"
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <KitchenIcon sx={{ mr: 2, fontSize: '2rem', color: 'secondary.main' }} />
@@ -231,7 +231,7 @@ const Dashboard: React.FC = () => {
                     },
                   }}
                   onClick={() => navigate('/planner')}
-                  data-testid="dashboard-meal-planning-card"
+                  data-testid="dashboardPage-widget-quickActions-card-mealPlanning"
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <EventNoteIcon sx={{ mr: 2, fontSize: '2rem', color: 'success.main' }} />
@@ -250,16 +250,16 @@ const Dashboard: React.FC = () => {
 
         {/* Today's Plan Widget */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%' }} data-testid="dashboardPage-widget-todaysPlan">
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                 <CalendarIcon sx={{ mr: 1 }} />
                 Today's Plan
               </Typography>
               {todaysMealPlanRecipes.length > 0 ? (
-                <List dense>
+                <List dense data-testid="dashboardPage-widget-todaysPlan-list-meals">
                   {todaysMealPlanRecipes.slice(0, 4).map((mealRecipe, index) => (
-                    <ListItem key={index} sx={{ px: 0 }}>
+                    <ListItem key={index} sx={{ px: 0 }} data-testid={`dashboardPage-widget-todaysPlan-listItem-${index}`}>
                       <ListItemIcon>
                         <RestaurantIcon fontSize="small" />
                       </ListItemIcon>
@@ -271,7 +271,7 @@ const Dashboard: React.FC = () => {
                   ))}
                 </List>
               ) : (
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" data-testid="dashboardPage-widget-todaysPlan-text-noMeals">
                   No meals planned for today
                 </Typography>
               )}
@@ -279,7 +279,7 @@ const Dashboard: React.FC = () => {
                 variant="text"
                 onClick={() => navigate('/planner')}
                 sx={{ mt: 1 }}
-                data-testid="dashboard-view-meal-plan-button"
+                data-testid="dashboardPage-widget-todaysPlan-button-viewFullPlan"
               >
                 View Full Plan
               </Button>
@@ -289,16 +289,16 @@ const Dashboard: React.FC = () => {
 
         {/* Pantry At-a-Glance Widget */}
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%' }} data-testid="dashboardPage-widget-pantry">
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
                 <WarningIcon sx={{ mr: 1 }} />
                 Pantry At-a-Glance
               </Typography>
               {expiringItems.length > 0 ? (
-                <List dense>
+                <List dense data-testid="dashboardPage-widget-pantry-list-expiringItems">
                   {expiringItems.slice(0, 4).map((item, index) => (
-                    <ListItem key={index} sx={{ px: 0 }}>
+                    <ListItem key={index} sx={{ px: 0 }} data-testid={`dashboardPage-widget-pantry-listItem-expiring-${index}`}>
                       <ListItemText
                         primary={item.name}
                         secondary={`Expires ${new Date(item.expiryDate!).toLocaleDateString()}`}
@@ -312,20 +312,20 @@ const Dashboard: React.FC = () => {
                     </ListItem>
                   ))}
                   {expiringItems.length > 4 && (
-                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }} data-testid="dashboardPage-widget-pantry-text-moreExpiringItems">
                       +{expiringItems.length - 4} more items expiring soon
                     </Typography>
                   )}
                 </List>
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }} data-testid="dashboardPage-widget-pantry-text-noExpiringItems">
                   No items expiring soon
                 </Typography>
               )}
               <Button
                 size="small"
                 onClick={() => navigate('/pantry')}
-                data-testid="dashboard-view-pantry-button"
+                data-testid="dashboardPage-widget-pantry-button-viewPantry"
               >
                 View Pantry
               </Button>
@@ -335,19 +335,19 @@ const Dashboard: React.FC = () => {
 
         {/* Recently Added Recipes Widget */}
         <Grid size={{ xs: 12 }}>
-          <Card>
+          <Card data-testid="dashboardPage-widget-recentRecipes">
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
                   Recently Added Recipes
                 </Typography>
-                <Button onClick={() => navigate('/cookbook')} data-testid="dashboard-view-all-recipes-button">
+                <Button onClick={() => navigate('/cookbook')} data-testid="dashboardPage-widget-recentRecipes-button-viewAll">
                   View All
                 </Button>
               </Box>
               <Divider sx={{ mb: 2 }} />
               {recentRecipes.length > 0 ? (
-                <Grid container spacing={2}>
+                <Grid container spacing={2} data-testid="dashboardPage-widget-recentRecipes-grid-recipes">
                   {recentRecipes.map(recipe => (
                     <Grid size={{ xs: 12, sm: 6, md: 3 }} key={recipe.id}>
                       <RecipeCard
@@ -359,7 +359,7 @@ const Dashboard: React.FC = () => {
                   ))}
                 </Grid>
               ) : (
-                <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Box sx={{ textAlign: 'center', py: 4 }} data-testid="dashboardPage-widget-recentRecipes-emptyState">
                   <KitchenIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
                   <Typography variant="h6" color="text.secondary" gutterBottom>
                     No recipes yet!
@@ -371,7 +371,7 @@ const Dashboard: React.FC = () => {
                     variant="contained"
                     startIcon={<ImportIcon />}
                     onClick={() => navigate('/cookbook')}
-                    data-testid="dashboard-import-first-recipe-button"
+                    data-testid="dashboardPage-widget-recentRecipes-button-importFirst"
                   >
                     Import Recipe
                   </Button>

@@ -259,7 +259,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
       {Object.entries(groupedItems).length > 0 ? (
         Object.entries(groupedItems).map(([category, categoryItems]) => (
           <Paper key={category} sx={{ mb: 3, overflow: 'hidden' }}>
-            <Box sx={{ px: 2, py: 1, bgcolor: 'background.default' }}>
+            <Box sx={{ px: 2, py: 1, bgcolor: 'background.default' }} data-testid={`pantryManager-header-category-${category.toLowerCase()}`}>
               <Typography variant="h6" component="h3">
                 {category}
               </Typography>
@@ -332,7 +332,7 @@ const PantryManager: React.FC<PantryManagerProps> = ({
           </Paper>
         ))
       ) : (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
+        <Paper sx={{ p: 3, textAlign: 'center' }} data-testid="pantryManager-emptyState-container">
           <Typography variant="body1" color="text.secondary">
             Your pantry is empty. Add some items to get started!
           </Typography>

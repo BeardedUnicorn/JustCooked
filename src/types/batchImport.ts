@@ -59,6 +59,7 @@ export enum BatchImportStatus {
   EXTRACTING_RECIPES = 'extractingRecipes',
   FILTERING_EXISTING = 'filteringExisting',
   IMPORTING_RECIPES = 'importingRecipes',
+  RE_IMPORTING_RECIPES = 'reImportingRecipes',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
   ERROR = 'error',

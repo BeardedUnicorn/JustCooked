@@ -4,7 +4,12 @@ use scraper::{Html, Selector};
 
 #[tokio::main]
 async fn main() {
-    let url = "https://www.allrecipes.com/recipe/8486405/chocolate-candy-corn-pretzel-bites/";
+    let args: Vec<String> = std::env::args().collect();
+    let url = if args.len() > 1 {
+        &args[1]
+    } else {
+        "https://www.allrecipes.com/recipe/112157/tuna-garden-casserole/"
+    };
 
     println!("Testing recipe import from: {}", url);
     println!("{}", "=".repeat(60));
