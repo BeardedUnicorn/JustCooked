@@ -89,6 +89,9 @@ mod tests {
         // Invalid URLs
         assert!(!importer.is_valid_category_url("https://www.allrecipes.com/recipe/123/individual-recipe"));
         assert!(!importer.is_valid_category_url("https://example.com/recipes"));
+        assert!(!importer.is_valid_category_url("https://allrecipes.com.evil.test/recipes/79/desserts"));
+        assert!(!importer.is_valid_category_url("https://evil-allrecipes.com/recipes/79/desserts"));
+        assert!(!importer.is_valid_category_url("https://seriouseats.com.evil.test/all-recipes-5117985"));
         assert!(!importer.is_valid_category_url("invalid-url"));
     }
 
@@ -107,6 +110,8 @@ mod tests {
 
         // Invalid URLs - not a supported site
         assert!(!is_valid_recipe_url_standalone("https://example.com/recipe/123/test"));
+        assert!(!is_valid_recipe_url_standalone("https://allrecipes.com.evil.test/recipe/123/test"));
+        assert!(!is_valid_recipe_url_standalone("https://evil-allrecipes.com/recipe/123/test"));
         assert!(!is_valid_recipe_url_standalone("invalid-url"));
 
         // Invalid AllRecipes URLs - not a recipe path
@@ -315,6 +320,36 @@ mod tests {
 
         // Test URL validation
         assert!(importer.is_valid_category_url(&request.start_url));
+    }
+
+    #[test]
+    fn test_apply_max_depth_limit_zero_keeps_only_start_url() {
+        let importer = BatchImporter::new();
+        let start_url = "https://www.allrecipes.com/recipes/79/desserts";
+        let categories = vec![
+            CategoryInfo { url: start_url.to_string() },
+            CategoryInfo { url: "https://www.allrecipes.com/recipes/80/main-dish".to_string() },
+            CategoryInfo { url: "https://www.allrecipes.com/recipes/81/side-dish".to_string() },
+        ];
+
+        let limited = importer.apply_max_depth_limit(categories, Some(0), start_url);
+
+        assert_eq!(limited.len(), 1);
+        assert_eq!(limited[0].url, start_url);
+    }
+
+    #[test]
+    fn test_apply_max_depth_limit_none_keeps_all_categories() {
+        let importer = BatchImporter::new();
+        let start_url = "https://www.allrecipes.com/recipes/79/desserts";
+        let categories = vec![
+            CategoryInfo { url: start_url.to_string() },
+            CategoryInfo { url: "https://www.allrecipes.com/recipes/80/main-dish".to_string() },
+        ];
+
+        let limited = importer.apply_max_depth_limit(categories.clone(), None, start_url);
+
+        assert_eq!(limited.len(), categories.len());
     }
 
     #[test]

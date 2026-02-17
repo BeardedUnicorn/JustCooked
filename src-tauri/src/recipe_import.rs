@@ -116,19 +116,24 @@ pub async fn import_recipe_from_url(url: &str) -> Result<ImportedRecipe, RecipeI
     result
 }
 
+fn host_matches_domain(host: &str, domain: &str) -> bool {
+    host == domain || host.ends_with(&format!(".{}", domain))
+}
+
 pub fn is_supported_url(url: &Url) -> bool {
     if let Some(host) = url.host_str() {
-        host.contains("allrecipes.com") ||
-        host.contains("foodnetwork.com") ||
-        host.contains("bbcgoodfood.com") ||
-        host.contains("seriouseats.com") ||
-        host.contains("epicurious.com") ||
-        host.contains("food.com") ||
-        host.contains("tasteofhome.com") ||
-        host.contains("delish.com") ||
-        host.contains("bonappetit.com") ||
-        host.contains("simplyrecipes.com") ||
-        host.contains("americastestkitchen.com")
+        let host = host.to_ascii_lowercase();
+        host_matches_domain(&host, "allrecipes.com") ||
+        host_matches_domain(&host, "foodnetwork.com") ||
+        host_matches_domain(&host, "bbcgoodfood.com") ||
+        host_matches_domain(&host, "seriouseats.com") ||
+        host_matches_domain(&host, "epicurious.com") ||
+        host_matches_domain(&host, "food.com") ||
+        host_matches_domain(&host, "tasteofhome.com") ||
+        host_matches_domain(&host, "delish.com") ||
+        host_matches_domain(&host, "bonappetit.com") ||
+        host_matches_domain(&host, "simplyrecipes.com") ||
+        host_matches_domain(&host, "americastestkitchen.com")
     } else {
         false
     }
@@ -320,37 +325,39 @@ pub fn extract_from_html_selectors(document: &Html, source_url: &str) -> Result<
 }
 
 pub fn get_site_selectors(host: &str) -> (String, String, String) {
-    if host.contains("allrecipes.com") {
+    let host = host.to_ascii_lowercase();
+
+    if host_matches_domain(&host, "allrecipes.com") {
         (
             "h1.headline, h1.recipe-summary__h1, h1.entry-title, title".to_string(),
             "meta[name='description'], .recipe-summary__description".to_string(),
             "meta[property='og:image'], .recipe-hero__image img, .recipe-image img".to_string(),
         )
-    } else if host.contains("foodnetwork.com") {
+    } else if host_matches_domain(&host, "foodnetwork.com") {
         (
             "h1.o-AssetTitle__a-HeadlineText, h1.recipe-title, title".to_string(),
             "meta[name='description'], .o-RecipeInfo__a-Description".to_string(),
             "meta[property='og:image'], .m-MediaBlock__a-Image img".to_string(),
         )
-    } else if host.contains("bbcgoodfood.com") {
+    } else if host_matches_domain(&host, "bbcgoodfood.com") {
         (
             "h1.post-header__title, h1.recipe-header__title, title".to_string(),
             "meta[name='description'], .recipe-header__description".to_string(),
             "meta[property='og:image'], .recipe-media__image img".to_string(),
         )
-    } else if host.contains("seriouseats.com") {
+    } else if host_matches_domain(&host, "seriouseats.com") {
         (
             "h1.heading__title, h1.recipe-title, title".to_string(),
             "meta[name='description'], .recipe-about".to_string(),
             "meta[property='og:image'], .recipe-hero-image img".to_string(),
         )
-    } else if host.contains("epicurious.com") {
+    } else if host_matches_domain(&host, "epicurious.com") {
         (
             "h1.recipe-title, h1.hed, title".to_string(),
             "meta[name='description'], .recipe-intro".to_string(),
             "meta[property='og:image'], .recipe-image img".to_string(),
         )
-    } else if host.contains("americastestkitchen.com") {
+    } else if host_matches_domain(&host, "americastestkitchen.com") {
         (
             "h1.BaseRecipeInfo__title, h1[class*='RecipeInfo__title'], h1[class*='recipe-title'], h1, title".to_string(),
             "meta[name='description'], meta[property='og:description'], [class*='recipe-description'], [class*='RecipeDescription']".to_string(),
@@ -589,9 +596,10 @@ pub fn extract_core_ingredient_name(name: &str) -> String {
 // Extract ingredients with section information from HTML
 pub fn extract_sectioned_ingredients_from_html(document: &Html, host: &str) -> Vec<String> {
     let mut ingredients = Vec::new();
+    let normalized_host = host.to_ascii_lowercase();
 
     // Check if this is AllRecipes and try to extract sectioned ingredients
-    if host.contains("allrecipes.com") {
+    if host_matches_domain(&normalized_host, "allrecipes.com") {
         if let Ok(section_selector) = Selector::parse(".mm-recipes-structured-ingredients__list-heading") {
             if let Ok(list_selector) = Selector::parse(".mm-recipes-structured-ingredients__list") {
                 let sections = document.select(&section_selector).collect::<Vec<_>>();

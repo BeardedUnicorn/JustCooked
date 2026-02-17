@@ -34,6 +34,9 @@ mod tests {
             "https://www.example.com/recipe",
             "https://www.youtube.com/watch?v=123",
             "https://www.reddit.com/r/recipes",
+            "https://allrecipes.com.evil.test/recipe/123/test",
+            "https://evil-allrecipes.com/recipe/123/test",
+            "https://seriouseats.com.attacker.net/test-recipe",
         ];
 
         for url_str in unsupported_urls {

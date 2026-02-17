@@ -34,7 +34,7 @@ export class BatchImportService {
 
       // Validate URL
       if (!this.isValidBatchImportUrl(startUrl)) {
-        const error = new Error("Invalid URL. Please provide a valid AllRecipes or America's Test Kitchen category URL.");
+        const error = new Error("Invalid URL. Please provide a valid AllRecipes, America's Test Kitchen, Serious Eats, or Bon Appétit category URL.");
         await logger.error('Invalid URL provided for batch import', { startUrl });
         throw error;
       }
@@ -224,18 +224,31 @@ export class BatchImportService {
       const pathname = urlObj.pathname.toLowerCase();
 
       const isAllRecipes =
-        hostname.includes('allrecipes.com') &&
+        this.matchesDomain(hostname, 'allrecipes.com') &&
         pathname.includes('/recipes/') &&
         !pathname.includes('/recipe/'); // Exclude individual recipes
 
       const isATK =
-        hostname.includes('americastestkitchen.com') &&
-        pathname.includes('/recipes/');
+        this.matchesDomain(hostname, 'americastestkitchen.com') &&
+        pathname.includes('/recipes/') &&
+        !/\/recipes\/\d+-[a-z]/.test(pathname); // Exclude individual recipes
 
-      return isAllRecipes || isATK;
+      const isSeriousEats =
+        this.matchesDomain(hostname, 'seriouseats.com') &&
+        /^\/all-recipes-\d+\/?$/.test(pathname);
+
+      const isBonAppetit =
+        this.matchesDomain(hostname, 'bonappetit.com') &&
+        (pathname === '/recipes' || pathname === '/recipes/');
+
+      return isAllRecipes || isATK || isSeriousEats || isBonAppetit;
     } catch {
       return false;
     }
+  }
+
+  private matchesDomain(hostname: string, domain: string): boolean {
+    return hostname === domain || hostname.endsWith(`.${domain}`);
   }
 
   /**

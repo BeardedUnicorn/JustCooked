@@ -165,12 +165,21 @@ export class ReImportService {
           this.onProgressCallback(progress);
 
           // Stop monitoring if completed or failed
-          if (progress.status === 'completed' || progress.status === 'error' || progress.status === 'cancelled') {
+          const normalizedStatus = this.normalizeStatus(progress.status);
+          if (normalizedStatus === 'completed' || normalizedStatus === 'error' || normalizedStatus === 'cancelled') {
             this.stopProgressMonitoring();
           }
         }
       }
     }, 1000); // Update every second
+  }
+
+  private normalizeStatus(status: string): string {
+    if (!status) {
+      return '';
+    }
+
+    return status.charAt(0).toLowerCase() + status.slice(1);
   }
 
   /**

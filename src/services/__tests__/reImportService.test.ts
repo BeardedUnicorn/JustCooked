@@ -217,6 +217,49 @@ describe('ReImportService', () => {
     });
   });
 
+  describe('Progress Monitoring', () => {
+    it('should stop monitoring on PascalCase terminal status from backend', async () => {
+      vi.useFakeTimers();
+      try {
+        const onProgress = vi.fn();
+        const terminalProgress: ReImportProgress = {
+          status: 'Completed' as any,
+          processedRecipes: 10,
+          totalRecipes: 10,
+          processedCategories: 0,
+          totalCategories: 0,
+          successfulImports: 10,
+          failedImports: 0,
+          skippedRecipes: 0,
+          errors: [],
+          startTime: '2023-01-01T00:00:00Z',
+          estimatedTimeRemaining: 0,
+        };
+
+        mockInvoke
+          .mockResolvedValueOnce('test-import-id') // start_re_import
+          .mockResolvedValue(terminalProgress); // get_re_import_progress (polling)
+
+        await service.startReImport({ onProgress });
+
+        await vi.advanceTimersByTimeAsync(1000);
+        const callsAfterFirstTick = mockInvoke.mock.calls.filter(
+          ([command]) => command === 'get_re_import_progress'
+        ).length;
+        expect(callsAfterFirstTick).toBe(1);
+
+        await vi.advanceTimersByTimeAsync(3000);
+        const callsAfterMoreTicks = mockInvoke.mock.calls.filter(
+          ([command]) => command === 'get_re_import_progress'
+        ).length;
+
+        expect(callsAfterMoreTicks).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('getTaskDescription', () => {
     it('should generate description for all recipes re-import', () => {
       const request: ReImportRequest = {};

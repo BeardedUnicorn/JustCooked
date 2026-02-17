@@ -35,7 +35,15 @@ export interface BatchImportError {
   url: string;
   message: string;
   timestamp: string;
-  errorType: 'NetworkError' | 'ParseError' | 'ValidationError' | 'ImportError';
+  errorType:
+    | 'NetworkError'
+    | 'ParseError'
+    | 'ValidationError'
+    | 'ImportError'
+    | 'DatabaseError'
+    | 'ReImportError'
+    | 'UnsupportedSite'
+    | string;
 }
 
 export interface CategoryInfo {

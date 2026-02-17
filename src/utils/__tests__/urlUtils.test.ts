@@ -29,6 +29,14 @@ describe('urlUtils', () => {
       expect(isSupportedUrl('https://unsupported-recipe-site.com')).toBe(false);
     });
 
+    test('should reject lookalike hostnames that only contain supported domain strings', () => {
+      expect(isSupportedUrl('https://allrecipes.com.evil.test/recipe/123')).toBe(false);
+      expect(isSupportedUrl('https://evil-allrecipes.com/recipe/123')).toBe(false);
+      expect(isSupportedUrl('https://notseriouseats.com/recipe')).toBe(false);
+      expect(isSupportedUrl('https://seriouseats.com.evil.test/recipe')).toBe(false);
+      expect(isSupportedUrl('https://bonappetit.com.attacker.net/recipe')).toBe(false);
+    });
+
     test('should handle invalid URLs', () => {
       expect(isSupportedUrl('not-a-url')).toBe(false);
       expect(isSupportedUrl('')).toBe(false);

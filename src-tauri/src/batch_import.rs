@@ -21,6 +21,10 @@ use tracing::{debug, info, error, warn, instrument};
 const RECIPE_IMPORT_CONCURRENT_THREADS: usize = 5; // Concurrent threads for recipe imports
 const CATEGORY_SCRAPING_CONCURRENT_THREADS: usize = 3; // Concurrent threads for category scraping
 
+fn host_matches_domain(host: &str, domain: &str) -> bool {
+    host == domain || host.ends_with(&format!(".{}", domain))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchImportRequest {
@@ -77,6 +81,7 @@ pub struct BatchImportError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub enum BatchImportStatus {
     Idle,
     Starting,
@@ -251,11 +256,11 @@ impl BatchImporter {
             Err(_) => return Err("Invalid start URL".to_string()),
         };
 
-        let host = start_url.host_str().unwrap_or("");
-        let is_supported_batch_site = host.contains("allrecipes.com")
-            || host.contains("americastestkitchen.com")
-            || host.contains("seriouseats.com")
-            || host.contains("bonappetit.com");
+        let host = start_url.host_str().unwrap_or("").to_ascii_lowercase();
+        let is_supported_batch_site = host_matches_domain(&host, "allrecipes.com")
+            || host_matches_domain(&host, "americastestkitchen.com")
+            || host_matches_domain(&host, "seriouseats.com")
+            || host_matches_domain(&host, "bonappetit.com");
         if !is_supported_batch_site {
             return Err("Only AllRecipes.com, America's Test Kitchen, Serious Eats, and Bon Appétit URLs are supported for batch import".to_string());
         }
@@ -274,6 +279,16 @@ impl BatchImporter {
                 return Err(format!("Failed to crawl categories: {}", e));
             }
         };
+        let categories = self.apply_max_depth_limit(categories, request.max_depth, &request.start_url);
+        {
+            let mut progress = self.progress.lock().unwrap();
+            progress.total_categories = categories.len() as u32;
+        }
+        info!(
+            "Category count after max_depth {:?} filter: {}",
+            request.max_depth,
+            categories.len()
+        );
 
         if self.is_cancelled() {
             return Ok(self.build_result(start_time));
@@ -434,6 +449,33 @@ impl BatchImporter {
         }
     }
 
+    fn apply_max_depth_limit(
+        &self,
+        categories: Vec<CategoryInfo>,
+        max_depth: Option<u32>,
+        start_url: &str,
+    ) -> Vec<CategoryInfo> {
+        match max_depth {
+            // Current crawler only discovers one level of categories from `start_url`.
+            // `max_depth = 0` means "only the starting category".
+            Some(0) => {
+                let mut start_only: Vec<CategoryInfo> = categories
+                    .into_iter()
+                    .filter(|category| category.url == start_url)
+                    .collect();
+
+                if start_only.is_empty() {
+                    start_only.push(CategoryInfo {
+                        url: start_url.to_string(),
+                    });
+                }
+
+                start_only
+            }
+            _ => categories,
+        }
+    }
+
     fn resolve_url(&self, base: &str, href: &str) -> Result<String, String> {
         let base_url = Url::parse(base).map_err(|_| "Invalid base URL")?;
         let resolved = base_url.join(href).map_err(|_| "Failed to resolve URL")?;
@@ -443,14 +485,15 @@ impl BatchImporter {
     fn is_valid_category_url(&self, url: &str) -> bool {
         if let Ok(parsed) = Url::parse(url) {
             if let Some(host) = parsed.host_str() {
+                let host = host.to_ascii_lowercase();
                 let path = parsed.path();
 
-                if host.contains("allrecipes.com") {
+                if host_matches_domain(&host, "allrecipes.com") {
                     return path.contains("/recipes/") &&
                            !path.contains("/recipe/"); // Exclude individual recipes
                 }
 
-                if host.contains("americastestkitchen.com") {
+                if host_matches_domain(&host, "americastestkitchen.com") {
                     // Must contain /recipes/ but must not be an individual recipe
                     // ATK individual recipes match /recipes/{numeric_id}-{slug}
                     if !path.contains("/recipes/") {
@@ -460,14 +503,14 @@ impl BatchImporter {
                     return !atk_recipe_pattern.is_match(path);
                 }
 
-                if host.contains("seriouseats.com") {
+                if host_matches_domain(&host, "seriouseats.com") {
                     // Serious Eats uses a single listing page as the entry point
                     // (e.g. /all-recipes-5117985). No sub-category crawling is needed —
                     // pagination is handled inside extract_seriouseats_recipe_urls_with_pagination.
                     return false;
                 }
 
-                if host.contains("bonappetit.com") {
+                if host_matches_domain(&host, "bonappetit.com") {
                     // Bon Appétit uses a single listing page (/recipes) as the entry point.
                     // No sub-category crawling needed — pagination is handled inside
                     // extract_bonappetit_recipe_urls_with_pagination.
@@ -1228,19 +1271,19 @@ pub async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, 
     // We simulate clicking "Load More" repeatedly by fetching ?page=N until no new URLs appear.
     // Serious Eats (Dotdash Meredith platform) also uses ?page=N pagination.
     if let Ok(parsed) = url::Url::parse(page_url) {
-        let host = parsed.host_str().unwrap_or("");
+        let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
         let path = parsed.path().to_ascii_lowercase();
         // Some tests and non-production hosts proxy an ATK listing path without the ATK host.
         // Treat `/recipes/all` as an ATK-style listing route so pagination behavior is preserved.
         let looks_like_atk_listing = path == "/recipes/all" || path.starts_with("/recipes/all/");
 
-        if host.contains("americastestkitchen.com") || looks_like_atk_listing {
+        if host_matches_domain(&host, "americastestkitchen.com") || looks_like_atk_listing {
             return extract_atk_recipe_urls_with_pagination(client, page_url).await;
         }
-        if host.contains("seriouseats.com") {
+        if host_matches_domain(&host, "seriouseats.com") {
             return extract_seriouseats_recipe_urls_with_pagination(client, page_url).await;
         }
-        if host.contains("bonappetit.com") {
+        if host_matches_domain(&host, "bonappetit.com") {
             return extract_bonappetit_recipe_urls_with_pagination(client, page_url).await;
         }
     }
@@ -2224,10 +2267,11 @@ pub fn resolve_url_standalone(base: &str, href: &str) -> Result<String, String> 
 pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
     if let Ok(parsed) = url::Url::parse(url) {
         if let Some(host) = parsed.host_str() {
+            let host = host.to_ascii_lowercase();
             let path = parsed.path();
 
             // --- AllRecipes validation ---
-            if host.contains("allrecipes.com") {
+            if host_matches_domain(&host, "allrecipes.com") {
                 if !path.contains("/recipe/") {
                     return false;
                 }
@@ -2268,7 +2312,7 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
             // --- America's Test Kitchen validation ---
             // ATK recipe URLs: /recipes/{numeric_id}-{slug}
             // e.g. /recipes/12345-perfect-chocolate-chip-cookies
-            if host.contains("americastestkitchen.com") {
+            if host_matches_domain(&host, "americastestkitchen.com") {
                 let atk_recipe_pattern = regex::Regex::new(r"^/recipes/\d+-[a-zA-Z]").unwrap();
                 if !atk_recipe_pattern.is_match(path) {
                     return false;
@@ -2298,7 +2342,7 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
             //   • "-recipe" (singular) distinguishes recipes from category/listing pages
             //     which use "-recipes" (plural), e.g. /all-recipes-5117985
             // Old Serious Eats format: seriouseats.com/recipes/YYYY/MM/slug.html
-            if host.contains("seriouseats.com") {
+            if host_matches_domain(&host, "seriouseats.com") {
                 // Old format: /recipes/{year}/... — accept these
                 if path.starts_with("/recipes/") {
                     // Exclude bare listing paths like /recipes/ or /recipes/search
@@ -2371,7 +2415,7 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
             //   • /recipes/* — category listing sub-pages
             //   • /story/*  — editorial articles
             //   • /gallery/* — photo galleries
-            if host.contains("bonappetit.com") {
+            if host_matches_domain(&host, "bonappetit.com") {
                 // Must start with /recipe/ (singular)
                 if !path.starts_with("/recipe/") {
                     return false;
@@ -2431,4 +2475,3 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
-

@@ -54,6 +54,42 @@ describe('BatchImportService', () => {
       });
     });
 
+    test('should start batch import with valid Serious Eats listing URL', async () => {
+      const mockImportId = 'test-import-se';
+      mockInvoke.mockResolvedValueOnce(mockImportId);
+
+      const startUrl = 'https://www.seriouseats.com/all-recipes-5117985';
+      const importId = await service.startBatchImport(startUrl);
+
+      expect(importId).toBe(mockImportId);
+      expect(mockInvoke).toHaveBeenCalledWith('start_batch_import', {
+        request: {
+          startUrl,
+          maxRecipes: undefined,
+          maxDepth: undefined,
+          existingUrls: [],
+        },
+      });
+    });
+
+    test('should start batch import with valid Bon Appetit listing URL', async () => {
+      const mockImportId = 'test-import-ba';
+      mockInvoke.mockResolvedValueOnce(mockImportId);
+
+      const startUrl = 'https://www.bonappetit.com/recipes';
+      const importId = await service.startBatchImport(startUrl);
+
+      expect(importId).toBe(mockImportId);
+      expect(mockInvoke).toHaveBeenCalledWith('start_batch_import', {
+        request: {
+          startUrl,
+          maxRecipes: undefined,
+          maxDepth: undefined,
+          existingUrls: [],
+        },
+      });
+    });
+
     test('should start batch import with options', async () => {
       const mockImportId = 'test-import-456';
       mockInvoke.mockResolvedValueOnce(mockImportId);
@@ -83,6 +119,8 @@ describe('BatchImportService', () => {
         'https://foodnetwork.com/recipes',
         'not-a-url',
         'https://allrecipes.com/recipe/123/individual-recipe',
+        'https://allrecipes.com.evil.test/recipes/79/desserts',
+        'https://evil-allrecipes.com/recipes/79/desserts',
       ];
 
       for (const url of invalidUrls) {

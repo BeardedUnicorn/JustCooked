@@ -2,22 +2,26 @@
  * Utility functions for URL validation and processing
  */
 
+function matchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
 // Check if URL is from a supported recipe site
 export function isSupportedUrl(url: string): boolean {
   try {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname.toLowerCase();
-    return hostname.includes('allrecipes.com') ||
-           hostname.includes('foodnetwork.com') ||
-           hostname.includes('bbcgoodfood.com') ||
-           hostname.includes('seriouseats.com') ||
-           hostname.includes('epicurious.com') ||
-           hostname.includes('food.com') ||
-           hostname.includes('tasteofhome.com') ||
-           hostname.includes('delish.com') ||
-           hostname.includes('bonappetit.com') ||
-           hostname.includes('simplyrecipes.com') ||
-           hostname.includes('americastestkitchen.com');
+    return matchesDomain(hostname, 'allrecipes.com') ||
+           matchesDomain(hostname, 'foodnetwork.com') ||
+           matchesDomain(hostname, 'bbcgoodfood.com') ||
+           matchesDomain(hostname, 'seriouseats.com') ||
+           matchesDomain(hostname, 'epicurious.com') ||
+           matchesDomain(hostname, 'food.com') ||
+           matchesDomain(hostname, 'tasteofhome.com') ||
+           matchesDomain(hostname, 'delish.com') ||
+           matchesDomain(hostname, 'bonappetit.com') ||
+           matchesDomain(hostname, 'simplyrecipes.com') ||
+           matchesDomain(hostname, 'americastestkitchen.com');
   } catch {
     return false;
   }
@@ -46,7 +50,7 @@ export function isValidImageUrl(url: string): boolean {
     ];
     
     const isFromImageHost = imageHostingDomains.some(domain => 
-      urlObj.hostname.includes(domain)
+      matchesDomain(urlObj.hostname.toLowerCase(), domain)
     );
     
     return hasImageExtension || isFromImageHost || url.includes('image') || url.includes('photo');

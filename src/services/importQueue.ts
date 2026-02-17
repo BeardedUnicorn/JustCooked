@@ -342,9 +342,10 @@ export class ImportQueueService {
     }
 
     const progress = task.progress;
+    const normalizedStatus = this.normalizeStatus(progress.status);
     const isActive = task.status === ImportQueueTaskStatus.RUNNING && (
-      progress.status === 'crawlingCategories' ||
-      progress.status === 'extractingRecipes'
+      normalizedStatus === 'crawlingCategories' ||
+      normalizedStatus === 'extractingRecipes'
     );
 
     if (progress.totalCategories === 0) {
@@ -369,8 +370,9 @@ export class ImportQueueService {
     }
 
     const progress = task.progress;
+    const normalizedStatus = this.normalizeStatus(progress.status);
     const isActive = task.status === ImportQueueTaskStatus.RUNNING &&
-      progress.status === 'importingRecipes';
+      normalizedStatus === 'importingRecipes';
 
     if (progress.totalRecipes === 0) {
       return { current: 0, total: 0, percentage: 0, isActive };
@@ -394,7 +396,8 @@ export class ImportQueueService {
     }
 
     const progress = task.progress;
-    switch (progress.status) {
+    const normalizedStatus = this.normalizeStatus(progress.status);
+    switch (normalizedStatus) {
       case 'starting':
         return 'Initializing import...';
       case 'crawlingCategories':
@@ -420,7 +423,8 @@ export class ImportQueueService {
       case ImportQueueTaskStatus.RUNNING:
         if (task.progress) {
           const progress = task.progress;
-          switch (progress.status) {
+          const normalizedStatus = this.normalizeStatus(progress.status);
+          switch (normalizedStatus) {
             case 'starting':
               return 'Starting...';
             case 'crawlingCategories':
@@ -448,6 +452,14 @@ export class ImportQueueService {
       default:
         return 'Unknown';
     }
+  }
+
+  private normalizeStatus(status: string): string {
+    if (!status) {
+      return '';
+    }
+
+    return status.charAt(0).toLowerCase() + status.slice(1);
   }
 
   /**

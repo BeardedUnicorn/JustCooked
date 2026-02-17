@@ -400,5 +400,66 @@ describe('ImportQueueService', () => {
       expect(queueService.canRemoveTask(runningTask)).toBe(true);
       expect(queueService.canRemoveTask(completedTask)).toBe(false);
     });
+
+    it('should interpret PascalCase backend status for phase descriptions', () => {
+      const runningTask: ImportQueueTask = {
+        ...mockQueueTask,
+        status: ImportQueueTaskStatus.RUNNING,
+        progress: {
+          status: 'Starting',
+          processedRecipes: 0,
+          totalRecipes: 10,
+          processedCategories: 0,
+          totalCategories: 1,
+          successfulImports: 0,
+          failedImports: 0,
+          skippedRecipes: 0,
+          errors: [],
+          startTime: '2024-01-01T00:00:00Z',
+        } as any,
+      };
+
+      expect(queueService.getCurrentPhaseDescription(runningTask)).toBe('Initializing import...');
+      expect(queueService.getStatusDisplayText(runningTask)).toBe('Starting...');
+    });
+
+    it('should treat PascalCase progress statuses as active in progress helpers', () => {
+      const categoryTask: ImportQueueTask = {
+        ...mockQueueTask,
+        status: ImportQueueTaskStatus.RUNNING,
+        progress: {
+          status: 'CrawlingCategories',
+          processedRecipes: 0,
+          totalRecipes: 10,
+          processedCategories: 1,
+          totalCategories: 4,
+          successfulImports: 0,
+          failedImports: 0,
+          skippedRecipes: 0,
+          errors: [],
+          startTime: '2024-01-01T00:00:00Z',
+        } as any,
+      };
+
+      const recipeTask: ImportQueueTask = {
+        ...mockQueueTask,
+        status: ImportQueueTaskStatus.RUNNING,
+        progress: {
+          status: 'ImportingRecipes',
+          processedRecipes: 4,
+          totalRecipes: 10,
+          processedCategories: 4,
+          totalCategories: 4,
+          successfulImports: 4,
+          failedImports: 0,
+          skippedRecipes: 0,
+          errors: [],
+          startTime: '2024-01-01T00:00:00Z',
+        } as any,
+      };
+
+      expect(queueService.getCategoryProgress(categoryTask).isActive).toBe(true);
+      expect(queueService.getRecipeProgress(recipeTask).isActive).toBe(true);
+    });
   });
 });

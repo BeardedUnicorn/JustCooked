@@ -1,9 +1,17 @@
 import { BatchImportRequest, BatchImportProgress } from './batchImport';
+import { ReImportRequest } from './reImport';
+
+export type ImportQueueRequest =
+  | { batchImport: BatchImportRequest }
+  | { reImport: ReImportRequest }
+  // Backward compatibility for any older serialized payloads.
+  | BatchImportRequest
+  | ReImportRequest;
 
 export interface ImportQueueTask {
   id: string;
   description: string;
-  request: BatchImportRequest;
+  request: ImportQueueRequest;
   status: ImportQueueTaskStatus;
   progress?: BatchImportProgress;
   addedAt: string;
