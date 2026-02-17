@@ -11,7 +11,7 @@ const logger = createLogger('BatchImport');
 
 export class BatchImportService {
   private currentImportId: string | null = null;
-  private progressInterval: NodeJS.Timeout | null = null;
+  private progressInterval: ReturnType<typeof setInterval> | null = null;
   private onProgressCallback: ((progress: BatchImportProgress) => void) | null = null;
 
   /**

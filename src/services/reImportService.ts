@@ -10,7 +10,7 @@ const logger = createLogger('ReImportService');
 
 export class ReImportService {
   private currentImportId: string | null = null;
-  private progressInterval: NodeJS.Timeout | null = null;
+  private progressInterval: ReturnType<typeof setInterval> | null = null;
   private onProgressCallback: ((progress: ReImportProgress) => void) | null = null;
 
   /**

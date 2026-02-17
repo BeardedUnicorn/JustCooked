@@ -12,7 +12,7 @@ import { getExistingRecipeUrls } from '@services/recipeStorage';
 const logger = createLogger('ImportQueue');
 
 export class ImportQueueService {
-  private statusInterval: NodeJS.Timeout | null = null;
+  private statusInterval: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Add a batch import task to the queue
@@ -227,6 +227,8 @@ export class ImportQueueService {
    * Start monitoring queue status with periodic updates
    */
   startStatusMonitoring(onStatusUpdate: (status: ImportQueueStatus) => void, intervalMs: number = 1000): void {
+    // Ensure only one active polling loop exists at a time.
+    this.stopStatusMonitoring();
     
     // Get initial status
     this.getQueueStatus()

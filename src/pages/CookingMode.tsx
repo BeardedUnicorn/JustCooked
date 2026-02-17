@@ -70,7 +70,7 @@ const CookingMode: React.FC = () => {
 
   // Timer effect
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isTimerRunning && timer !== null && timer > 0) {
       interval = setInterval(() => {
         setTimer(prev => {

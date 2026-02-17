@@ -132,7 +132,11 @@ describe('BatchImportDialog', () => {
 
     await user.type(urlInput, 'https://example.com/invalid');
 
-    expect(screen.getByText("Please enter a valid AllRecipes or America's Test Kitchen category URL")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Please enter a valid AllRecipes, America's Test Kitchen, Serious Eats, or Bon Appétit category URL"
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText('Add to Queue')).toBeDisabled();
   });
 

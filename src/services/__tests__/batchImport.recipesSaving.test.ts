@@ -173,7 +173,7 @@ describe('BatchImport Recipe Saving', () => {
     
     await expect(
       batchImportService.startBatchImport(invalidUrl)
-    ).rejects.toThrow('Invalid AllRecipes URL');
+    ).rejects.toThrow('Invalid URL');
   });
 
   it('should handle cancellation correctly', async () => {
@@ -215,11 +215,11 @@ describe('BatchImport Recipe Saving', () => {
   it('should provide suggested category URLs', () => {
     const suggestions = batchImportService.getSuggestedCategoryUrls();
     
-    expect(suggestions).toHaveLength(6);
+    expect(suggestions).toHaveLength(9);
     expect(suggestions[0]).toEqual({
-      name: 'Desserts',
-      url: 'https://www.allrecipes.com/recipes/79/desserts',
-      description: 'All dessert recipes including cakes, cookies, pies, and more',
+      name: 'ATK – All Recipes',
+      url: 'https://www.americastestkitchen.com/recipes/all',
+      description: "All recipes from America's Test Kitchen",
     });
   });
 

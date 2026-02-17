@@ -46,7 +46,7 @@ class LoggingService {
     }
     
     // Also log to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.debug(`[${this.componentName}] ${message}`, context || '');
     }
   }
@@ -68,7 +68,7 @@ class LoggingService {
     }
     
     // Also log to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.info(`[${this.componentName}] ${message}`, context || '');
     }
   }

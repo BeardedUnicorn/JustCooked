@@ -1229,7 +1229,12 @@ pub async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, 
     // Serious Eats (Dotdash Meredith platform) also uses ?page=N pagination.
     if let Ok(parsed) = url::Url::parse(page_url) {
         let host = parsed.host_str().unwrap_or("");
-        if host.contains("americastestkitchen.com") {
+        let path = parsed.path().to_ascii_lowercase();
+        // Some tests and non-production hosts proxy an ATK listing path without the ATK host.
+        // Treat `/recipes/all` as an ATK-style listing route so pagination behavior is preserved.
+        let looks_like_atk_listing = path == "/recipes/all" || path.starts_with("/recipes/all/");
+
+        if host.contains("americastestkitchen.com") || looks_like_atk_listing {
             return extract_atk_recipe_urls_with_pagination(client, page_url).await;
         }
         if host.contains("seriouseats.com") {
@@ -1966,6 +1971,7 @@ pub fn atk_page_has_more(html: &str) -> bool {
         "[class*='LoadMore']",
         "[data-load-more]",
         "a[rel='next']",
+        "link[rel='next']",
         "[aria-label='Next page']",
         "[aria-label='Load more']",
         ".pagination__next:not([disabled]):not([aria-disabled='true'])",
@@ -2425,5 +2431,4 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
-
 

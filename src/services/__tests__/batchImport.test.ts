@@ -231,17 +231,40 @@ describe('BatchImportService', () => {
     test('getSuggestedCategoryUrls should return valid suggestions', () => {
       const suggestions = service.getSuggestedCategoryUrls();
 
-      expect(suggestions).toHaveLength(6);
+      expect(suggestions).toHaveLength(9);
       expect(suggestions[0]).toEqual({
-        name: 'Desserts',
-        url: 'https://www.allrecipes.com/recipes/79/desserts',
-        description: 'All dessert recipes including cakes, cookies, pies, and more',
+        name: 'ATK – All Recipes',
+        url: 'https://www.americastestkitchen.com/recipes/all',
+        description: "All recipes from America's Test Kitchen",
       });
 
-      // Verify all URLs are valid AllRecipes category URLs
+      expect(suggestions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Serious Eats – All Recipes',
+            url: 'https://www.seriouseats.com/all-recipes-5117985',
+          }),
+          expect.objectContaining({
+            name: 'Bon Appétit – All Recipes',
+            url: 'https://www.bonappetit.com/recipes',
+          }),
+          expect.objectContaining({
+            name: 'Desserts',
+            url: 'https://www.allrecipes.com/recipes/79/desserts',
+          }),
+        ])
+      );
+
+      const allowedHosts = new Set([
+        'www.allrecipes.com',
+        'www.americastestkitchen.com',
+        'www.seriouseats.com',
+        'www.bonappetit.com',
+      ]);
+
       suggestions.forEach(suggestion => {
-        expect(suggestion.url).toMatch(/^https:\/\/www\.allrecipes\.com\/recipes\//);
-        expect(suggestion.url).not.toMatch(/\/recipe\//);
+        const host = new URL(suggestion.url).hostname;
+        expect(allowedHosts.has(host)).toBe(true);
       });
     });
 
