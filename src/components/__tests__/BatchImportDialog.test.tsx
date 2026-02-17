@@ -60,7 +60,10 @@ const siteValidation = (url: string, site: string) => {
       return host.includes('americastestkitchen.com') && path.includes('/recipes/');
     }
     if (site === 'seriousEats') {
-      return host.includes('seriouseats.com') && /^\/all-recipes-\d+\/?$/.test(path);
+      return (
+        host.includes('seriouseats.com') &&
+        (path === '/' || path === '/sitemap.xml' || /^\/all-recipes-\d+\/?$/.test(path))
+      );
     }
     if (site === 'bonAppetit') {
       return host.includes('bonappetit.com') && (path === '/recipes' || path === '/recipes/');
@@ -101,7 +104,7 @@ describe('BatchImportDialog', () => {
       },
       {
         name: 'Serious Eats All Recipes',
-        url: 'https://www.seriouseats.com/all-recipes-5117985',
+        url: 'https://www.seriouseats.com/',
         description: 'Serious Eats index',
       },
     ]);

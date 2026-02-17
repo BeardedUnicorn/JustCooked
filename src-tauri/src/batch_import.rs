@@ -4,7 +4,7 @@ use reqwest;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -1354,19 +1354,22 @@ impl ReImporter {
 pub async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, page_url: &str) -> Result<Vec<String>, String> {
     // America's Test Kitchen uses JavaScript-driven "Load More" pagination.
     // We simulate clicking "Load More" repeatedly by fetching ?page=N until no new URLs appear.
-    // Serious Eats (Dotdash Meredith platform) also uses ?page=N pagination.
+    // Serious Eats uses sitemap-first discovery for complete recipe coverage.
     if let Ok(parsed) = url::Url::parse(page_url) {
         let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
         let path = parsed.path().to_ascii_lowercase();
         // Some tests and non-production hosts proxy an ATK listing path without the ATK host.
         // Treat `/recipes/all` as an ATK-style listing route so pagination behavior is preserved.
         let looks_like_atk_listing = path == "/recipes/all" || path.starts_with("/recipes/all/");
+        let looks_like_seriouseats_listing = regex::Regex::new(r"^/all-recipes-\d+/?$")
+            .map(|re| re.is_match(&path))
+            .unwrap_or(false);
 
         if host_matches_domain(&host, "americastestkitchen.com") || looks_like_atk_listing {
             return extract_atk_recipe_urls_with_pagination(client, page_url).await;
         }
-        if host_matches_domain(&host, "seriouseats.com") {
-            return extract_seriouseats_recipe_urls_with_pagination(client, page_url).await;
+        if host_matches_domain(&host, "seriouseats.com") || looks_like_seriouseats_listing {
+            return extract_seriouseats_recipe_urls_from_sitemaps(client, page_url).await;
         }
         if host_matches_domain(&host, "bonappetit.com") {
             return extract_bonappetit_recipe_urls_with_pagination(client, page_url).await;
@@ -1590,166 +1593,380 @@ async fn extract_atk_recipe_urls_with_pagination(
     Ok(all_urls.into_iter().collect())
 }
 
-/// Fetches all Serious Eats recipe URLs from a listing page using `?page=N` pagination.
+/// Fetches Serious Eats recipe URLs using sitemap-first discovery.
 ///
-/// Serious Eats runs on the Dotdash Meredith platform (acquired 2021) and is
-/// server-side rendered, so every page of results is available via plain HTTP.
-/// Recipe cards use the `.mntl-card-list-items` / `.mntl-document-card` CSS classes.
-/// Pagination works identically to ATK — append `?page=N` and stop when a page
-/// returns no new URLs.
-async fn extract_seriouseats_recipe_urls_with_pagination(
+/// This is fail-closed by design: if sitemap discovery or page classification
+/// fails, we return an error instead of silently falling back to partial listing crawl.
+pub(crate) async fn extract_seriouseats_recipe_urls_from_sitemaps(
     client: &reqwest::Client,
     start_url: &str,
 ) -> Result<Vec<String>, String> {
-    let mut all_urls: HashSet<String> = HashSet::new();
-    let mut page: u32 = 1;
+    const MAX_SITEMAP_DOCS: usize = 64;
+    const PER_REQUEST_TIMEOUT_SECS: u64 = 45;
 
-    // Serious Eats has ~10 000+ recipes; cap well above that to be safe.
-    const MAX_PAGES: u32 = 400;
-    const PAGE_TIMEOUT_SECS: u64 = 45;
+    let start_parsed = url::Url::parse(start_url).map_err(|e| format!("Invalid Serious Eats start URL: {}", e))?;
+    let origin = start_parsed.origin().ascii_serialization();
 
-    info!("Serious Eats pagination: starting from {} (max {} pages)", start_url, MAX_PAGES);
+    let root_sitemaps = discover_seriouseats_root_sitemaps(client, &origin).await?;
+    if root_sitemaps.is_empty() {
+        return Err("Serious Eats sitemap discovery failed: no sitemap roots found".to_string());
+    }
 
-    loop {
-        if page > MAX_PAGES {
-            warn!("Serious Eats pagination: hit safety cap of {} pages, stopping", MAX_PAGES);
+    info!(
+        "Serious Eats sitemap discovery: starting with {} root sitemap(s)",
+        root_sitemaps.len()
+    );
+
+    let mut sitemap_queue: VecDeque<String> = root_sitemaps.into_iter().collect();
+    let mut seen_sitemaps: HashSet<String> = HashSet::new();
+    let mut sitemap_parse_errors: u32 = 0;
+    let mut candidate_urls: Vec<String> = Vec::new();
+    let mut seen_candidates: HashSet<String> = HashSet::new();
+
+    while let Some(sitemap_url) = sitemap_queue.pop_front() {
+        if seen_sitemaps.contains(&sitemap_url) {
+            continue;
+        }
+        if seen_sitemaps.len() >= MAX_SITEMAP_DOCS {
+            warn!(
+                "Serious Eats sitemap discovery: reached sitemap document cap ({}), stopping recursion",
+                MAX_SITEMAP_DOCS
+            );
             break;
         }
+        seen_sitemaps.insert(sitemap_url.clone());
 
-        // build_atk_page_url is generic — it just adds/replaces ?page=N.
-        let page_url = build_atk_page_url(start_url, page);
-        info!("Serious Eats pagination: fetching page {} → {}", page, page_url);
+        let xml = match fetch_text_with_retries(client, &sitemap_url, PER_REQUEST_TIMEOUT_SECS, 2).await {
+            Ok(body) => body,
+            Err(e) => {
+                sitemap_parse_errors += 1;
+                warn!("Serious Eats sitemap discovery: failed to fetch {}: {}", sitemap_url, e);
+                continue;
+            }
+        };
 
-        let fetch_result = tokio::time::timeout(Duration::from_secs(PAGE_TIMEOUT_SECS), async {
+        let nested_sitemaps = extract_sitemap_index_locs(&xml);
+        if !nested_sitemaps.is_empty() {
+            for nested in nested_sitemaps {
+                if is_news_sitemap_url(&nested) {
+                    continue;
+                }
+                if !seen_sitemaps.contains(&nested) {
+                    sitemap_queue.push_back(nested);
+                }
+            }
+            continue;
+        }
+
+        let page_urls = extract_sitemap_url_locs(&xml);
+        if page_urls.is_empty() {
+            sitemap_parse_errors += 1;
+            warn!(
+                "Serious Eats sitemap discovery: {} did not parse as sitemap index or urlset",
+                sitemap_url
+            );
+            continue;
+        }
+
+        for url in page_urls {
+            // Keep extraction scoped to the same origin as the requested site.
+            if !url.starts_with(&origin) {
+                continue;
+            }
+            if seen_candidates.insert(url.clone()) {
+                candidate_urls.push(url);
+            }
+        }
+    }
+
+    let sitemap_urls_total = candidate_urls.len() as u32;
+    if sitemap_urls_total == 0 {
+        return Err(format!(
+            "Serious Eats sitemap discovery failed: no URLs discovered (sitemaps visited: {}, sitemap_parse_errors: {})",
+            seen_sitemaps.len(),
+            sitemap_parse_errors
+        ));
+    }
+
+    info!(
+        "Serious Eats sitemap discovery complete: sitemaps visited={}, sitemap_urls_total={}, sitemap_parse_errors={}",
+        seen_sitemaps.len(),
+        sitemap_urls_total,
+        sitemap_parse_errors
+    );
+
+    let (recipe_urls_confirmed, non_recipe_urls_filtered) =
+        classify_seriouseats_urls_by_schema(client, candidate_urls).await?;
+
+    info!(
+        "Serious Eats recipe filtering complete: sitemap_urls_total={}, recipe_urls_confirmed={}, non_recipe_urls_filtered={}, sitemap_parse_errors={}",
+        sitemap_urls_total,
+        recipe_urls_confirmed.len(),
+        non_recipe_urls_filtered,
+        sitemap_parse_errors
+    );
+
+    Ok(recipe_urls_confirmed)
+}
+
+async fn discover_seriouseats_root_sitemaps(
+    client: &reqwest::Client,
+    origin: &str,
+) -> Result<Vec<String>, String> {
+    const PER_REQUEST_TIMEOUT_SECS: u64 = 30;
+
+    let robots_url = format!("{}/robots.txt", origin.trim_end_matches('/'));
+    let mut sitemap_roots = Vec::new();
+
+    match fetch_text_with_retries(client, &robots_url, PER_REQUEST_TIMEOUT_SECS, 2).await {
+        Ok(robots_txt) => {
+            sitemap_roots = extract_sitemap_urls_from_robots(&robots_txt)
+                .into_iter()
+                .filter(|url| !is_news_sitemap_url(url))
+                .collect();
+        }
+        Err(e) => {
+            warn!(
+                "Serious Eats sitemap discovery: failed to fetch robots.txt at {}: {}",
+                robots_url, e
+            );
+        }
+    }
+
+    // Always include the canonical fallback root sitemap.
+    let fallback_sitemap = format!("{}/sitemap.xml", origin.trim_end_matches('/'));
+    if !sitemap_roots.contains(&fallback_sitemap) {
+        sitemap_roots.push(fallback_sitemap);
+    }
+
+    // Deduplicate while preserving order.
+    let mut seen = HashSet::new();
+    sitemap_roots.retain(|url| seen.insert(url.clone()));
+
+    if sitemap_roots.is_empty() {
+        return Err("No Serious Eats sitemap roots available".to_string());
+    }
+
+    Ok(sitemap_roots)
+}
+
+fn extract_sitemap_urls_from_robots(robots_txt: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    for line in robots_txt.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if trimmed.to_ascii_lowercase().starts_with("sitemap:") {
+            if let Some((_, value)) = trimmed.split_once(':') {
+                let sitemap_url = value.trim();
+                if !sitemap_url.is_empty() {
+                    urls.push(sitemap_url.to_string());
+                }
+            }
+        }
+    }
+
+    let mut seen = HashSet::new();
+    urls.retain(|url| seen.insert(url.clone()));
+    urls
+}
+
+pub(crate) fn extract_sitemap_index_locs(xml: &str) -> Vec<String> {
+    if !xml.to_ascii_lowercase().contains("<sitemapindex") {
+        return Vec::new();
+    }
+    extract_loc_values(xml)
+}
+
+pub(crate) fn extract_sitemap_url_locs(xml: &str) -> Vec<String> {
+    if !xml.to_ascii_lowercase().contains("<urlset") {
+        return Vec::new();
+    }
+    extract_loc_values(xml)
+}
+
+fn extract_loc_values(xml: &str) -> Vec<String> {
+    let loc_regex = match regex::Regex::new(r"(?is)<loc>\s*([^<]+?)\s*</loc>") {
+        Ok(r) => r,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut locs: Vec<String> = Vec::new();
+    for caps in loc_regex.captures_iter(xml) {
+        if let Some(value) = caps.get(1) {
+            let loc = value.as_str().trim();
+            if !loc.is_empty() {
+                locs.push(loc.to_string());
+            }
+        }
+    }
+
+    let mut seen = HashSet::new();
+    locs.retain(|loc| seen.insert(loc.clone()));
+    locs
+}
+
+fn is_news_sitemap_url(url: &str) -> bool {
+    let normalized = url.to_ascii_lowercase();
+    normalized.contains("google-news-sitemap") || normalized.contains("news-sitemap")
+}
+
+async fn fetch_text_with_retries(
+    client: &reqwest::Client,
+    url: &str,
+    timeout_secs: u64,
+    max_attempts: u8,
+) -> Result<String, String> {
+    let attempts = std::cmp::max(max_attempts, 1);
+    let mut last_error = "unknown error".to_string();
+
+    for attempt in 1..=attempts {
+        let fetch = tokio::time::timeout(Duration::from_secs(timeout_secs), async {
             let response = client
-                .get(&page_url)
+                .get(url)
                 .send()
                 .await
-                .map_err(|e| format!("Request failed for SE page {}: {}", page, e))?;
+                .map_err(|e| format!("request failed: {}", e))?;
 
             let status = response.status();
-            info!("Serious Eats pagination: page {} — HTTP {}", page, status);
-
             if !status.is_success() {
-                return Err(format!(
-                    "HTTP {} for Serious Eats page {} ({})",
-                    status, page, page_url
-                ));
+                return Err(format!("HTTP {}", status));
             }
 
             response
                 .text()
                 .await
-                .map_err(|e| format!("Failed to read body for SE page {}: {}", page, e))
-        })
-        .await;
+                .map_err(|e| format!("failed reading body: {}", e))
+        }).await;
 
-        let html = match fetch_result {
-            Ok(Ok(h)) => h,
+        match fetch {
+            Ok(Ok(body)) => return Ok(body),
             Ok(Err(e)) => {
-                warn!("Serious Eats pagination: page {} error — {}", page, e);
-                break;
+                last_error = e;
             }
             Err(_) => {
-                warn!(
-                    "Serious Eats pagination: page {} timed out after {}s",
-                    page, PAGE_TIMEOUT_SECS
-                );
-                break;
+                last_error = format!("request timed out after {}s", timeout_secs);
             }
-        };
-
-        debug!(
-            "Serious Eats pagination: page {} — fetched {} bytes of HTML",
-            page,
-            html.len()
-        );
-
-        // On page 1 log a diagnostic snippet to aid debugging.
-        if page == 1 {
-            let snippet: String = html.chars().take(800).collect();
-            info!(
-                "Serious Eats pagination: first 800 chars of page 1 HTML:\n{}",
-                snippet
-            );
         }
 
-        // Diagnostic: count recipe card anchors before filtering.
-        {
-            let diag_doc = Html::parse_document(&html);
-            let card_count = Selector::parse("a.mntl-card-list-items")
-                .map(|s| diag_doc.select(&s).count())
-                .unwrap_or(0);
-            let doc_card_count = Selector::parse("a.mntl-document-card")
-                .map(|s| diag_doc.select(&s).count())
-                .unwrap_or(0);
-            info!(
-                "Serious Eats pagination: page {} — {} .mntl-card-list-items, {} .mntl-document-card links",
-                page, card_count, doc_card_count
-            );
+        if attempt < attempts {
+            sleep(Duration::from_millis(350)).await;
         }
-
-        // Extract validated recipe URLs from this page's HTML.
-        let page_urls = match extract_recipe_urls_from_html_standalone(&html, &page_url) {
-            Ok(urls) => urls,
-            Err(e) => {
-                warn!(
-                    "Serious Eats pagination: HTML extraction failed on page {}: {}",
-                    page, e
-                );
-                break;
-            }
-        };
-
-        info!(
-            "Serious Eats pagination: page {} — CSS extraction returned {} valid recipe URLs",
-            page,
-            page_urls.len()
-        );
-
-        // No URLs found → we've gone past the last page of results.
-        if page_urls.is_empty() {
-            info!(
-                "Serious Eats pagination: page {} found 0 recipe URLs, stopping",
-                page
-            );
-            break;
-        }
-
-        let before = all_urls.len();
-        for url in &page_urls {
-            all_urls.insert(url.clone());
-        }
-        let new_count = all_urls.len() - before;
-
-        info!(
-            "Serious Eats pagination: page {} — {} links found, {} new (running total: {})",
-            page,
-            page_urls.len(),
-            new_count,
-            all_urls.len()
-        );
-
-        // No new URLs → we've wrapped around to content already seen.
-        if new_count == 0 {
-            info!(
-                "Serious Eats pagination: page {} had no new URLs, stopping",
-                page
-            );
-            break;
-        }
-
-        page += 1;
-        // Be respectful to Serious Eats' servers.
-        sleep(Duration::from_millis(1500)).await;
     }
 
-    info!(
-        "Serious Eats pagination complete: {} unique recipe URLs collected over {} page(s)",
-        all_urls.len(),
-        page
-    );
-    Ok(all_urls.into_iter().collect())
+    Err(last_error)
+}
+
+async fn classify_seriouseats_urls_by_schema(
+    client: &reqwest::Client,
+    candidate_urls: Vec<String>,
+) -> Result<(Vec<String>, u32), String> {
+    const CLASSIFY_TIMEOUT_SECS: u64 = 35;
+    const CLASSIFY_ATTEMPTS: u8 = 2;
+    const CLASSIFY_CONCURRENCY: usize = 12;
+
+    let total = candidate_urls.len();
+    let mut join_set = JoinSet::new();
+    let mut next_index: usize = 0;
+    let mut recipe_by_index: Vec<(usize, String)> = Vec::new();
+    let mut non_recipe_urls_filtered: u32 = 0;
+    let mut classification_failures: u32 = 0;
+
+    while next_index < total || !join_set.is_empty() {
+        while next_index < total && join_set.len() < CLASSIFY_CONCURRENCY {
+            let index = next_index;
+            let url = candidate_urls[index].clone();
+            next_index += 1;
+            let client_clone = client.clone();
+
+            join_set.spawn(async move {
+                let body = fetch_text_with_retries(
+                    &client_clone,
+                    &url,
+                    CLASSIFY_TIMEOUT_SECS,
+                    CLASSIFY_ATTEMPTS,
+                ).await?;
+                Ok::<(usize, String, bool), String>((index, url, is_recipe_page_via_jsonld(&body)))
+            });
+        }
+
+        if let Some(result) = join_set.join_next().await {
+            match result {
+                Ok(Ok((index, url, is_recipe))) => {
+                    if is_recipe {
+                        recipe_by_index.push((index, url));
+                    } else {
+                        non_recipe_urls_filtered += 1;
+                    }
+                }
+                Ok(Err(e)) => {
+                    classification_failures += 1;
+                    warn!("Serious Eats page classification failure: {}", e);
+                }
+                Err(e) => {
+                    classification_failures += 1;
+                    warn!("Serious Eats page classification task join failure: {}", e);
+                }
+            }
+        }
+    }
+
+    if classification_failures > 0 {
+        return Err(format!(
+            "Serious Eats sitemap classification failed for {} URL(s); aborting to preserve completeness guarantee",
+            classification_failures
+        ));
+    }
+
+    recipe_by_index.sort_by_key(|(index, _)| *index);
+    let recipe_urls_confirmed = recipe_by_index
+        .into_iter()
+        .map(|(_, url)| url)
+        .collect::<Vec<_>>();
+
+    Ok((recipe_urls_confirmed, non_recipe_urls_filtered))
+}
+
+pub(crate) fn is_recipe_page_via_jsonld(html: &str) -> bool {
+    let document = Html::parse_document(html);
+    let script_selector = match Selector::parse("script[type='application/ld+json']") {
+        Ok(selector) => selector,
+        Err(_) => return false,
+    };
+
+    for script in document.select(&script_selector) {
+        let raw = script.inner_html();
+        let json = match serde_json::from_str::<serde_json::Value>(&raw) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if json_value_contains_recipe_type(&json) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn json_value_contains_recipe_type(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(node_type) = map.get("@type") {
+                if node_type.as_str() == Some("Recipe") {
+                    return true;
+                }
+                if let Some(types) = node_type.as_array() {
+                    if types.iter().any(|item| item.as_str() == Some("Recipe")) {
+                        return true;
+                    }
+                }
+            }
+            map.values().any(json_value_contains_recipe_type)
+        }
+        serde_json::Value::Array(items) => items.iter().any(json_value_contains_recipe_type),
+        _ => false,
+    }
 }
 
 /// Fetches all Bon Appétit recipe URLs from a listing page using `?page=N` pagination.

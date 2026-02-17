@@ -262,7 +262,17 @@ export class BatchImportService {
       }
 
       if (site === 'seriousEats') {
-        return this.matchesDomain(hostname, 'seriouseats.com') && /^\/all-recipes-\d+\/?$/.test(pathname);
+        if (!this.matchesDomain(hostname, 'seriouseats.com')) {
+          return false;
+        }
+
+        // Sitemap-first backend accepts stable Serious Eats entry points and
+        // canonicalizes discovery from sitemaps.
+        return (
+          pathname === '/' ||
+          pathname === '/sitemap.xml' ||
+          /^\/all-recipes-\d+\/?$/.test(pathname)
+        );
       }
 
       if (site === 'bonAppetit') {
@@ -307,8 +317,8 @@ export class BatchImportService {
       },
       {
         name: 'Serious Eats – All Recipes',
-        url: 'https://www.seriouseats.com/all-recipes-5117985',
-        description: 'All recipes from Serious Eats',
+        url: 'https://www.seriouseats.com/',
+        description: 'Sitemap-first import from Serious Eats',
       },
       {
         name: 'Bon Appétit – All Recipes',

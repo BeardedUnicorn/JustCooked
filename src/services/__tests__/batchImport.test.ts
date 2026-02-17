@@ -280,7 +280,7 @@ describe('BatchImportService', () => {
         expect.arrayContaining([
           expect.objectContaining({
             name: 'Serious Eats – All Recipes',
-            url: 'https://www.seriouseats.com/all-recipes-5117985',
+            url: 'https://www.seriouseats.com/',
           }),
           expect.objectContaining({
             name: 'Bon Appétit – All Recipes',
@@ -331,8 +331,11 @@ describe('BatchImportService', () => {
       expect(service.validateUrlForSite('https://www.americastestkitchen.com/recipes/all', 'americasTestKitchen')).toBe(true);
       expect(service.validateUrlForSite('https://www.americastestkitchen.com/recipes/12345-example', 'americasTestKitchen')).toBe(false);
 
+      expect(service.validateUrlForSite('https://www.seriouseats.com/', 'seriousEats')).toBe(true);
+      expect(service.validateUrlForSite('https://www.seriouseats.com/sitemap.xml', 'seriousEats')).toBe(true);
       expect(service.validateUrlForSite('https://www.seriouseats.com/all-recipes-5117985', 'seriousEats')).toBe(true);
       expect(service.validateUrlForSite('https://www.seriouseats.com/recipes', 'seriousEats')).toBe(false);
+      expect(service.validateUrlForSite('https://www.seriouseats.com/5-minute-molten-chocolate-raspberry-mug-cake-11898388', 'seriousEats')).toBe(false);
 
       expect(service.validateUrlForSite('https://www.bonappetit.com/recipes', 'bonAppetit')).toBe(true);
       expect(service.validateUrlForSite('https://www.bonappetit.com/recipe/something', 'bonAppetit')).toBe(false);
@@ -341,6 +344,7 @@ describe('BatchImportService', () => {
     test('detectSiteFromUrl should identify supported URL patterns', () => {
       expect(service.detectSiteFromUrl('https://www.allrecipes.com/recipes/79/desserts')).toBe('allrecipes');
       expect(service.detectSiteFromUrl('https://www.americastestkitchen.com/recipes/all')).toBe('americasTestKitchen');
+      expect(service.detectSiteFromUrl('https://www.seriouseats.com/')).toBe('seriousEats');
       expect(service.detectSiteFromUrl('https://www.seriouseats.com/all-recipes-5117985')).toBe('seriousEats');
       expect(service.detectSiteFromUrl('https://www.bonappetit.com/recipes')).toBe('bonAppetit');
       expect(service.detectSiteFromUrl('https://example.com/recipes')).toBeNull();

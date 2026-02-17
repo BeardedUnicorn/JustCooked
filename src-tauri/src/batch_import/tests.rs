@@ -1496,4 +1496,286 @@ mod tests {
         let urls = result.unwrap().unwrap();
         assert_eq!(urls.len(), 1, "Should return URLs from page 1 before the error");
     }
+
+    // -------------------------------------------------------------------------
+    // Serious Eats sitemap-first extraction tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_is_recipe_page_via_jsonld_detects_recipe_types() {
+        let recipe_html = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":"Recipe","name":"Test Recipe"}
+                </script>
+            </head><body></body></html>
+        "#;
+        assert!(crate::batch_import::is_recipe_page_via_jsonld(recipe_html));
+
+        let recipe_graph_html = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@graph":[{"@type":"WebPage"},{"@type":["Recipe","NewsArticle"],"name":"Graph Recipe"}]}
+                </script>
+            </head><body></body></html>
+        "#;
+        assert!(crate::batch_import::is_recipe_page_via_jsonld(recipe_graph_html));
+
+        let non_recipe_html = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":"Article","headline":"Not a Recipe"}
+                </script>
+            </head><body></body></html>
+        "#;
+        assert!(!crate::batch_import::is_recipe_page_via_jsonld(non_recipe_html));
+    }
+
+    #[test]
+    fn test_extract_sitemap_loc_parsers() {
+        let sitemap_index = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <sitemap><loc>https://example.com/sitemap_1.xml</loc></sitemap>
+                <sitemap><loc>https://example.com/google-news-sitemap.xml</loc></sitemap>
+            </sitemapindex>
+        "#;
+        let index_locs = crate::batch_import::extract_sitemap_index_locs(sitemap_index);
+        assert_eq!(index_locs.len(), 2);
+        assert!(index_locs.contains(&"https://example.com/sitemap_1.xml".to_string()));
+
+        let urlset = r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <url><loc>https://example.com/recipe-one-111</loc></url>
+                <url><loc>https://example.com/article-two-222</loc></url>
+                <url><loc>https://example.com/recipe-one-111</loc></url>
+            </urlset>
+        "#;
+        let url_locs = crate::batch_import::extract_sitemap_url_locs(urlset);
+        assert_eq!(url_locs.len(), 2);
+        assert!(url_locs.contains(&"https://example.com/recipe-one-111".to_string()));
+        assert!(url_locs.contains(&"https://example.com/article-two-222".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_seriouseats_sitemap_chain_filters_to_schema_recipes() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        let robots_txt = format!(
+            "User-agent: *\nSitemap: {}/sitemap.xml\nSitemap: {}/google-news-sitemap.xml\n",
+            mock_server.uri(),
+            mock_server.uri()
+        );
+        let sitemap_index = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <sitemap><loc>{}/sitemap_1.xml</loc></sitemap>
+                <sitemap><loc>{}/google-news-sitemap.xml</loc></sitemap>
+            </sitemapindex>
+            "#,
+            mock_server.uri(),
+            mock_server.uri()
+        );
+        let sitemap_urlset = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <url><loc>{}/austro-hungarian-goulash-111</loc></url>
+                <url><loc>{}/editor-roundup-222</loc></url>
+                <url><loc>{}/viennese-beef-goulash-333</loc></url>
+                <url><loc>{}/austro-hungarian-goulash-111</loc></url>
+            </urlset>
+            "#,
+            mock_server.uri(),
+            mock_server.uri(),
+            mock_server.uri(),
+            mock_server.uri()
+        );
+        let news_sitemap = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <url><loc>{}/news-item-444</loc></url>
+            </urlset>
+            "#,
+            mock_server.uri()
+        );
+
+        let recipe_page_1 = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":"Recipe","name":"Austro-Hungarian Goulash"}
+                </script>
+            </head><body></body></html>
+        "#;
+        let recipe_page_2 = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":["Recipe","NewsArticle"],"name":"Viennese Beef Goulash"}
+                </script>
+            </head><body></body></html>
+        "#;
+        let non_recipe_page = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":"Article","headline":"Editor Roundup"}
+                </script>
+            </head><body></body></html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/robots.txt"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(robots_txt))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sitemap.xml"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sitemap_index))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sitemap_1.xml"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sitemap_urlset))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/google-news-sitemap.xml"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(news_sitemap))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/austro-hungarian-goulash-111"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(recipe_page_1))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/viennese-beef-goulash-333"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(recipe_page_2))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/editor-roundup-222"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(non_recipe_page))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/news-item-444"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(non_recipe_page))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/all-recipes-5117985", mock_server.uri());
+        let urls =
+            crate::batch_import::extract_seriouseats_recipe_urls_from_sitemaps(&importer.client, &start_url)
+                .await
+                .expect("sitemap extraction should succeed");
+
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&format!("{}/austro-hungarian-goulash-111", mock_server.uri())));
+        assert!(urls.contains(&format!("{}/viennese-beef-goulash-333", mock_server.uri())));
+        assert!(!urls.contains(&format!("{}/editor-roundup-222", mock_server.uri())));
+    }
+
+    #[tokio::test]
+    async fn test_seriouseats_sitemap_failure_is_fail_closed() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        Mock::given(method("GET"))
+            .and(path("/robots.txt"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("User-agent: *\n"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sitemap.xml"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/all-recipes-5117985", mock_server.uri());
+        let result =
+            crate::batch_import::extract_seriouseats_recipe_urls_from_sitemaps(&importer.client, &start_url)
+                .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_seriouseats_concurrent_extractor_uses_sitemap_not_listing_pagination() {
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        let robots_txt = format!("User-agent: *\nSitemap: {}/sitemap.xml\n", mock_server.uri());
+        let sitemap_urlset = format!(
+            r#"
+            <?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <url><loc>{}/recipe-one-111</loc></url>
+                <url><loc>{}/recipe-two-222</loc></url>
+            </urlset>
+            "#,
+            mock_server.uri(),
+            mock_server.uri()
+        );
+
+        let recipe_page = r#"
+            <html><head>
+                <script type="application/ld+json">
+                {"@type":"Recipe","name":"Recipe"}
+                </script>
+            </head><body></body></html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/robots.txt"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(robots_txt))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/sitemap.xml"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(sitemap_urlset))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/recipe-one-111"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(recipe_page))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/recipe-two-222"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(recipe_page))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/all-recipes-5117985"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("<html></html>"))
+            .expect(0)
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/all-recipes-5117985", mock_server.uri());
+        let urls = crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &start_url)
+            .await
+            .expect("sitemap-based extraction should succeed");
+
+        assert_eq!(urls.len(), 2);
+        assert!(urls.contains(&format!("{}/recipe-one-111", mock_server.uri())));
+        assert!(urls.contains(&format!("{}/recipe-two-222", mock_server.uri())));
+    }
 }
