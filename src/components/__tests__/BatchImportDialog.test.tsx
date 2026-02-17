@@ -132,7 +132,7 @@ describe('BatchImportDialog', () => {
 
     await user.type(urlInput, 'https://example.com/invalid');
 
-    expect(screen.getByText('Please enter a valid AllRecipes category URL')).toBeInTheDocument();
+    expect(screen.getByText("Please enter a valid AllRecipes or America's Test Kitchen category URL")).toBeInTheDocument();
     expect(screen.getByText('Add to Queue')).toBeDisabled();
   });
 
@@ -278,8 +278,8 @@ describe('BatchImportDialog', () => {
     renderWithRedux();
 
     expect(screen.getByText('Quick Start')).toBeInTheDocument();
-    expect(screen.getByText(/Load 20 popular AllRecipes categories/)).toBeInTheDocument();
-    expect(screen.getByTestId('batch-import-load-popular-categories-button')).toBeInTheDocument();
+    expect(screen.getByText('Load Popular Categories')).toBeInTheDocument();
+    expect(screen.getByTestId('batchImportDialog-button-loadPopular')).toBeInTheDocument();
   });
 
   test('loads popular categories when button is clicked', async () => {
@@ -287,7 +287,7 @@ describe('BatchImportDialog', () => {
 
     renderWithRedux();
 
-    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
+    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
 
     // Check initial state
     expect(loadButton).toHaveTextContent('Load Popular Categories');
@@ -308,9 +308,9 @@ describe('BatchImportDialog', () => {
 
     renderWithRedux();
 
-    const loadButton = screen.getByTestId('batch-import-load-popular-categories-button');
-    const cancelButton = screen.getByTestId('batch-import-cancel-button');
-    const addButton = screen.getByTestId('batch-import-add-to-queue-button');
+    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
+    const cancelButton = screen.getByTestId('batchImportDialog-button-cancel');
+    const addButton = screen.getByTestId('batchImportDialog-button-addToQueue');
 
     await user.click(loadButton);
 

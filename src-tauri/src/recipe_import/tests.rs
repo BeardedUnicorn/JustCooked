@@ -19,6 +19,8 @@ mod tests {
             "https://www.delish.com/cooking/recipe-ideas/test",
             "https://www.bonappetit.com/recipe/test",
             "https://www.simplyrecipes.com/recipes/test",
+            "https://www.americastestkitchen.com/recipes/12345-perfect-cookies",
+            "https://www.americastestkitchen.com/recipes/all",
         ];
 
         for url_str in supported_urls {
@@ -234,6 +236,12 @@ mod tests {
         let (title, desc, image) = get_site_selectors("www.foodnetwork.com");
         assert!(title.contains("h1.o-AssetTitle__a-HeadlineText"));
         assert!(desc.contains("meta[name='description']"));
+        assert!(image.contains("meta[property='og:image']"));
+
+        // Test America's Test Kitchen selectors
+        let (title, desc, image) = get_site_selectors("www.americastestkitchen.com");
+        assert!(title.contains("h1"));
+        assert!(desc.contains("meta[name='description']") || desc.contains("og:description"));
         assert!(image.contains("meta[property='og:image']"));
 
         // Test generic fallback selectors

@@ -240,7 +240,13 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
   const isValidUrl = (urlString: string) => {
     try {
       const urlObj = new URL(urlString);
-      return urlObj.hostname.includes('allrecipes.com') && urlObj.pathname.includes('/recipes/');
+      const hostname = urlObj.hostname;
+      const pathname = urlObj.pathname;
+      const isAllRecipes = hostname.includes('allrecipes.com') && pathname.includes('/recipes/');
+      const isATK = hostname.includes('americastestkitchen.com') && pathname.includes('/recipes/');
+      const isSeriousEats = hostname.includes('seriouseats.com');
+      const isBonAppetit = hostname.includes('bonappetit.com');
+      return isAllRecipes || isATK || isSeriousEats || isBonAppetit;
     } catch {
       return false;
     }
@@ -271,20 +277,20 @@ const BatchImportDialog: React.FC<BatchImportDialogProps> = ({
             {/* URL Input */}
             <Box>
               <Typography variant="h6" gutterBottom>
-                AllRecipes Category URL
+                Category URL
               </Typography>
               <TextField
                 fullWidth
                 label="Category URL"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.allrecipes.com/recipes/79/desserts"
+                placeholder="https://www.bonappetit.com/recipes"
                 error={url.length > 0 && !isValidUrl(url)}
                 data-testid="batchImportDialog-input-url"
                 helperText={
                   url.length > 0 && !isValidUrl(url)
-                    ? 'Please enter a valid AllRecipes category URL'
-                    : 'Enter the URL of an AllRecipes category page to import all recipes from that category and its subcategories'
+                    ? "Please enter a valid AllRecipes, America's Test Kitchen, Serious Eats, or Bon Appétit category URL"
+                    : "Enter the URL of an AllRecipes, America's Test Kitchen, Serious Eats, or Bon Appétit category page to import all recipes from that category"
                 }
               />
             </Box>

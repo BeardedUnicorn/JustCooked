@@ -1895,7 +1895,16 @@ impl Database {
             date_modified,
             rating: row.get("rating"),
             difficulty: row.get("difficulty"),
-            is_favorite: row.get("is_favorite"),
+            is_favorite: {
+                // Handle is_favorite conversion from SQLite integer to Option<bool>
+                match row.try_get::<Option<i32>, _>("is_favorite") {
+                    Ok(Some(1)) => Some(true),
+                    Ok(Some(0)) => Some(false),
+                    Ok(Some(_)) => None, // Invalid value, treat as None
+                    Ok(None) => None,
+                    Err(_) => None, // Column doesn't exist or other error
+                }
+            },
             personal_notes: row.get("personal_notes"),
             collections,
             nutritional_info,

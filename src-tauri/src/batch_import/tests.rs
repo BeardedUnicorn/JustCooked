@@ -75,9 +75,16 @@ mod tests {
     async fn test_is_valid_category_url() {
         let importer = BatchImporter::new();
 
-        // Valid category URLs
+        // Valid AllRecipes category URLs
         assert!(importer.is_valid_category_url("https://www.allrecipes.com/recipes/79/desserts"));
         assert!(importer.is_valid_category_url("https://allrecipes.com/recipes/17562/dinner/main-dishes"));
+
+        // Valid ATK category URLs
+        assert!(importer.is_valid_category_url("https://www.americastestkitchen.com/recipes/all"));
+        assert!(importer.is_valid_category_url("https://www.americastestkitchen.com/recipes/browse/chicken"));
+
+        // Invalid: ATK individual recipe should NOT be a category
+        assert!(!importer.is_valid_category_url("https://www.americastestkitchen.com/recipes/12345-perfect-cookies"));
 
         // Invalid URLs
         assert!(!importer.is_valid_category_url("https://www.allrecipes.com/recipe/123/individual-recipe"));
@@ -90,20 +97,31 @@ mod tests {
         // Test using the standalone function since the method is now internal
         use crate::batch_import::is_valid_recipe_url_standalone;
 
-        // Valid recipe URLs
+        // Valid AllRecipes recipe URLs
         assert!(is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123/chocolate-chip-cookies"));
         assert!(is_valid_recipe_url_standalone("https://allrecipes.com/recipe/456/banana-bread"));
 
-        // Invalid URLs - no recipe name after ID
+        // Invalid AllRecipes URLs - no recipe name after ID
         assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/123"));
         assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipe/456/"));
 
-        // Invalid URLs - not AllRecipes
+        // Invalid URLs - not a supported site
         assert!(!is_valid_recipe_url_standalone("https://example.com/recipe/123/test"));
         assert!(!is_valid_recipe_url_standalone("invalid-url"));
 
-        // Invalid URLs - not recipe path
+        // Invalid AllRecipes URLs - not a recipe path
         assert!(!is_valid_recipe_url_standalone("https://www.allrecipes.com/recipes/79/desserts"));
+
+        // Valid ATK recipe URLs
+        assert!(is_valid_recipe_url_standalone("https://www.americastestkitchen.com/recipes/12345-perfect-chocolate-chip-cookies"));
+        assert!(is_valid_recipe_url_standalone("https://www.americastestkitchen.com/recipes/98765-beef-stew"));
+
+        // Invalid ATK URLs - category/listing pages are not recipes
+        assert!(!is_valid_recipe_url_standalone("https://www.americastestkitchen.com/recipes/all"));
+        assert!(!is_valid_recipe_url_standalone("https://www.americastestkitchen.com/recipes/browse/chicken"));
+
+        // Invalid ATK URLs - no numeric ID
+        assert!(!is_valid_recipe_url_standalone("https://www.americastestkitchen.com/recipes/chocolate-chip-cookies"));
     }
 
     #[tokio::test]
@@ -942,5 +960,505 @@ mod tests {
         // (8 tasks, 5 concurrent, 100ms each = at least 2 batches = 200ms)
         assert!(elapsed >= std::time::Duration::from_millis(180),
                 "Should take at least 180ms due to rate limiting, took {:?}", elapsed);
+    }
+
+    // -------------------------------------------------------------------------
+    // ATK Pagination Tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_build_atk_page_url_page_1() {
+        use crate::batch_import::build_atk_page_url;
+
+        let base = "https://www.americastestkitchen.com/recipes/all";
+        let result = build_atk_page_url(base, 1);
+        assert_eq!(result, base, "Page 1 should return the URL unchanged");
+    }
+
+    #[test]
+    fn test_build_atk_page_url_page_2() {
+        use crate::batch_import::build_atk_page_url;
+
+        let base = "https://www.americastestkitchen.com/recipes/all";
+        let result = build_atk_page_url(base, 2);
+        assert!(result.contains("page=2"), "Page 2 should include page=2");
+        assert!(result.starts_with("https://www.americastestkitchen.com/recipes/all"));
+    }
+
+    #[test]
+    fn test_build_atk_page_url_replaces_existing_page_param() {
+        use crate::batch_import::build_atk_page_url;
+
+        // If the base already has page=1, it should be replaced with page=3
+        let base = "https://www.americastestkitchen.com/recipes/all?page=1";
+        let result = build_atk_page_url(base, 3);
+        assert!(result.contains("page=3"), "Should replace existing page param");
+        assert!(!result.contains("page=1"), "Old page param should be gone");
+    }
+
+    #[test]
+    fn test_build_atk_page_url_preserves_other_params() {
+        use crate::batch_import::build_atk_page_url;
+
+        let base = "https://www.americastestkitchen.com/recipes/all?category=chicken";
+        let result = build_atk_page_url(base, 2);
+        assert!(result.contains("category=chicken"), "Other params should be preserved");
+        assert!(result.contains("page=2"), "New page param should be present");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_load_more_button_text() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <div class="recipe-list">
+                    <a href="/recipes/12345-test">Test Recipe</a>
+                </div>
+                <button class="btn-primary">Load More</button>
+            </body></html>
+        "#;
+        assert!(atk_page_has_more(html), "Should detect 'Load More' button text");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_show_more_button_text() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <button>Show More Recipes</button>
+            </body></html>
+        "#;
+        assert!(atk_page_has_more(html), "Should detect 'Show More' button text");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_css_class_selector() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <div class="recipe-list"></div>
+                <button class="LoadMore__button" data-testid="load-more-btn">Load More</button>
+            </body></html>
+        "#;
+        assert!(atk_page_has_more(html), "Should detect load-more CSS class");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_rel_next_link() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html>
+                <head><link rel="next" href="/recipes/all?page=3" /></head>
+                <body></body>
+            </html>
+        "#;
+        assert!(atk_page_has_more(html), "Should detect rel=next link");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_next_data_has_next_page() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <script id="__NEXT_DATA__" type="application/json">
+                    {"props":{"pageProps":{"pagination":{"hasNextPage":true,"totalCount":500,"loadedCount":24}}}}
+                </script>
+            </body></html>
+        "#;
+        assert!(atk_page_has_more(html), "Should detect hasNextPage=true in __NEXT_DATA__");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_next_data_no_more_pages() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <script id="__NEXT_DATA__" type="application/json">
+                    {"props":{"pageProps":{"pagination":{"hasNextPage":false}}}}
+                </script>
+            </body></html>
+        "#;
+        assert!(!atk_page_has_more(html), "Should detect hasNextPage=false in __NEXT_DATA__");
+    }
+
+    #[test]
+    fn test_atk_page_has_more_no_signals() {
+        use crate::batch_import::atk_page_has_more;
+
+        let html = r#"
+            <html><body>
+                <div class="recipe-list">
+                    <a href="/recipes/12345-test">Test Recipe</a>
+                </div>
+                <p>That's all the recipes!</p>
+            </body></html>
+        "#;
+        assert!(!atk_page_has_more(html), "Should return false when no more-pages signals present");
+    }
+
+    #[tokio::test]
+    async fn test_atk_pagination_stops_when_no_new_urls() {
+        use tokio::time::{timeout, Duration};
+
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Page 1: 2 recipes + Load More button
+        let page1_html = r#"
+            <html><body>
+                <a href="https://www.americastestkitchen.com/recipes/11111-beef-stew">Beef Stew</a>
+                <a href="https://www.americastestkitchen.com/recipes/22222-chicken-soup">Chicken Soup</a>
+                <button>Load More</button>
+            </body></html>
+        "#;
+
+        // Page 2: same 2 recipes (no new ones) — should trigger stop
+        let page2_html = r#"
+            <html><body>
+                <a href="https://www.americastestkitchen.com/recipes/11111-beef-stew">Beef Stew</a>
+                <a href="https://www.americastestkitchen.com/recipes/22222-chicken-soup">Chicken Soup</a>
+                <button>Load More</button>
+            </body></html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/all"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(page1_html))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/all"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(page2_html))
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/recipes/all", mock_server.uri());
+
+        let result = timeout(
+            Duration::from_secs(15),
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &start_url),
+        )
+        .await;
+
+        assert!(result.is_ok(), "Should not timeout");
+        let urls = result.unwrap().unwrap();
+        assert_eq!(urls.len(), 2, "Should have exactly 2 unique recipe URLs");
+    }
+
+    #[tokio::test]
+    async fn test_atk_pagination_collects_multiple_pages() {
+        use tokio::time::{timeout, Duration};
+
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Page 1: 2 unique recipes + Load More button
+        let page1_html = r#"
+            <html><body>
+                <a href="https://www.americastestkitchen.com/recipes/11111-beef-stew">Beef Stew</a>
+                <a href="https://www.americastestkitchen.com/recipes/22222-chicken-soup">Chicken Soup</a>
+                <button>Load More</button>
+            </body></html>
+        "#;
+
+        // Page 2: 2 more unique recipes, no Load More button
+        let page2_html = r#"
+            <html><body>
+                <a href="https://www.americastestkitchen.com/recipes/33333-pasta">Pasta</a>
+                <a href="https://www.americastestkitchen.com/recipes/44444-salad">Salad</a>
+            </body></html>
+        "#;
+
+        // Mount page=2 mock FIRST so it takes priority for page=2 requests.
+        // The less-specific page=1 mock is mounted second.
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::query_param("page", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(page2_html))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/all"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(page1_html))
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/recipes/all", mock_server.uri());
+
+        let result = timeout(
+            Duration::from_secs(20),
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &start_url),
+        )
+        .await;
+
+        assert!(result.is_ok(), "Should not timeout");
+        let urls = result.unwrap().unwrap();
+        assert_eq!(urls.len(), 4, "Should collect all 4 unique recipe URLs across both pages");
+    }
+
+    // -------------------------------------------------------------------------
+    // ATK __NEXT_DATA__ extraction tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_extract_atk_urls_from_next_data_basic() {
+        use crate::batch_import::extract_atk_urls_from_next_data;
+
+        let html = r#"
+            <html><head>
+                <script id="__NEXT_DATA__" type="application/json">
+                {
+                    "props": {
+                        "pageProps": {
+                            "recipes": [
+                                {"path": "/recipes/12345-perfect-chocolate-chip-cookies", "title": "Cookies"},
+                                {"path": "/recipes/67890-best-beef-stew", "title": "Beef Stew"},
+                                {"path": "/recipes/all", "title": "Browse All"}
+                            ],
+                            "pagination": {"hasNextPage": false}
+                        }
+                    }
+                }
+                </script>
+            </head><body></body></html>
+        "#;
+
+        let urls = extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 2, "Should extract 2 valid recipe URLs (not the /recipes/all browse page)");
+        assert!(urls.iter().any(|u| u.contains("/recipes/12345-perfect-chocolate-chip-cookies")));
+        assert!(urls.iter().any(|u| u.contains("/recipes/67890-best-beef-stew")));
+        // /recipes/all should be filtered out (not a valid recipe URL)
+        assert!(!urls.iter().any(|u| u.ends_with("/recipes/all")));
+    }
+
+    #[test]
+    fn test_extract_atk_urls_from_next_data_deeply_nested() {
+        use crate::batch_import::extract_atk_urls_from_next_data;
+
+        // Recipe paths buried inside deeply nested JSON (real ATK shape may vary)
+        let html = r#"
+            <html><head>
+                <script id="__NEXT_DATA__" type="application/json">
+                {
+                    "props": {
+                        "pageProps": {
+                            "searchResults": {
+                                "results": [
+                                    {
+                                        "type": "recipe",
+                                        "document": {
+                                            "path": "/recipes/11111-roast-chicken",
+                                            "title": "Roast Chicken"
+                                        }
+                                    },
+                                    {
+                                        "type": "recipe",
+                                        "document": {
+                                            "path": "/recipes/22222-pasta-carbonara",
+                                            "title": "Pasta Carbonara"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+                </script>
+            </head><body></body></html>
+        "#;
+
+        let urls = extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 2, "Should find paths buried in deeply nested JSON");
+        assert!(urls.iter().any(|u| u.contains("/recipes/11111-roast-chicken")));
+        assert!(urls.iter().any(|u| u.contains("/recipes/22222-pasta-carbonara")));
+    }
+
+    #[test]
+    fn test_extract_atk_urls_from_next_data_no_script_tag() {
+        use crate::batch_import::extract_atk_urls_from_next_data;
+
+        let html = r#"
+            <html><body>
+                <p>No __NEXT_DATA__ here</p>
+            </body></html>
+        "#;
+
+        let urls = extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 0, "Should return empty when no __NEXT_DATA__ tag present");
+    }
+
+    #[test]
+    fn test_extract_atk_urls_from_next_data_invalid_json() {
+        use crate::batch_import::extract_atk_urls_from_next_data;
+
+        let html = r#"
+            <html><head>
+                <script id="__NEXT_DATA__" type="application/json">
+                    { this is not valid json !!!
+                </script>
+            </head><body></body></html>
+        "#;
+
+        let urls = extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 0, "Should return empty for invalid JSON");
+    }
+
+    #[test]
+    fn test_extract_atk_urls_from_next_data_deduplicates() {
+        use crate::batch_import::extract_atk_urls_from_next_data;
+
+        // Same path appears twice in different parts of the JSON
+        let html = r#"
+            <html><head>
+                <script id="__NEXT_DATA__" type="application/json">
+                {
+                    "props": {
+                        "pageProps": {
+                            "featured": {"path": "/recipes/11111-roast-chicken"},
+                            "recipes": [
+                                {"path": "/recipes/11111-roast-chicken"},
+                                {"path": "/recipes/22222-beef-stew"}
+                            ]
+                        }
+                    }
+                }
+                </script>
+            </head><body></body></html>
+        "#;
+
+        let urls = extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 2, "Duplicate paths should be deduplicated");
+    }
+
+    /// Integration test: mock server returns HTML with __NEXT_DATA__ but NO <a> tags.
+    /// This simulates ATK's JS-rendered page and verifies the full fallback flow.
+    #[tokio::test]
+    async fn test_atk_pagination_falls_back_to_next_data_when_no_anchor_tags() {
+        use tokio::time::{timeout, Duration};
+
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Simulates what reqwest actually gets from ATK: server-rendered HTML has no
+        // <a href="/recipes/..."> elements — all recipe data lives in __NEXT_DATA__.
+        let next_data_only_html = r#"
+            <html>
+                <head>
+                    <script id="__NEXT_DATA__" type="application/json">
+                    {
+                        "props": {
+                            "pageProps": {
+                                "recipes": [
+                                    {"path": "/recipes/11111-beef-stew", "title": "Beef Stew"},
+                                    {"path": "/recipes/22222-chicken-tikka", "title": "Chicken Tikka"},
+                                    {"path": "/recipes/33333-pasta-primavera", "title": "Pasta Primavera"}
+                                ],
+                                "pagination": {
+                                    "hasNextPage": false,
+                                    "totalCount": 3
+                                }
+                            }
+                        }
+                    }
+                    </script>
+                </head>
+                <body>
+                    <div id="__NEXT_PAGE__"><!-- React renders here --></div>
+                </body>
+            </html>
+        "#;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/all"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(next_data_only_html))
+            .mount(&mock_server)
+            .await;
+
+        // Use a hostname that will be treated as ATK
+        // We need to override the host check — but the mock server uses 127.0.0.1.
+        // So we'll call extract_atk_urls_from_next_data directly for this unit-level integration test.
+        let html = next_data_only_html;
+        let urls = crate::batch_import::extract_atk_urls_from_next_data(
+            html,
+            "https://www.americastestkitchen.com/recipes/all",
+        );
+
+        assert_eq!(urls.len(), 3, "Should extract 3 recipe URLs from __NEXT_DATA__");
+        assert!(urls.iter().any(|u| u.contains("/recipes/11111-beef-stew")));
+        assert!(urls.iter().any(|u| u.contains("/recipes/22222-chicken-tikka")));
+        assert!(urls.iter().any(|u| u.contains("/recipes/33333-pasta-primavera")));
+        // All URLs should be absolute ATK URLs
+        for url in &urls {
+            assert!(url.starts_with("https://www.americastestkitchen.com"), "URLs should be absolute: {}", url);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_atk_pagination_handles_server_error_gracefully() {
+        use tokio::time::{timeout, Duration};
+
+        let mock_server = MockServer::start().await;
+        let importer = BatchImporter::new();
+
+        // Page 1: valid recipes
+        let page1_html = r#"
+            <html><body>
+                <a href="https://www.americastestkitchen.com/recipes/11111-beef-stew">Beef Stew</a>
+                <button>Load More</button>
+            </body></html>
+        "#;
+
+        // Page 2: server returns 404 — should stop gracefully.
+        // Mount page=2 mock first so it matches before the catch-all page=1 mock.
+        Mock::given(method("GET"))
+            .and(wiremock::matchers::query_param("page", "2"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/recipes/all"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(page1_html))
+            .mount(&mock_server)
+            .await;
+
+        let start_url = format!("{}/recipes/all", mock_server.uri());
+
+        let result = timeout(
+            Duration::from_secs(15),
+            crate::batch_import::extract_recipe_urls_from_page_concurrent(&importer.client, &start_url),
+        )
+        .await;
+
+        assert!(result.is_ok(), "Should not timeout");
+        let urls = result.unwrap().unwrap();
+        assert_eq!(urls.len(), 1, "Should return URLs from page 1 before the error");
     }
 }

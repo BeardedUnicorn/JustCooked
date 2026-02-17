@@ -281,13 +281,20 @@ proptest! {
         let json_data = json!({
             "recipeIngredient": ingredients
         });
-        
-        let result = JustCooked::recipe_import::extract_ingredients_from_json(&json_data);
-        assert_eq!(result.len(), ingredients.len());
 
-        // Verify all ingredients are preserved
-        for (i, ingredient) in ingredients.iter().enumerate() {
-            assert_eq!(result[i], *ingredient);
+        let result = JustCooked::recipe_import::extract_ingredients_from_json(&json_data);
+
+        // Filter out ingredients that would be rejected by validation
+        let expected_ingredients: Vec<String> = ingredients.iter()
+            .map(|s| JustCooked::recipe_import::clean_raw_ingredient_string(s))
+            .filter(|s| !s.is_empty() && JustCooked::recipe_import::is_valid_ingredient_name(s))
+            .collect();
+
+        assert_eq!(result.len(), expected_ingredients.len());
+
+        // Verify all ingredients are preserved with proper cleaning
+        for (i, expected) in expected_ingredients.iter().enumerate() {
+            assert_eq!(result[i], *expected);
         }
     }
 

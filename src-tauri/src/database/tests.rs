@@ -57,7 +57,7 @@ mod tests {
             date_modified: Utc::now(),
             rating: Some(5),
             difficulty: Some("Easy".to_string()),
-            is_favorite: Some(true),
+            is_favorite: Some(false), // Changed from true to false to avoid affecting favorite tests
             personal_notes: Some("This is a test recipe".to_string()),
             collections: vec!["test-collection".to_string()],
             nutritional_info: Some(NutritionalInfo {
@@ -125,6 +125,7 @@ mod tests {
         let mut recipe2 = create_test_recipe();
         recipe2.id = "test-recipe-2".to_string();
         recipe2.title = "Second Test Recipe".to_string();
+        recipe2.source_url = "https://example.com/recipe2".to_string();
         db.save_recipe(&recipe2).await.unwrap();
 
         // Should now have two recipes
@@ -166,16 +167,19 @@ mod tests {
         recipe1.id = "recipe-1".to_string();
         recipe1.title = "Chocolate Cake".to_string();
         recipe1.description = "A delicious chocolate cake".to_string();
+        recipe1.source_url = "https://example.com/recipe1".to_string();
 
         let mut recipe2 = create_test_recipe();
         recipe2.id = "recipe-2".to_string();
         recipe2.title = "Vanilla Cookies".to_string();
         recipe2.description = "Sweet vanilla cookies".to_string();
+        recipe2.source_url = "https://example.com/recipe2".to_string();
 
         let mut recipe3 = create_test_recipe();
         recipe3.id = "recipe-3".to_string();
         recipe3.title = "Strawberry Pie".to_string();
         recipe3.description = "Fresh strawberry pie with chocolate drizzle".to_string();
+        recipe3.source_url = "https://example.com/recipe3".to_string();
 
         // Save all recipes
         db.save_recipe(&recipe1).await.unwrap();
@@ -206,14 +210,17 @@ mod tests {
         // Create test recipes with different tags
         let mut recipe1 = create_test_recipe();
         recipe1.id = "recipe-1".to_string();
+        recipe1.source_url = "https://example.com/recipe1".to_string();
         recipe1.tags = vec!["dessert".to_string(), "chocolate".to_string()];
 
         let mut recipe2 = create_test_recipe();
         recipe2.id = "recipe-2".to_string();
+        recipe2.source_url = "https://example.com/recipe2".to_string();
         recipe2.tags = vec!["dessert".to_string(), "vanilla".to_string()];
 
         let mut recipe3 = create_test_recipe();
         recipe3.id = "recipe-3".to_string();
+        recipe3.source_url = "https://example.com/recipe3".to_string();
         recipe3.tags = vec!["main-course".to_string(), "chicken".to_string()];
 
         // Save all recipes
@@ -242,14 +249,17 @@ mod tests {
         // Create test recipes with different favorite status
         let mut recipe1 = create_test_recipe();
         recipe1.id = "recipe-1".to_string();
+        recipe1.source_url = "https://example.com/recipe1".to_string();
         recipe1.is_favorite = Some(true);
 
         let mut recipe2 = create_test_recipe();
         recipe2.id = "recipe-2".to_string();
+        recipe2.source_url = "https://example.com/recipe2".to_string();
         recipe2.is_favorite = Some(false);
 
         let mut recipe3 = create_test_recipe();
         recipe3.id = "recipe-3".to_string();
+        recipe3.source_url = "https://example.com/recipe3".to_string();
         recipe3.is_favorite = None;
 
         // Save all recipes
@@ -259,6 +269,7 @@ mod tests {
 
         // Get favorite recipes - should only find recipe1
         let results = db.get_favorite_recipes().await.unwrap();
+
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "recipe-1");
     }

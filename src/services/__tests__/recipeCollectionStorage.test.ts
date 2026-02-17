@@ -136,7 +136,7 @@ describe('recipeCollectionStorage', () => {
       const collection = await createCollection('New Collection', 'Description');
 
       expect(collection).toEqual({
-        id: 'test-uuid-123',
+        id: '550e8400-e29b-41d4-a716-446655440000',
         name: 'New Collection',
         description: 'Description',
         recipeIds: [],

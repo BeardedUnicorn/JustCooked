@@ -129,6 +129,11 @@ export async function importRecipeFromUrl(url: string): Promise<Recipe> {
 }
 
 export async function reImportRecipe(recipeId: string, sourceUrl: string): Promise<string> {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.recipeImport?.reImportRecipe) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.recipeImport.reImportRecipe(recipeId, sourceUrl);
+  }
+
   const startTime = performance.now();
 
   try {

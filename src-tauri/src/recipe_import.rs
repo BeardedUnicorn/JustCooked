@@ -50,7 +50,7 @@ pub async fn import_recipe_from_url(url: &str) -> Result<ImportedRecipe, RecipeI
     if !is_supported_url(&parsed_url) {
         warn!("Unsupported website attempted: {}", url);
         return Err(RecipeImportError {
-            message: "Unsupported website. Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes.".to_string(),
+            message: "Unsupported website. Supported sites: AllRecipes, Food Network, BBC Good Food, Serious Eats, Epicurious, Food.com, Taste of Home, Delish, Bon Appétit, Simply Recipes, America's Test Kitchen.".to_string(),
             error_type: "UnsupportedSite".to_string(),
         });
     }
@@ -127,7 +127,8 @@ pub fn is_supported_url(url: &Url) -> bool {
         host.contains("tasteofhome.com") ||
         host.contains("delish.com") ||
         host.contains("bonappetit.com") ||
-        host.contains("simplyrecipes.com")
+        host.contains("simplyrecipes.com") ||
+        host.contains("americastestkitchen.com")
     } else {
         false
     }
@@ -279,6 +280,9 @@ pub fn extract_from_html_selectors(document: &Html, source_url: &str) -> Result<
                 .replace(" - Delish", "")
                 .replace(" | Bon Appétit", "")
                 .replace(" | Simply Recipes", "")
+                .replace(" | America's Test Kitchen", "")
+                .replace(" | Cook's Illustrated", "")
+                .replace(" | Cook's Country", "")
         })
         .unwrap_or_else(|| "Untitled Recipe".to_string());
 
@@ -345,6 +349,12 @@ pub fn get_site_selectors(host: &str) -> (String, String, String) {
             "h1.recipe-title, h1.hed, title".to_string(),
             "meta[name='description'], .recipe-intro".to_string(),
             "meta[property='og:image'], .recipe-image img".to_string(),
+        )
+    } else if host.contains("americastestkitchen.com") {
+        (
+            "h1.BaseRecipeInfo__title, h1[class*='RecipeInfo__title'], h1[class*='recipe-title'], h1, title".to_string(),
+            "meta[name='description'], meta[property='og:description'], [class*='recipe-description'], [class*='RecipeDescription']".to_string(),
+            "meta[property='og:image'], [class*='RecipeImage'] img, [class*='recipe-image'] img, .photo-container img".to_string(),
         )
     } else {
         // Generic fallback selectors
@@ -519,7 +529,7 @@ pub fn is_valid_ingredient_name(name: &str) -> bool {
         "spray", "leaf", "leaves", "caps", "whites", "yolks", "cubed",
         "halved", "quartered", "peeled", "seeded", "trimmed", "baby doll",
         "chopsticks for handles", "with flour", "for rolling", "juiced",
-        "mashed", "crushed", "fresh", "dried", "frozen"
+        "mashed", "crushed", "fresh", "dried", "frozen", "to taste", "as needed"
     ];
 
     let lower_core = core_ingredient.to_lowercase();
@@ -550,15 +560,16 @@ pub fn extract_core_ingredient_name(name: &str) -> String {
     let mut cleaned = name.trim().to_string();
 
     // Remove common suffixes that indicate preparation or serving suggestions
+    // Order matters: longer, more specific patterns should be checked first
     let suffixes_to_remove = [
-        ", to taste",
-        " to taste",
-        ", as needed",
-        " as needed",
         ", or to taste",
         " or to taste",
         ", or as needed",
         " or as needed",
+        ", to taste",
+        " to taste",
+        ", as needed",
+        " as needed",
         ", divided",
         " divided",
         ", optional",

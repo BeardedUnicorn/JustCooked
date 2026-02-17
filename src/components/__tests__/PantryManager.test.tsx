@@ -420,9 +420,9 @@ describe('PantryManager Component', () => {
         expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalled();
       });
 
-      // Check that "No ingredient mapped" is displayed for items without mappings
-      const ingredientMapping2 = screen.getByTestId('pantry-item-item-2-ingredient-mapping');
-      expect(ingredientMapping2).toHaveTextContent('Ingredient: No ingredient mapped');
+      // Check that the link ingredient button is displayed for items without mappings (instead of mapping text)
+      const linkButton = screen.getByTestId('pantry-item-item-2-link-ingredient-button');
+      expect(linkButton).toBeInTheDocument();
     });
 
     test('should handle ingredient mapping service errors gracefully', async () => {
@@ -435,12 +435,12 @@ describe('PantryManager Component', () => {
         expect(mockProductIngredientMappingService.getAllMappings).toHaveBeenCalled();
       });
 
-      // All items should show "No ingredient mapped" when service fails
-      const ingredientMapping1 = screen.getByTestId('pantry-item-item-1-ingredient-mapping');
-      expect(ingredientMapping1).toHaveTextContent('Ingredient: No ingredient mapped');
+      // All items should show link ingredient buttons when service fails (no mappings loaded)
+      const linkButton1 = screen.getByTestId('pantry-item-item-1-link-ingredient-button');
+      expect(linkButton1).toBeInTheDocument();
 
-      const ingredientMapping2 = screen.getByTestId('pantry-item-item-2-ingredient-mapping');
-      expect(ingredientMapping2).toHaveTextContent('Ingredient: No ingredient mapped');
+      const linkButton2 = screen.getByTestId('pantry-item-item-2-link-ingredient-button');
+      expect(linkButton2).toBeInTheDocument();
     });
   });
 

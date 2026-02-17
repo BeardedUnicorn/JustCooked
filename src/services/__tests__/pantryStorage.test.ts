@@ -57,7 +57,7 @@ describe('pantryStorage', () => {
       expect(mockInvoke).toHaveBeenCalledWith('db_save_pantry_item', {
         item: expect.objectContaining({
           ...newItem,
-          id: 'test-uuid-123',
+          id: '550e8400-e29b-41d4-a716-446655440000',
           dateAdded: expect.any(String),
           dateModified: expect.any(String),
         }),

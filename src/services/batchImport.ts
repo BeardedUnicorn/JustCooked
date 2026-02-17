@@ -33,8 +33,8 @@ export class BatchImportService {
       });
 
       // Validate URL
-      if (!this.isValidAllRecipesUrl(startUrl)) {
-        const error = new Error('Invalid AllRecipes URL. Please provide a valid AllRecipes category URL.');
+      if (!this.isValidBatchImportUrl(startUrl)) {
+        const error = new Error("Invalid URL. Please provide a valid AllRecipes or America's Test Kitchen category URL.");
         await logger.error('Invalid URL provided for batch import', { startUrl });
         throw error;
       }
@@ -215,29 +215,49 @@ export class BatchImportService {
   }
 
   /**
-   * Validate if URL is a valid AllRecipes category URL
+   * Validate if URL is a valid batch-import category URL (AllRecipes or America's Test Kitchen)
    */
-  private isValidAllRecipesUrl(url: string): boolean {
+  private isValidBatchImportUrl(url: string): boolean {
     try {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname.toLowerCase();
       const pathname = urlObj.pathname.toLowerCase();
 
-      return (
+      const isAllRecipes =
         hostname.includes('allrecipes.com') &&
         pathname.includes('/recipes/') &&
-        !pathname.includes('/recipe/') // Exclude individual recipes
-      );
+        !pathname.includes('/recipe/'); // Exclude individual recipes
+
+      const isATK =
+        hostname.includes('americastestkitchen.com') &&
+        pathname.includes('/recipes/');
+
+      return isAllRecipes || isATK;
     } catch {
       return false;
     }
   }
 
   /**
-   * Get suggested category URLs for AllRecipes
+   * Get suggested category URLs for AllRecipes, America's Test Kitchen, Serious Eats, and Bon Appétit
    */
   getSuggestedCategoryUrls(): Array<{ name: string; url: string; description: string }> {
     return [
+      {
+        name: "ATK – All Recipes",
+        url: 'https://www.americastestkitchen.com/recipes/all',
+        description: "All recipes from America's Test Kitchen",
+      },
+      {
+        name: 'Serious Eats – All Recipes',
+        url: 'https://www.seriouseats.com/all-recipes-5117985',
+        description: 'All recipes from Serious Eats',
+      },
+      {
+        name: 'Bon Appétit – All Recipes',
+        url: 'https://www.bonappetit.com/recipes',
+        description: 'All recipes from Bon Appétit',
+      },
       {
         name: 'Desserts',
         url: 'https://www.allrecipes.com/recipes/79/desserts',

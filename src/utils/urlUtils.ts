@@ -16,7 +16,8 @@ export function isSupportedUrl(url: string): boolean {
            hostname.includes('tasteofhome.com') ||
            hostname.includes('delish.com') ||
            hostname.includes('bonappetit.com') ||
-           hostname.includes('simplyrecipes.com');
+           hostname.includes('simplyrecipes.com') ||
+           hostname.includes('americastestkitchen.com');
   } catch {
     return false;
   }

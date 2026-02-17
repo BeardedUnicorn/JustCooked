@@ -80,10 +80,10 @@ describe('searchHistoryStorage', () => {
 
       await saveSearch('chocolate cake');
 
-      expect(mockInvoke).toHaveBeenCalledWith('db_get_recent_searches', { limit: 50 });
+      expect(mockInvoke).toHaveBeenCalledWith('db_get_recent_searches', { limit: 10 });
       expect(mockInvoke).toHaveBeenCalledWith('db_save_search_history', {
         search: expect.objectContaining({
-          id: 'test-uuid-123',
+          id: '550e8400-e29b-41d4-a716-446655440000',
           query: 'chocolate cake',
           timestamp: expect.any(String),
           filters: {},

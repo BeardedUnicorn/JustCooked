@@ -8,6 +8,11 @@ export class DatabaseManagementService {
    * Export the entire database to a JSON file
    */
   async exportDatabase(): Promise<void> {
+    // Check for Storybook mocks
+    if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.databaseManagementService?.exportDatabase) {
+      return (window as any).__STORYBOOK_SERVICE_MOCKS__.databaseManagementService.exportDatabase();
+    }
+
     try {
       // Get the database export data from the backend
       const exportData: DatabaseExport = await invoke('db_export_database');
@@ -45,6 +50,11 @@ export class DatabaseManagementService {
    * Import database from a JSON file
    */
   async importDatabase(replaceExisting: boolean = false): Promise<DatabaseImportResult> {
+    // Check for Storybook mocks
+    if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.databaseManagementService?.importDatabase) {
+      return (window as any).__STORYBOOK_SERVICE_MOCKS__.databaseManagementService.importDatabase(replaceExisting);
+    }
+
     try {
       // Show open dialog
       const filePath = await open({
@@ -68,7 +78,7 @@ export class DatabaseManagementService {
 
       // Read the file content
       const fileContent = await readTextFile(filePath as string);
-      
+
       // Parse the JSON data
       let importData: DatabaseExport;
       try {
@@ -98,6 +108,11 @@ export class DatabaseManagementService {
    * Reset/clear the entire database
    */
   async resetDatabase(): Promise<void> {
+    // Check for Storybook mocks
+    if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.databaseManagementService?.resetDatabase) {
+      return (window as any).__STORYBOOK_SERVICE_MOCKS__.databaseManagementService.resetDatabase();
+    }
+
     try {
       await invoke('db_reset_database');
     } catch (error) {
@@ -170,8 +185,13 @@ export class DatabaseManagementService {
    * Format import result for display
    */
   formatImportResult(result: DatabaseImportResult): string {
+    // Check for Storybook mocks
+    if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.databaseManagementService?.formatImportResult) {
+      return (window as any).__STORYBOOK_SERVICE_MOCKS__.databaseManagementService.formatImportResult(result);
+    }
+
     const parts: string[] = [];
-    
+
     if (result.recipes_imported > 0) {
       parts.push(`${result.recipes_imported} recipes`);
     }
@@ -191,15 +211,15 @@ export class DatabaseManagementService {
       parts.push(`${result.raw_ingredients_imported} raw ingredients`);
     }
 
-    const successMessage = parts.length > 0 
+    const successMessage = parts.length > 0
       ? `Successfully imported: ${parts.join(', ')}`
       : 'No data was imported';
 
-    const failureCount = result.recipes_failed + result.ingredients_failed + 
-                        result.pantry_items_failed + result.collections_failed + 
+    const failureCount = result.recipes_failed + result.ingredients_failed +
+                        result.pantry_items_failed + result.collections_failed +
                         result.searches_failed + result.raw_ingredients_failed;
 
-    const failureMessage = failureCount > 0 
+    const failureMessage = failureCount > 0
       ? `\n${failureCount} items failed to import`
       : '';
 

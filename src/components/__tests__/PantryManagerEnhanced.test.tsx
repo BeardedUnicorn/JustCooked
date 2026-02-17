@@ -519,7 +519,8 @@ describe('PantryManager - Enhanced Functionality', () => {
 
       // Should display the item without errors
       expect(screen.getByText('Incomplete Item')).toBeInTheDocument();
-      expect(screen.getByTestId('pantry-item-incomplete-item-ingredient-mapping')).toHaveTextContent('Ingredient: No ingredient mapped');
+      // Since there's no product code, it should show the link ingredient button instead of mapping text
+      expect(screen.getByTestId('pantry-item-incomplete-item-link-ingredient-button')).toBeInTheDocument();
     });
   });
 

@@ -104,11 +104,11 @@ describe('AppLayout Component', () => {
       expect(screen.getByRole('button', { name: /toggle navigation drawer/i })).toBeInTheDocument();
 
       // Navigation items should be visible
-      expect(screen.getByText('Home')).toBeInTheDocument();
-      expect(screen.getByText('Import Recipe')).toBeInTheDocument();
-      expect(screen.getByText('Search Recipes')).toBeInTheDocument();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
+      expect(screen.getByText('Cookbook')).toBeInTheDocument();
+      expect(screen.getByText('Planner')).toBeInTheDocument();
       expect(screen.getByText('Pantry')).toBeInTheDocument();
-      expect(screen.getByText('Ingredients')).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
     });
 
     test('should toggle drawer when menu button is clicked', async () => {
@@ -121,26 +121,26 @@ describe('AppLayout Component', () => {
       await user.click(menuButton);
       
       // Drawer should still be accessible (persistent drawer)
-      expect(screen.getByText('Home')).toBeInTheDocument();
+      expect(screen.getByText('Dashboard')).toBeInTheDocument();
     });
 
     test('should navigate when menu items are clicked', async () => {
       const user = userEvent.setup();
       renderAppLayout();
 
-      // Click on Import Recipe
-      const importButton = screen.getByText('Import Recipe');
-      await user.click(importButton);
+      // Click on Cookbook
+      const cookbookButton = screen.getByText('Cookbook');
+      await user.click(cookbookButton);
 
-      expect(mockNavigate).toHaveBeenCalledWith('/import');
+      expect(mockNavigate).toHaveBeenCalledWith('/cookbook');
     });
 
     test('should highlight active menu item', () => {
-      mockLocation.pathname = '/search';
+      mockLocation.pathname = '/planner';
       renderAppLayout();
 
-      const searchItem = screen.getByLabelText('Navigate to Search Recipes');
-      expect(searchItem).toHaveAttribute('aria-label', 'Navigate to Search Recipes');
+      const plannerItem = screen.getByLabelText('Navigate to Planner');
+      expect(plannerItem).toHaveAttribute('aria-label', 'Navigate to Planner');
     });
   });
 
@@ -153,10 +153,10 @@ describe('AppLayout Component', () => {
       expect(bottomNav).toBeInTheDocument();
 
       // Navigation items should be in bottom nav - use within to scope to bottom nav
-      const homeButton = screen.getAllByLabelText('Navigate to Home').find(el => 
+      const dashboardButton = screen.getAllByLabelText('Navigate to Dashboard').find(el =>
         bottomNav.contains(el)
       );
-      expect(homeButton).toBeInTheDocument();
+      expect(dashboardButton).toBeInTheDocument();
     });
 
     test('should navigate when bottom navigation items are clicked', async () => {
@@ -164,12 +164,12 @@ describe('AppLayout Component', () => {
       renderAppLayout(<div>Test Content</div>, true);
 
       const bottomNav = screen.getByRole('navigation', { name: 'main navigation' });
-      const searchTab = screen.getAllByLabelText('Navigate to Search Recipes').find(el => 
+      const plannerTab = screen.getAllByLabelText('Navigate to Planner').find(el =>
         bottomNav.contains(el)
       );
-      await user.click(searchTab!);
+      await user.click(plannerTab!);
 
-      expect(mockNavigate).toHaveBeenCalledWith('/search');
+      expect(mockNavigate).toHaveBeenCalledWith('/planner');
     });
 
     test('should show active tab in bottom navigation', () => {
@@ -189,7 +189,7 @@ describe('AppLayout Component', () => {
       mockLocation.pathname = '/recipe/123';
       renderAppLayout();
 
-      // Use getAllByText to handle multiple "Home" elements
+      // Use getAllByText to handle multiple "Home" elements (breadcrumbs)
       const homeElements = screen.getAllByText('Home');
       expect(homeElements.length).toBeGreaterThan(0);
       expect(screen.getByText('Recipe Details')).toBeInTheDocument();
@@ -266,10 +266,10 @@ describe('AppLayout Component', () => {
       await user.tab();
       expect(screen.getByRole('button', { name: /toggle navigation drawer/i })).toHaveFocus();
 
-      // Tab to search input
+      // Tab to queue status button
       await user.tab();
-      const searchInput = screen.getByPlaceholderText('Search recipes...');
-      expect(searchInput).toHaveFocus();
+      const queueButton = screen.getByTestId('queue-status-button');
+      expect(queueButton).toHaveFocus();
     });
   });
 

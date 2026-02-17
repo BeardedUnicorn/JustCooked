@@ -39,9 +39,11 @@ pub fn init_logging(app_data_dir: &PathBuf) -> Result<()> {
         "info"
     };
 
-    // Create environment filter
+    // Create environment filter.
+    // NOTE: the crate name is "JustCooked" (capital J and C) — tracing's EnvFilter
+    // target matching is case-sensitive, so this must match the actual crate name.
     let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(format!("justcooked={},tauri=info", log_level)));
+        .unwrap_or_else(|_| EnvFilter::new(format!("JustCooked={},tauri=info", log_level)));
 
     // Set up the subscriber with both file and console output
     tracing_subscriber::registry()

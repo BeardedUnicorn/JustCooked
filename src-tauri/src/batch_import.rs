@@ -3,6 +3,7 @@
 use reqwest;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -11,7 +12,7 @@ use tokio::task::JoinSet;
 use tokio::sync::Semaphore;
 use url::Url;
 use uuid;
-use tracing::{info, error, warn, instrument};
+use tracing::{debug, info, error, warn, instrument};
 
 // Removed unused import: use crate::recipe_import::import_recipe_from_url;
 
@@ -108,8 +109,54 @@ pub struct BatchImporter {
 
 impl BatchImporter {
     pub fn new() -> Self {
+        let mut default_headers = reqwest::header::HeaderMap::new();
+        default_headers.insert(
+            reqwest::header::ACCEPT,
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+                .parse().unwrap(),
+        );
+        default_headers.insert(
+            reqwest::header::ACCEPT_LANGUAGE,
+            "en-US,en;q=0.9".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-CH-UA".parse::<reqwest::header::HeaderName>().unwrap(),
+            r#""Google Chrome";v="120", "Chromium";v="120", "Not-A.Brand";v="99""#.parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-CH-UA-Mobile".parse::<reqwest::header::HeaderName>().unwrap(),
+            "?0".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-CH-UA-Platform".parse::<reqwest::header::HeaderName>().unwrap(),
+            r#""Windows""#.parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-Fetch-Dest".parse::<reqwest::header::HeaderName>().unwrap(),
+            "document".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-Fetch-Mode".parse::<reqwest::header::HeaderName>().unwrap(),
+            "navigate".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-Fetch-Site".parse::<reqwest::header::HeaderName>().unwrap(),
+            "none".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Sec-Fetch-User".parse::<reqwest::header::HeaderName>().unwrap(),
+            "?1".parse().unwrap(),
+        );
+        default_headers.insert(
+            "Upgrade-Insecure-Requests".parse::<reqwest::header::HeaderName>().unwrap(),
+            "1".parse().unwrap(),
+        );
         let client = reqwest::Client::builder()
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .default_headers(default_headers)
+            .gzip(true)
+            .brotli(true)
+            .deflate(true)
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
@@ -204,8 +251,13 @@ impl BatchImporter {
             Err(_) => return Err("Invalid start URL".to_string()),
         };
 
-        if !start_url.host_str().unwrap_or("").contains("allrecipes.com") {
-            return Err("Only AllRecipes.com URLs are supported for batch import".to_string());
+        let host = start_url.host_str().unwrap_or("");
+        let is_supported_batch_site = host.contains("allrecipes.com")
+            || host.contains("americastestkitchen.com")
+            || host.contains("seriouseats.com")
+            || host.contains("bonappetit.com");
+        if !is_supported_batch_site {
+            return Err("Only AllRecipes.com, America's Test Kitchen, Serious Eats, and Bon Appétit URLs are supported for batch import".to_string());
         }
 
         // Step 1: Crawl categories
@@ -391,9 +443,36 @@ impl BatchImporter {
     fn is_valid_category_url(&self, url: &str) -> bool {
         if let Ok(parsed) = Url::parse(url) {
             if let Some(host) = parsed.host_str() {
-                return host.contains("allrecipes.com") &&
-                       parsed.path().contains("/recipes/") &&
-                       !parsed.path().contains("/recipe/"); // Exclude individual recipes
+                let path = parsed.path();
+
+                if host.contains("allrecipes.com") {
+                    return path.contains("/recipes/") &&
+                           !path.contains("/recipe/"); // Exclude individual recipes
+                }
+
+                if host.contains("americastestkitchen.com") {
+                    // Must contain /recipes/ but must not be an individual recipe
+                    // ATK individual recipes match /recipes/{numeric_id}-{slug}
+                    if !path.contains("/recipes/") {
+                        return false;
+                    }
+                    let atk_recipe_pattern = regex::Regex::new(r"/recipes/\d+-[a-zA-Z]").unwrap();
+                    return !atk_recipe_pattern.is_match(path);
+                }
+
+                if host.contains("seriouseats.com") {
+                    // Serious Eats uses a single listing page as the entry point
+                    // (e.g. /all-recipes-5117985). No sub-category crawling is needed —
+                    // pagination is handled inside extract_seriouseats_recipe_urls_with_pagination.
+                    return false;
+                }
+
+                if host.contains("bonappetit.com") {
+                    // Bon Appétit uses a single listing page (/recipes) as the entry point.
+                    // No sub-category crawling needed — pagination is handled inside
+                    // extract_bonappetit_recipe_urls_with_pagination.
+                    return false;
+                }
             }
         }
         false
@@ -1144,10 +1223,25 @@ impl ReImporter {
 // Removed BatchImporterTask implementation - using standalone functions instead
 
 /// Standalone function for concurrent category processing (avoids lifetime issues in async tasks)
-async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, page_url: &str) -> Result<Vec<String>, String> {
-    // Add timeout wrapper for the entire operation
-    let timeout_duration = Duration::from_secs(45); // Slightly longer than client timeout
+pub async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, page_url: &str) -> Result<Vec<String>, String> {
+    // America's Test Kitchen uses JavaScript-driven "Load More" pagination.
+    // We simulate clicking "Load More" repeatedly by fetching ?page=N until no new URLs appear.
+    // Serious Eats (Dotdash Meredith platform) also uses ?page=N pagination.
+    if let Ok(parsed) = url::Url::parse(page_url) {
+        let host = parsed.host_str().unwrap_or("");
+        if host.contains("americastestkitchen.com") {
+            return extract_atk_recipe_urls_with_pagination(client, page_url).await;
+        }
+        if host.contains("seriouseats.com") {
+            return extract_seriouseats_recipe_urls_with_pagination(client, page_url).await;
+        }
+        if host.contains("bonappetit.com") {
+            return extract_bonappetit_recipe_urls_with_pagination(client, page_url).await;
+        }
+    }
 
+    // All other sites: single-page fetch with timeout
+    let timeout_duration = Duration::from_secs(45); // Slightly longer than client timeout
     let result = tokio::time::timeout(timeout_duration, async {
         let response = client.get(page_url).send().await
             .map_err(|e| format!("Failed to fetch page: {}", e))?;
@@ -1164,14 +1258,904 @@ async fn extract_recipe_urls_from_page_concurrent(client: &reqwest::Client, page
     }
 }
 
+/// Fetches all ATK recipe URLs from a listing page by simulating repeated
+/// "Load More" clicks — implemented as sequential `?page=N` requests until
+/// no new recipe URLs are found or the page signals there are no more results.
+async fn extract_atk_recipe_urls_with_pagination(
+    client: &reqwest::Client,
+    start_url: &str,
+) -> Result<Vec<String>, String> {
+    let mut all_urls: HashSet<String> = HashSet::new();
+    let mut page: u32 = 1;
+
+    // Hard safety cap — ATK has ~2 000 recipes; 100 pages × 24/page = 2 400
+    const MAX_PAGES: u32 = 200;
+    // Per-page request timeout (separate from the overall client timeout)
+    const PAGE_TIMEOUT_SECS: u64 = 45;
+
+    info!("ATK pagination: starting from {} (max {} pages)", start_url, MAX_PAGES);
+
+    loop {
+        if page > MAX_PAGES {
+            warn!("ATK pagination: hit safety cap of {} pages, stopping", MAX_PAGES);
+            break;
+        }
+
+        let page_url = build_atk_page_url(start_url, page);
+        info!("ATK pagination: fetching page {} → {}", page, page_url);
+
+        // Fetch the page with its own timeout
+        let fetch_result = tokio::time::timeout(Duration::from_secs(PAGE_TIMEOUT_SECS), async {
+            let response = client
+                .get(&page_url)
+                .send()
+                .await
+                .map_err(|e| format!("Request failed for ATK page {}: {}", page, e))?;
+
+            let status = response.status();
+            info!("ATK pagination: page {} — HTTP {}", page, status);
+
+            if !status.is_success() {
+                return Err(format!(
+                    "HTTP {} for ATK page {} ({})",
+                    status,
+                    page,
+                    page_url
+                ));
+            }
+
+            response
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read body for ATK page {}: {}", page, e))
+        })
+        .await;
+
+        let html = match fetch_result {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) => {
+                warn!("ATK pagination: page {} error — {}", page, e);
+                break;
+            }
+            Err(_) => {
+                warn!("ATK pagination: page {} timed out after {}s", page, PAGE_TIMEOUT_SECS);
+                break;
+            }
+        };
+
+        debug!("ATK pagination: page {} — fetched {} bytes of HTML", page, html.len());
+
+        // On the first page, log a snippet of the response so we can diagnose
+        // what ATK is actually returning (helpful for debugging bot-detection issues).
+        if page == 1 {
+            // Use chars() to avoid slicing in the middle of a multi-byte UTF-8 sequence.
+            let snippet: String = html.chars().take(800).collect();
+            info!(
+                "ATK pagination: first 800 chars of page 1 HTML:\n{}",
+                snippet
+            );
+
+            // Log whether __NEXT_DATA__ is present and its content
+            if let Some(next_data_offset) = html.find("__NEXT_DATA__") {
+                // Slice from the tag onwards (safe: find() returns a char-boundary offset for ASCII)
+                let preview: String = html[next_data_offset..].chars().take(3000).collect();
+                info!(
+                    "ATK pagination: __NEXT_DATA__ found at byte offset {}. Preview:\n{}",
+                    next_data_offset,
+                    preview
+                );
+            } else {
+                info!(
+                    "ATK pagination: NO __NEXT_DATA__ found in page 1 HTML \
+                     — page may be a bot-detection wall or login redirect. \
+                     Check the HTML snippet above."
+                );
+            }
+        }
+
+        // Count total <a> tags in the HTML for diagnostic logging
+        {
+            let diag_doc = Html::parse_document(&html);
+            let all_a = Selector::parse("a").map(|s| diag_doc.select(&s).count()).unwrap_or(0);
+            let recipe_a = Selector::parse("a[href*='/recipes/']")
+                .map(|s| diag_doc.select(&s).count())
+                .unwrap_or(0);
+            info!(
+                "ATK pagination: page {} — {} total <a> tags, {} with href containing '/recipes/'",
+                page, all_a, recipe_a
+            );
+        }
+
+        // Parse recipe URLs from this page via CSS selectors
+        let css_urls = match extract_recipe_urls_from_html_standalone(&html, &page_url) {
+            Ok(urls) => urls,
+            Err(e) => {
+                warn!("ATK pagination: HTML extraction failed on page {}: {}", page, e);
+                break;
+            }
+        };
+        info!(
+            "ATK pagination: page {} — CSS extraction returned {} valid recipe URLs",
+            page,
+            css_urls.len()
+        );
+
+        // If CSS extraction found nothing, fall back to __NEXT_DATA__ JSON parsing.
+        // ATK renders recipe cards via React client-side, so reqwest (no JS) may get
+        // HTML with no <a href="/recipes/..."> tags. The recipe data is embedded in
+        // the <script id="__NEXT_DATA__"> tag as Next.js server-side props.
+        let page_urls = if css_urls.is_empty() {
+            info!(
+                "ATK pagination: page {} — no <a> recipe links found via CSS; \
+                 trying __NEXT_DATA__ JSON fallback",
+                page
+            );
+            let next_data_urls = extract_atk_urls_from_next_data(&html, &page_url);
+            if next_data_urls.is_empty() {
+                info!(
+                    "ATK pagination: page {} — __NEXT_DATA__ fallback also found 0 URLs; stopping",
+                    page
+                );
+                break;
+            }
+            info!(
+                "ATK pagination: page {} — __NEXT_DATA__ fallback found {} recipe URLs",
+                page,
+                next_data_urls.len()
+            );
+            next_data_urls
+        } else {
+            css_urls
+        };
+
+        let before = all_urls.len();
+        for url in &page_urls {
+            all_urls.insert(url.clone());
+        }
+        let new_count = all_urls.len() - before;
+        info!(
+            "ATK pagination: page {} — {} links found, {} new (running total: {})",
+            page,
+            page_urls.len(),
+            new_count,
+            all_urls.len()
+        );
+
+        // If every URL on this page was already collected, we've looped back to the start —
+        // the site is no longer returning new content, so stop.
+        if new_count == 0 {
+            info!("ATK pagination: page {} had no new URLs, stopping", page);
+            break;
+        }
+
+        // Check whether the page signals that more results are available.
+        // We use two signals:
+        //   1. A "Load More" / "Next page" element is present in the HTML.
+        //   2. The __NEXT_DATA__ props include a totalCount that we haven't reached yet.
+        // Either signal being true means we should keep going.
+        let has_more = atk_page_has_more(&html) || {
+            // Fallback: if the page returned a full batch, assume there's another page.
+            // ATK typically shows 24 items per page.
+            page_urls.len() >= 20
+        };
+
+        if !has_more {
+            info!("ATK pagination: no 'Load More' signal on page {}, stopping", page);
+            break;
+        }
+
+        page += 1;
+        // Be respectful to ATK's servers — 1.5 s between pages.
+        sleep(Duration::from_millis(1500)).await;
+    }
+
+    info!(
+        "ATK pagination complete: {} unique recipe URLs collected over {} page(s)",
+        all_urls.len(),
+        page
+    );
+    Ok(all_urls.into_iter().collect())
+}
+
+/// Fetches all Serious Eats recipe URLs from a listing page using `?page=N` pagination.
+///
+/// Serious Eats runs on the Dotdash Meredith platform (acquired 2021) and is
+/// server-side rendered, so every page of results is available via plain HTTP.
+/// Recipe cards use the `.mntl-card-list-items` / `.mntl-document-card` CSS classes.
+/// Pagination works identically to ATK — append `?page=N` and stop when a page
+/// returns no new URLs.
+async fn extract_seriouseats_recipe_urls_with_pagination(
+    client: &reqwest::Client,
+    start_url: &str,
+) -> Result<Vec<String>, String> {
+    let mut all_urls: HashSet<String> = HashSet::new();
+    let mut page: u32 = 1;
+
+    // Serious Eats has ~10 000+ recipes; cap well above that to be safe.
+    const MAX_PAGES: u32 = 400;
+    const PAGE_TIMEOUT_SECS: u64 = 45;
+
+    info!("Serious Eats pagination: starting from {} (max {} pages)", start_url, MAX_PAGES);
+
+    loop {
+        if page > MAX_PAGES {
+            warn!("Serious Eats pagination: hit safety cap of {} pages, stopping", MAX_PAGES);
+            break;
+        }
+
+        // build_atk_page_url is generic — it just adds/replaces ?page=N.
+        let page_url = build_atk_page_url(start_url, page);
+        info!("Serious Eats pagination: fetching page {} → {}", page, page_url);
+
+        let fetch_result = tokio::time::timeout(Duration::from_secs(PAGE_TIMEOUT_SECS), async {
+            let response = client
+                .get(&page_url)
+                .send()
+                .await
+                .map_err(|e| format!("Request failed for SE page {}: {}", page, e))?;
+
+            let status = response.status();
+            info!("Serious Eats pagination: page {} — HTTP {}", page, status);
+
+            if !status.is_success() {
+                return Err(format!(
+                    "HTTP {} for Serious Eats page {} ({})",
+                    status, page, page_url
+                ));
+            }
+
+            response
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read body for SE page {}: {}", page, e))
+        })
+        .await;
+
+        let html = match fetch_result {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) => {
+                warn!("Serious Eats pagination: page {} error — {}", page, e);
+                break;
+            }
+            Err(_) => {
+                warn!(
+                    "Serious Eats pagination: page {} timed out after {}s",
+                    page, PAGE_TIMEOUT_SECS
+                );
+                break;
+            }
+        };
+
+        debug!(
+            "Serious Eats pagination: page {} — fetched {} bytes of HTML",
+            page,
+            html.len()
+        );
+
+        // On page 1 log a diagnostic snippet to aid debugging.
+        if page == 1 {
+            let snippet: String = html.chars().take(800).collect();
+            info!(
+                "Serious Eats pagination: first 800 chars of page 1 HTML:\n{}",
+                snippet
+            );
+        }
+
+        // Diagnostic: count recipe card anchors before filtering.
+        {
+            let diag_doc = Html::parse_document(&html);
+            let card_count = Selector::parse("a.mntl-card-list-items")
+                .map(|s| diag_doc.select(&s).count())
+                .unwrap_or(0);
+            let doc_card_count = Selector::parse("a.mntl-document-card")
+                .map(|s| diag_doc.select(&s).count())
+                .unwrap_or(0);
+            info!(
+                "Serious Eats pagination: page {} — {} .mntl-card-list-items, {} .mntl-document-card links",
+                page, card_count, doc_card_count
+            );
+        }
+
+        // Extract validated recipe URLs from this page's HTML.
+        let page_urls = match extract_recipe_urls_from_html_standalone(&html, &page_url) {
+            Ok(urls) => urls,
+            Err(e) => {
+                warn!(
+                    "Serious Eats pagination: HTML extraction failed on page {}: {}",
+                    page, e
+                );
+                break;
+            }
+        };
+
+        info!(
+            "Serious Eats pagination: page {} — CSS extraction returned {} valid recipe URLs",
+            page,
+            page_urls.len()
+        );
+
+        // No URLs found → we've gone past the last page of results.
+        if page_urls.is_empty() {
+            info!(
+                "Serious Eats pagination: page {} found 0 recipe URLs, stopping",
+                page
+            );
+            break;
+        }
+
+        let before = all_urls.len();
+        for url in &page_urls {
+            all_urls.insert(url.clone());
+        }
+        let new_count = all_urls.len() - before;
+
+        info!(
+            "Serious Eats pagination: page {} — {} links found, {} new (running total: {})",
+            page,
+            page_urls.len(),
+            new_count,
+            all_urls.len()
+        );
+
+        // No new URLs → we've wrapped around to content already seen.
+        if new_count == 0 {
+            info!(
+                "Serious Eats pagination: page {} had no new URLs, stopping",
+                page
+            );
+            break;
+        }
+
+        page += 1;
+        // Be respectful to Serious Eats' servers.
+        sleep(Duration::from_millis(1500)).await;
+    }
+
+    info!(
+        "Serious Eats pagination complete: {} unique recipe URLs collected over {} page(s)",
+        all_urls.len(),
+        page
+    );
+    Ok(all_urls.into_iter().collect())
+}
+
+/// Fetches all Bon Appétit recipe URLs from a listing page using `?page=N` pagination.
+///
+/// Bon Appétit runs on Condé Nast's Next.js-based CMS. The listing page at
+/// `/recipes` is server-side rendered with Next.js, so recipe links may be
+/// present directly in the HTML. A `__NEXT_DATA__` JSON blob is always embedded
+/// as a fallback (same strategy used for ATK).
+///
+/// Individual recipe URLs follow the pattern `bonappetit.com/recipe/{slug}`
+/// (singular "recipe", no numeric ID).
+async fn extract_bonappetit_recipe_urls_with_pagination(
+    client: &reqwest::Client,
+    start_url: &str,
+) -> Result<Vec<String>, String> {
+    let mut all_urls: HashSet<String> = HashSet::new();
+    let mut page: u32 = 1;
+
+    // Bon Appétit has thousands of recipes; a large but finite cap.
+    const MAX_PAGES: u32 = 500;
+    const PAGE_TIMEOUT_SECS: u64 = 45;
+
+    info!("Bon Appétit pagination: starting from {} (max {} pages)", start_url, MAX_PAGES);
+
+    loop {
+        if page > MAX_PAGES {
+            warn!("Bon Appétit pagination: hit safety cap of {} pages, stopping", MAX_PAGES);
+            break;
+        }
+
+        // Reuse the generic ?page=N builder.
+        let page_url = build_atk_page_url(start_url, page);
+        info!("Bon Appétit pagination: fetching page {} → {}", page, page_url);
+
+        let fetch_result = tokio::time::timeout(Duration::from_secs(PAGE_TIMEOUT_SECS), async {
+            let response = client
+                .get(&page_url)
+                .send()
+                .await
+                .map_err(|e| format!("Request failed for BA page {}: {}", page, e))?;
+
+            let status = response.status();
+            info!("Bon Appétit pagination: page {} — HTTP {}", page, status);
+
+            if !status.is_success() {
+                return Err(format!(
+                    "HTTP {} for Bon Appétit page {} ({})",
+                    status, page, page_url
+                ));
+            }
+
+            response
+                .text()
+                .await
+                .map_err(|e| format!("Failed to read body for BA page {}: {}", page, e))
+        })
+        .await;
+
+        let html = match fetch_result {
+            Ok(Ok(h)) => h,
+            Ok(Err(e)) => {
+                warn!("Bon Appétit pagination: page {} error — {}", page, e);
+                break;
+            }
+            Err(_) => {
+                warn!(
+                    "Bon Appétit pagination: page {} timed out after {}s",
+                    page, PAGE_TIMEOUT_SECS
+                );
+                break;
+            }
+        };
+
+        debug!(
+            "Bon Appétit pagination: page {} — fetched {} bytes of HTML",
+            page,
+            html.len()
+        );
+
+        // On page 1 log a diagnostic snippet and check for __NEXT_DATA__.
+        if page == 1 {
+            let snippet: String = html.chars().take(800).collect();
+            info!(
+                "Bon Appétit pagination: first 800 chars of page 1 HTML:\n{}",
+                snippet
+            );
+            if let Some(nd_offset) = html.find("__NEXT_DATA__") {
+                let preview: String = html[nd_offset..].chars().take(3000).collect();
+                info!(
+                    "Bon Appétit pagination: __NEXT_DATA__ found at byte {}. Preview:\n{}",
+                    nd_offset, preview
+                );
+            } else {
+                info!(
+                    "Bon Appétit pagination: NO __NEXT_DATA__ in page 1 — \
+                     page may be blocked or redirected. Check HTML snippet above."
+                );
+            }
+        }
+
+        // Diagnostic: count direct recipe links in the DOM.
+        {
+            let diag_doc = Html::parse_document(&html);
+            let direct_links = Selector::parse("a[href*='/recipe/']")
+                .map(|s| diag_doc.select(&s).count())
+                .unwrap_or(0);
+            info!(
+                "Bon Appétit pagination: page {} — {} <a href*='/recipe/'> tags in DOM",
+                page, direct_links
+            );
+        }
+
+        // Try CSS extraction first (works when Next.js SSR includes recipe links).
+        let css_urls = match extract_recipe_urls_from_html_standalone(&html, &page_url) {
+            Ok(urls) => urls,
+            Err(e) => {
+                warn!(
+                    "Bon Appétit pagination: CSS extraction failed on page {}: {}",
+                    page, e
+                );
+                Vec::new()
+            }
+        };
+
+        info!(
+            "Bon Appétit pagination: page {} — CSS extraction returned {} valid recipe URLs",
+            page,
+            css_urls.len()
+        );
+
+        // Fall back to __NEXT_DATA__ JSON if CSS found nothing.
+        let page_urls = if css_urls.is_empty() {
+            info!(
+                "Bon Appétit pagination: page {} — no CSS links found; \
+                 trying __NEXT_DATA__ JSON fallback",
+                page
+            );
+            let next_data_urls = extract_bonappetit_urls_from_next_data(&html, &page_url);
+            if next_data_urls.is_empty() {
+                info!(
+                    "Bon Appétit pagination: page {} — __NEXT_DATA__ fallback also found 0 URLs; stopping",
+                    page
+                );
+                break;
+            }
+            info!(
+                "Bon Appétit pagination: page {} — __NEXT_DATA__ fallback found {} recipe URLs",
+                page,
+                next_data_urls.len()
+            );
+            next_data_urls
+        } else {
+            css_urls
+        };
+
+        let before = all_urls.len();
+        for url in &page_urls {
+            all_urls.insert(url.clone());
+        }
+        let new_count = all_urls.len() - before;
+
+        info!(
+            "Bon Appétit pagination: page {} — {} links found, {} new (running total: {})",
+            page,
+            page_urls.len(),
+            new_count,
+            all_urls.len()
+        );
+
+        // No new URLs → we've wrapped around to already-seen content.
+        if new_count == 0 {
+            info!("Bon Appétit pagination: page {} had no new URLs, stopping", page);
+            break;
+        }
+
+        // Keep going if the page returned a reasonable batch size.
+        let has_more = page_urls.len() >= 10;
+        if !has_more {
+            info!(
+                "Bon Appétit pagination: page {} returned only {} URLs (< 10), stopping",
+                page,
+                page_urls.len()
+            );
+            break;
+        }
+
+        page += 1;
+        // Respectful delay between requests.
+        sleep(Duration::from_millis(1500)).await;
+    }
+
+    info!(
+        "Bon Appétit pagination complete: {} unique recipe URLs collected over {} page(s)",
+        all_urls.len(),
+        page
+    );
+    Ok(all_urls.into_iter().collect())
+}
+
+/// Extract Bon Appétit recipe URLs from the `__NEXT_DATA__` JSON embedded by Next.js.
+///
+/// Bon Appétit is built on Condé Nast's Next.js CMS. When the page is rendered
+/// server-side, it embeds initial props (including recipe slugs) inside a
+/// `<script id="__NEXT_DATA__">` tag. This function recursively walks the JSON
+/// and collects every string that matches the BA recipe path pattern `/recipe/`.
+pub(crate) fn extract_bonappetit_urls_from_next_data(html: &str, base_url: &str) -> Vec<String> {
+    let document = Html::parse_document(html);
+
+    let script_sel = match Selector::parse("script#__NEXT_DATA__") {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let script = match document.select(&script_sel).next() {
+        Some(s) => s,
+        None => {
+            debug!("BA __NEXT_DATA__: no <script id=\"__NEXT_DATA__\"> found");
+            return Vec::new();
+        }
+    };
+
+    let raw = script.inner_html();
+    debug!("BA __NEXT_DATA__: found JSON blob ({} chars)", raw.len());
+
+    let json: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(j) => j,
+        Err(e) => {
+            warn!("BA __NEXT_DATA__: failed to parse JSON: {}", e);
+            return Vec::new();
+        }
+    };
+
+    // BA individual recipe paths: /recipe/{slug}  (no numeric prefix, unlike ATK)
+    let ba_recipe_pattern = match regex::Regex::new(r"^/recipe/[a-zA-Z0-9]") {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut found_paths: Vec<String> = Vec::new();
+    collect_atk_recipe_paths(&json, &ba_recipe_pattern, &mut found_paths);
+
+    debug!(
+        "BA __NEXT_DATA__: recursive scan found {} candidate paths",
+        found_paths.len()
+    );
+
+    // Resolve to absolute URLs using the base origin.
+    let base_origin = if let Ok(parsed) = url::Url::parse(base_url) {
+        format!(
+            "{}://{}",
+            parsed.scheme(),
+            parsed.host_str().unwrap_or("www.bonappetit.com")
+        )
+    } else {
+        "https://www.bonappetit.com".to_string()
+    };
+
+    let mut result: Vec<String> = found_paths
+        .into_iter()
+        .map(|path| {
+            if path.starts_with("http://") || path.starts_with("https://") {
+                path
+            } else {
+                format!("{}{}", base_origin, path)
+            }
+        })
+        .filter(|url| is_valid_recipe_url_standalone(url))
+        .collect();
+
+    // Deduplicate while preserving order.
+    let mut seen = HashSet::new();
+    result.retain(|url| seen.insert(url.clone()));
+
+    info!(
+        "BA __NEXT_DATA__: extracted {} valid, unique recipe URLs",
+        result.len()
+    );
+    result
+}
+
+/// Build the URL for ATK page N, adding or replacing the `page` query parameter.
+pub fn build_atk_page_url(base_url: &str, page: u32) -> String {
+    if page == 1 {
+        return base_url.to_string();
+    }
+
+    if let Ok(mut parsed) = url::Url::parse(base_url) {
+        // Rebuild query string, removing any existing `page` param
+        let existing: Vec<(String, String)> = parsed
+            .query_pairs()
+            .filter(|(k, _)| k != "page")
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
+
+        let mut new_pairs = existing;
+        new_pairs.push(("page".to_string(), page.to_string()));
+
+        let query = new_pairs
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<_>>()
+            .join("&");
+
+        parsed.set_query(Some(&query));
+        return parsed.to_string();
+    }
+
+    // Fallback: simple string append
+    let base = base_url.trim_end_matches('/');
+    if base.contains('?') {
+        format!("{}&page={}", base, page)
+    } else {
+        format!("{}?page={}", base, page)
+    }
+}
+
+/// Detect whether an ATK page still has more results to load.
+///
+/// We check:
+///  1. Explicit "Load More" / "Next page" HTML elements.
+///  2. `__NEXT_DATA__` JSON for a `totalCount` / `hasNextPage` field.
+pub fn atk_page_has_more(html: &str) -> bool {
+    let document = Html::parse_document(html);
+
+    // --- 1. DOM-based signals ---
+    // Button / link text: "Load More", "Show More", "More Recipes"
+    for selector_str in &["button", "a", "[role='button']"] {
+        if let Ok(sel) = Selector::parse(selector_str) {
+            for el in document.select(&sel) {
+                let text = el.text().collect::<String>().to_lowercase();
+                if text.contains("load more")
+                    || text.contains("show more")
+                    || text.contains("more recipes")
+                    || text.contains("next page")
+                {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Common CSS-class / attribute signals for a "Load More" button
+    let dom_selectors = [
+        "button[data-testid*='load-more']",
+        "button[data-testid*='LoadMore']",
+        "[class*='load-more']",
+        "[class*='LoadMore']",
+        "[data-load-more]",
+        "a[rel='next']",
+        "[aria-label='Next page']",
+        "[aria-label='Load more']",
+        ".pagination__next:not([disabled]):not([aria-disabled='true'])",
+    ];
+    for selector_str in &dom_selectors {
+        if let Ok(sel) = Selector::parse(selector_str) {
+            if document.select(&sel).next().is_some() {
+                return true;
+            }
+        }
+    }
+
+    // --- 2. __NEXT_DATA__ JSON ---
+    // ATK is built with Next.js; the server embeds initial props in a script tag.
+    // We look for `hasNextPage`, `totalCount`/`total` vs items seen, etc.
+    if let Ok(script_sel) = Selector::parse("script#__NEXT_DATA__") {
+        if let Some(script) = document.select(&script_sel).next() {
+            let raw = script.inner_html();
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) {
+                // Traverse into props.pageProps (common Next.js shape).
+                // Use an owned Null as the fallback to avoid temporary-lifetime issues.
+                let null_value = serde_json::Value::Null;
+                let page_props = json
+                    .pointer("/props/pageProps")
+                    .unwrap_or(&null_value);
+
+                // hasNextPage flag
+                if let Some(hnp) = page_props.pointer("/pagination/hasNextPage")
+                    .or_else(|| page_props.pointer("/hasNextPage"))
+                    .or_else(|| page_props.pointer("/meta/hasNextPage"))
+                {
+                    if hnp.as_bool() == Some(true) {
+                        return true;
+                    }
+                    if hnp.as_bool() == Some(false) {
+                        return false;
+                    }
+                }
+
+                // totalCount vs items loaded so far
+                let total = page_props
+                    .pointer("/pagination/totalCount")
+                    .or_else(|| page_props.pointer("/totalCount"))
+                    .or_else(|| page_props.pointer("/meta/totalCount"))
+                    .or_else(|| page_props.pointer("/total"))
+                    .and_then(|v| v.as_u64());
+
+                let loaded = page_props
+                    .pointer("/pagination/loadedCount")
+                    .or_else(|| page_props.pointer("/recipes"))
+                    .and_then(|v| {
+                        if let Some(arr) = v.as_array() {
+                            Some(arr.len() as u64)
+                        } else {
+                            v.as_u64()
+                        }
+                    });
+
+                if let (Some(total), Some(loaded)) = (total, loaded) {
+                    return loaded < total;
+                }
+            }
+        }
+    }
+
+    // Default: conservatively say there might be more
+    // (the caller will stop naturally when no new URLs appear).
+    false
+}
+
+/// Extract ATK recipe URLs from the `__NEXT_DATA__` JSON embedded by Next.js.
+///
+/// ATK renders recipe cards client-side with React, so a plain HTTP fetch (no
+/// JavaScript) returns HTML that contains no `<a href="/recipes/...">` links.
+/// However, Next.js embeds the server-side props — including the full list of
+/// recipes for the current page — inside a `<script id="__NEXT_DATA__">` tag.
+/// This function parses that JSON and recursively extracts every string that
+/// looks like an ATK recipe path (`/recipes/{id}-{slug}`).
+pub(crate) fn extract_atk_urls_from_next_data(html: &str, base_url: &str) -> Vec<String> {
+    let document = Html::parse_document(html);
+
+    let script_sel = match Selector::parse("script#__NEXT_DATA__") {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let script = match document.select(&script_sel).next() {
+        Some(s) => s,
+        None => {
+            debug!("ATK __NEXT_DATA__: no <script id=\"__NEXT_DATA__\"> tag found in HTML");
+            return Vec::new();
+        }
+    };
+
+    let raw = script.inner_html();
+    debug!("ATK __NEXT_DATA__: found JSON blob ({} chars)", raw.len());
+
+    let json: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(j) => j,
+        Err(e) => {
+            warn!("ATK __NEXT_DATA__: failed to parse JSON: {}", e);
+            return Vec::new();
+        }
+    };
+
+    // Recursively walk the entire JSON tree and collect every string that
+    // matches the ATK individual-recipe path pattern.
+    let atk_recipe_pattern = match regex::Regex::new(r"^/recipes/\d+-[a-zA-Z]") {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut found_paths: Vec<String> = Vec::new();
+    collect_atk_recipe_paths(&json, &atk_recipe_pattern, &mut found_paths);
+
+    debug!(
+        "ATK __NEXT_DATA__: recursive scan found {} candidate paths",
+        found_paths.len()
+    );
+
+    // Resolve to absolute URLs
+    let base_origin = if let Ok(parsed) = url::Url::parse(base_url) {
+        format!(
+            "{}://{}",
+            parsed.scheme(),
+            parsed.host_str().unwrap_or("www.americastestkitchen.com")
+        )
+    } else {
+        "https://www.americastestkitchen.com".to_string()
+    };
+
+    let mut result: Vec<String> = found_paths
+        .into_iter()
+        .map(|path| {
+            if path.starts_with("http://") || path.starts_with("https://") {
+                path
+            } else {
+                format!("{}{}", base_origin, path)
+            }
+        })
+        .filter(|url| is_valid_recipe_url_standalone(url))
+        .collect();
+
+    // Deduplicate while preserving order
+    let mut seen = HashSet::new();
+    result.retain(|url| seen.insert(url.clone()));
+
+    info!(
+        "ATK __NEXT_DATA__: extracted {} valid, unique recipe URLs",
+        result.len()
+    );
+    result
+}
+
+/// Recursively walk a `serde_json::Value` tree and collect every `String`
+/// value that matches `pattern` into `found`.
+fn collect_atk_recipe_paths(
+    value: &serde_json::Value,
+    pattern: &regex::Regex,
+    found: &mut Vec<String>,
+) {
+    match value {
+        serde_json::Value::String(s) => {
+            if pattern.is_match(s) {
+                found.push(s.clone());
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                collect_atk_recipe_paths(item, pattern, found);
+            }
+        }
+        serde_json::Value::Object(obj) => {
+            for (_, v) in obj {
+                collect_atk_recipe_paths(v, pattern, found);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Standalone function to extract recipe URLs from HTML (avoids lifetime issues in async tasks)
 fn extract_recipe_urls_from_html_standalone(html: &str, base_url: &str) -> Result<Vec<String>, String> {
     let document = Html::parse_document(html);
     let mut recipe_urls = Vec::new();
 
-    // AllRecipes-specific selectors for recipe links
+    // Recipe link selectors for AllRecipes, America's Test Kitchen, and Serious Eats
     let recipe_selectors = [
-        "a[href*='/recipe/'][href*='/']", // Must be a proper recipe path
+        // AllRecipes: individual recipe path /recipe/{id}/{name}
+        "a[href*='/recipe/'][href*='/']",
         ".recipe-card a[href*='/recipe/']",
         ".recipe-link[href*='/recipe/']",
         ".card-recipe a[href*='/recipe/']",
@@ -1181,6 +2165,18 @@ fn extract_recipe_urls_from_html_standalone(html: &str, base_url: &str) -> Resul
         ".recipe-grid a[href*='/recipe/']",
         ".recipe-list a[href*='/recipe/']",
         ".recipe-collection a[href*='/recipe/']",
+        // America's Test Kitchen: recipe path /recipes/{id}-{slug}
+        "a[href*='/recipes/']",
+        // Serious Eats (Dotdash Meredith platform): recipe cards
+        "a.mntl-card-list-items[href]",
+        "a.mntl-document-card[href]",
+        ".mntl-card-list-items a[href]",
+        // Bon Appétit (Condé Nast / Next.js CMS): recipe card links
+        // The CMS uses BEM-style or CSS-module class names; target by data-testid and href pattern.
+        "a[href^='/recipe/'][href]",
+        "[data-testid='SummaryItemHed'] a[href]",
+        "[class*='SummaryItemHedLink'] a[href]",
+        "a[class*='SummaryItemHedLink'][href]",
     ];
 
     for selector_str in &recipe_selectors {
@@ -1224,42 +2220,170 @@ pub fn is_valid_recipe_url_standalone(url: &str) -> bool {
         if let Some(host) = parsed.host_str() {
             let path = parsed.path();
 
-            // Must be AllRecipes and contain /recipe/
-            if !host.contains("allrecipes.com") || !path.contains("/recipe/") {
-                return false;
-            }
-
-            // Skip URLs that contain "main" as they often cause hanging issues
-            if path.to_lowercase().contains("main") || url.to_lowercase().contains("main") {
-                return false;
-            }
-
-            // Must have a recipe name after the ID (not just /recipe/123 or /recipe/123/)
-            // Pattern: /recipe/{numeric_id}/{recipe_name}
-            let recipe_pattern = regex::Regex::new(r"/recipe/\d+/[a-zA-Z]").unwrap();
-            if !recipe_pattern.is_match(path) {
-                return false;
-            }
-
-            // Skip common non-recipe paths
-            let invalid_paths = [
-                "/recipe/search/",
-                "/recipe/category/",
-                "/recipe/collection/",
-                "/recipe/reviews/",
-                "/recipe/photos/",
-                "/recipe/print/",
-                "/recipe/save/",
-                "/recipe/share/",
-            ];
-
-            for invalid_path in &invalid_paths {
-                if path.contains(invalid_path) {
+            // --- AllRecipes validation ---
+            if host.contains("allrecipes.com") {
+                if !path.contains("/recipe/") {
                     return false;
                 }
+
+                // Skip URLs that contain "main" as they often cause hanging issues
+                if path.to_lowercase().contains("main") || url.to_lowercase().contains("main") {
+                    return false;
+                }
+
+                // Must have a recipe name after the ID (not just /recipe/123 or /recipe/123/)
+                // Pattern: /recipe/{numeric_id}/{recipe_name}
+                let recipe_pattern = regex::Regex::new(r"/recipe/\d+/[a-zA-Z]").unwrap();
+                if !recipe_pattern.is_match(path) {
+                    return false;
+                }
+
+                // Skip common non-recipe paths
+                let invalid_paths = [
+                    "/recipe/search/",
+                    "/recipe/category/",
+                    "/recipe/collection/",
+                    "/recipe/reviews/",
+                    "/recipe/photos/",
+                    "/recipe/print/",
+                    "/recipe/save/",
+                    "/recipe/share/",
+                ];
+
+                for invalid_path in &invalid_paths {
+                    if path.contains(invalid_path) {
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
-            return true;
+            // --- America's Test Kitchen validation ---
+            // ATK recipe URLs: /recipes/{numeric_id}-{slug}
+            // e.g. /recipes/12345-perfect-chocolate-chip-cookies
+            if host.contains("americastestkitchen.com") {
+                let atk_recipe_pattern = regex::Regex::new(r"^/recipes/\d+-[a-zA-Z]").unwrap();
+                if !atk_recipe_pattern.is_match(path) {
+                    return false;
+                }
+
+                // Skip non-recipe ATK paths
+                let invalid_paths = [
+                    "/recipes/browse/",
+                    "/recipes/all",
+                    "/recipes/search",
+                    "/recipes/collections/",
+                ];
+
+                for invalid_path in &invalid_paths {
+                    if path.starts_with(invalid_path) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // --- Serious Eats validation ---
+            // New Dotdash Meredith format: seriouseats.com/{recipe-slug}
+            //   • Root-level path (single segment), typically contains "-recipe"
+            //   • May also have a numeric Dotdash ID suffix: /best-pizza-recipe-8374532
+            //   • "-recipe" (singular) distinguishes recipes from category/listing pages
+            //     which use "-recipes" (plural), e.g. /all-recipes-5117985
+            // Old Serious Eats format: seriouseats.com/recipes/YYYY/MM/slug.html
+            if host.contains("seriouseats.com") {
+                // Old format: /recipes/{year}/... — accept these
+                if path.starts_with("/recipes/") {
+                    // Exclude bare listing paths like /recipes/ or /recipes/search
+                    let old_format_pattern =
+                        regex::Regex::new(r"^/recipes/\d{4}/").unwrap();
+                    if old_format_pattern.is_match(path) {
+                        return true;
+                    }
+                    return false;
+                }
+
+                // New root-level format: a single path segment with no sub-path
+                // The segment must contain "-recipe" (singular) to be a recipe URL.
+                // Category/listing pages use "-recipes" (plural) or lack "recipe" entirely.
+                let segments: Vec<&str> = path
+                    .trim_start_matches('/')
+                    .trim_end_matches('/')
+                    .split('/')
+                    .collect();
+
+                if segments.len() != 1 {
+                    // Multi-segment paths are sub-pages (articles, equipment, etc.)
+                    return false;
+                }
+
+                let slug = segments[0];
+
+                // Must contain "-recipe" as a word boundary (not "-recipes")
+                // This accepts: "best-pizza-recipe", "best-pizza-recipe-12345678"
+                // This rejects: "all-recipes-5117985", "chicken-recipes-5117980"
+                if !slug.contains("-recipe") {
+                    return false;
+                }
+                // Reject the "-recipes" plural form that slips through "-recipe" substring
+                // (e.g. "best-recipes-2024" contains "-recipe" as a prefix of "-recipes")
+                // We need to confirm the slug has "-recipe" NOT immediately followed by 's'.
+                if let Some(pos) = slug.find("-recipe") {
+                    let after = &slug[pos + 7..]; // skip past "-recipe" (7 chars)
+                    if after.starts_with('s') {
+                        // "-recipes..." → category page, reject
+                        return false;
+                    }
+                }
+
+                // Reject known non-recipe path prefixes
+                let non_recipe_slugs = [
+                    "about",
+                    "the-food-lab-",    // technique/article series hub page
+                    "style-guide",
+                    "features-",
+                    "news-",
+                    "guides-",
+                ];
+                for prefix in &non_recipe_slugs {
+                    if slug.starts_with(prefix) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // --- Bon Appétit validation ---
+            // Individual recipe URLs: bonappetit.com/recipe/{slug}
+            //   • Singular "recipe" (not "recipes")
+            //   • Root-level two-segment path: /recipe/{slug}
+            //   • No numeric IDs — just a plain slug
+            // Non-recipe paths to exclude:
+            //   • /recipes  — the listing page itself
+            //   • /recipes/* — category listing sub-pages
+            //   • /story/*  — editorial articles
+            //   • /gallery/* — photo galleries
+            if host.contains("bonappetit.com") {
+                // Must start with /recipe/ (singular)
+                if !path.starts_with("/recipe/") {
+                    return false;
+                }
+
+                // Must have a non-trivial slug after /recipe/
+                let slug = path.trim_start_matches("/recipe/").trim_end_matches('/');
+                if slug.is_empty() || slug.len() < 3 {
+                    return false;
+                }
+
+                // Slug must not contain path separators (would be a sub-page, not a recipe)
+                if slug.contains('/') {
+                    return false;
+                }
+
+                return true;
+            }
         }
     }
     false

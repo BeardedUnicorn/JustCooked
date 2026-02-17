@@ -69,11 +69,10 @@ describe('Settings Page', () => {
     mockLoggingManagementService.getLogDirectoryPath.mockResolvedValue('/test/logs');
   });
 
-  it('renders settings page with correct title and breadcrumbs', () => {
+  it('renders settings page with correct title and description', () => {
     renderWithProviders(<Settings />);
 
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByText('Home')).toBeInTheDocument();
     expect(screen.getByText('Manage your application settings and data.')).toBeInTheDocument();
   });
 
@@ -81,9 +80,9 @@ describe('Settings Page', () => {
     renderWithProviders(<Settings />);
 
     expect(screen.getByText('Database Management')).toBeInTheDocument();
-    expect(screen.getByTestId('database-export-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-import-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-reset-button')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-export')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-import')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-reset')).toBeInTheDocument();
   });
 
   it('renders logging section', async () => {
@@ -96,23 +95,21 @@ describe('Settings Page', () => {
     expect(screen.getByTestId('open-log-directory-button')).toBeInTheDocument();
   });
 
-  it('has proper navigation structure', () => {
+  it('has proper page structure', () => {
     renderWithProviders(<Settings />);
-
-    // Check breadcrumbs
-    const homeLink = screen.getByText('Home');
-    expect(homeLink.closest('a')).toHaveAttribute('href', '/');
 
     // Check page structure
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
+    expect(screen.getByTestId('settingsPage-container-main')).toBeInTheDocument();
+    expect(screen.getByTestId('settingsPage-container-sections')).toBeInTheDocument();
   });
 
   it('renders all database management buttons with correct test ids', () => {
     renderWithProviders(<Settings />);
 
-    expect(screen.getByTestId('database-export-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-import-button')).toBeInTheDocument();
-    expect(screen.getByTestId('database-reset-button')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-export')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-import')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-reset')).toBeInTheDocument();
   });
 
   it('has accessible structure with proper headings', () => {

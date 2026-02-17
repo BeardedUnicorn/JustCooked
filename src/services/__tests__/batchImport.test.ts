@@ -87,7 +87,7 @@ describe('BatchImportService', () => {
 
       for (const url of invalidUrls) {
         await expect(service.startBatchImport(url)).rejects.toThrow(
-          'Invalid AllRecipes URL'
+          'Invalid URL'
         );
       }
 

@@ -20,6 +20,7 @@ describe('urlUtils', () => {
       expect(isSupportedUrl('https://delish.com/cooking/recipe-ideas/recipe-123')).toBe(true);
       expect(isSupportedUrl('https://bonappetit.com/recipe/recipe-123')).toBe(true);
       expect(isSupportedUrl('https://simplyrecipes.com/recipes/recipe-123')).toBe(true);
+      expect(isSupportedUrl('https://www.americastestkitchen.com/recipes/12345-chocolate-chip-cookies')).toBe(true);
     });
 
     test('should return false for unsupported sites', () => {

@@ -59,6 +59,11 @@ export async function saveShoppingListItem(item: ShoppingListItem): Promise<void
 }
 
 export async function getShoppingListItems(shoppingListId: string): Promise<ShoppingListItem[]> {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.getShoppingListItems) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.getShoppingListItems(shoppingListId);
+  }
+
   try {
     return await invoke<ShoppingListItem[]>('db_get_shopping_list_items', { shoppingListId });
   } catch (error) {
@@ -68,6 +73,11 @@ export async function getShoppingListItems(shoppingListId: string): Promise<Shop
 }
 
 export async function updateShoppingListItemChecked(id: string, isChecked: boolean): Promise<void> {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.updateShoppingListItemChecked) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.updateShoppingListItemChecked(id, isChecked);
+  }
+
   try {
     await invoke('db_update_shopping_list_item_checked', { id, isChecked });
   } catch (error) {
@@ -77,6 +87,11 @@ export async function updateShoppingListItemChecked(id: string, isChecked: boole
 }
 
 export async function deleteShoppingListItem(id: string): Promise<boolean> {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.deleteShoppingListItem) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.deleteShoppingListItem(id);
+  }
+
   try {
     return await invoke<boolean>('db_delete_shopping_list_item', { id });
   } catch (error) {
@@ -208,8 +223,13 @@ export async function generateShoppingListFromMealPlan(
 
 // Group shopping list items by category for display
 export function groupShoppingListItemsByCategory(items: ShoppingListItem[]): Record<string, ShoppingListItem[]> {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.groupShoppingListItemsByCategory) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.groupShoppingListItemsByCategory(items);
+  }
+
   const grouped: Record<string, ShoppingListItem[]> = {};
-  
+
   items.forEach(item => {
     const category = item.category || 'other';
     if (!grouped[category]) {
@@ -217,12 +237,12 @@ export function groupShoppingListItemsByCategory(items: ShoppingListItem[]): Rec
     }
     grouped[category].push(item);
   });
-  
+
   // Sort items within each category
   Object.keys(grouped).forEach(category => {
     grouped[category].sort((a, b) => a.ingredientName.localeCompare(b.ingredientName));
   });
-  
+
   return grouped;
 }
 
@@ -232,10 +252,15 @@ export function calculateShoppingListProgress(items: ShoppingListItem[]): {
   total: number;
   percentage: number;
 } {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.calculateShoppingListProgress) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.calculateShoppingListProgress(items);
+  }
+
   const total = items.length;
   const completed = items.filter(item => item.isChecked).length;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-  
+
   return { completed, total, percentage };
 }
 
@@ -244,17 +269,22 @@ export function exportShoppingListAsText(
   shoppingList: ShoppingList,
   items: ShoppingListItem[]
 ): string {
+  // Check for Storybook mocks
+  if (typeof window !== 'undefined' && (window as any).__STORYBOOK_SERVICE_MOCKS__?.shoppingListStorage?.exportShoppingListAsText) {
+    return (window as any).__STORYBOOK_SERVICE_MOCKS__.shoppingListStorage.exportShoppingListAsText(shoppingList, items);
+  }
+
   const groupedItems = groupShoppingListItemsByCategory(items);
   const progress = calculateShoppingListProgress(items);
-  
+
   let text = `${shoppingList.name}\n`;
   text += `Date Range: ${shoppingList.dateRangeStart} to ${shoppingList.dateRangeEnd}\n`;
   text += `Progress: ${progress.completed}/${progress.total} items (${progress.percentage}%)\n\n`;
-  
+
   Object.entries(groupedItems).forEach(([category, categoryItems]) => {
     text += `${category.toUpperCase()}\n`;
     text += '─'.repeat(category.length + 10) + '\n';
-    
+
     categoryItems.forEach(item => {
       const checkbox = item.isChecked ? '☑' : '☐';
       text += `${checkbox} ${item.quantity} ${item.unit} ${item.ingredientName}\n`;
@@ -262,9 +292,9 @@ export function exportShoppingListAsText(
         text += `   Note: ${item.notes}\n`;
       }
     });
-    
+
     text += '\n';
   });
-  
+
   return text;
 }
