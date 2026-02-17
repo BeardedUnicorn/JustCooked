@@ -2,12 +2,23 @@ import { invoke } from '@tauri-apps/api/core';
 import {
   BatchImportRequest,
   BatchImportProgress,
-  BatchImportStatus
+  BatchImportStatus,
+  BatchImportSite,
+  BatchImportPreflightRequest,
+  BatchImportPreflightResponse,
+  QuickStartPack
 } from '@app-types';
 import { getExistingRecipeUrls } from '@services/recipeStorage';
 import { createLogger } from '@services/loggingService';
 
 const logger = createLogger('BatchImport');
+
+const SUPPORTED_SITES: BatchImportSite[] = [
+  'allrecipes',
+  'americasTestKitchen',
+  'seriousEats',
+  'bonAppetit',
+];
 
 export class BatchImportService {
   private currentImportId: string | null = null;
@@ -214,37 +225,70 @@ export class BatchImportService {
     this.onProgressCallback = null;
   }
 
-  /**
-   * Validate if URL is a valid batch-import category URL (AllRecipes or America's Test Kitchen)
-   */
-  private isValidBatchImportUrl(url: string): boolean {
+  async getImportPreflight(
+    request: BatchImportPreflightRequest
+  ): Promise<BatchImportPreflightResponse> {
+    try {
+      const response: BatchImportPreflightResponse = await invoke('preview_batch_import', {
+        request,
+      });
+      return response;
+    } catch (error) {
+      await logger.logError(error, 'Failed to get batch import preflight', { startUrl: request.startUrl });
+      throw new Error(`Failed to preview batch import: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  validateUrlForSite(url: string, site: BatchImportSite): boolean {
     try {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname.toLowerCase();
       const pathname = urlObj.pathname.toLowerCase();
 
-      const isAllRecipes =
-        this.matchesDomain(hostname, 'allrecipes.com') &&
-        pathname.includes('/recipes/') &&
-        !pathname.includes('/recipe/'); // Exclude individual recipes
+      if (site === 'allrecipes') {
+        return (
+          this.matchesDomain(hostname, 'allrecipes.com') &&
+          pathname.includes('/recipes/') &&
+          !pathname.includes('/recipe/')
+        );
+      }
 
-      const isATK =
-        this.matchesDomain(hostname, 'americastestkitchen.com') &&
-        pathname.includes('/recipes/') &&
-        !/\/recipes\/\d+-[a-z]/.test(pathname); // Exclude individual recipes
+      if (site === 'americasTestKitchen') {
+        return (
+          this.matchesDomain(hostname, 'americastestkitchen.com') &&
+          pathname.includes('/recipes/') &&
+          !/\/recipes\/\d+-[a-z]/.test(pathname)
+        );
+      }
 
-      const isSeriousEats =
-        this.matchesDomain(hostname, 'seriouseats.com') &&
-        /^\/all-recipes-\d+\/?$/.test(pathname);
+      if (site === 'seriousEats') {
+        return this.matchesDomain(hostname, 'seriouseats.com') && /^\/all-recipes-\d+\/?$/.test(pathname);
+      }
 
-      const isBonAppetit =
-        this.matchesDomain(hostname, 'bonappetit.com') &&
-        (pathname === '/recipes' || pathname === '/recipes/');
+      if (site === 'bonAppetit') {
+        return this.matchesDomain(hostname, 'bonappetit.com') && (pathname === '/recipes' || pathname === '/recipes/');
+      }
 
-      return isAllRecipes || isATK || isSeriousEats || isBonAppetit;
+      return false;
     } catch {
       return false;
     }
+  }
+
+  detectSiteFromUrl(url: string): BatchImportSite | null {
+    for (const site of SUPPORTED_SITES) {
+      if (this.validateUrlForSite(url, site)) {
+        return site;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Validate if URL is a valid batch-import category URL.
+   */
+  private isValidBatchImportUrl(url: string): boolean {
+    return SUPPORTED_SITES.some(site => this.validateUrlForSite(url, site));
   }
 
   private matchesDomain(hostname: string, domain: string): boolean {
@@ -730,6 +774,95 @@ export class BatchImportService {
       'https://www.allrecipes.com/recipes/969/appetizers-and-snacks/nuts-and-seeds/pumpkin-seeds/',
       'https://www.allrecipes.com/recipes/980/desserts/specialty-desserts/dessert-salads/jell-o-salad/',
       'https://www.allrecipes.com/recipes/985/holidays-and-events/passover/seder/',
+    ];
+  }
+
+  getQuickStartPacks(): QuickStartPack[] {
+    return [
+      {
+        id: 'weeknight-basics',
+        name: 'Weeknight Basics',
+        description: 'Fast, practical dinners for weekday cooking.',
+        estimatedRecipes: 210,
+        urls: [
+          'https://www.allrecipes.com/recipes/1947/everyday-cooking/quick-and-easy/',
+          'https://www.allrecipes.com/recipes/455/everyday-cooking/more-meal-ideas/30-minute-meals/',
+          'https://www.allrecipes.com/recipes/17057/everyday-cooking/more-meal-ideas/5-ingredients/main-dishes/',
+          'https://www.allrecipes.com/recipes/15436/everyday-cooking/one-pot-meals/',
+          'https://www.allrecipes.com/recipes/22992/everyday-cooking/sheet-pan-dinners/',
+          'https://www.allrecipes.com/recipes/80/main-dish/',
+        ],
+      },
+      {
+        id: 'comfort-classics',
+        name: 'Comfort Classics',
+        description: 'Hearty staples, casseroles, soups, and cozy meals.',
+        estimatedRecipes: 280,
+        urls: [
+          'https://www.allrecipes.com/recipes/94/soups-stews-and-chili/',
+          'https://www.allrecipes.com/recipes/16099/everyday-cooking/comfort-food/',
+          'https://www.allrecipes.com/recipes/249/main-dish/casseroles/',
+          'https://www.allrecipes.com/recipes/258/main-dish/roasts/',
+          'https://www.allrecipes.com/recipes/535/main-dish/dumplings/',
+          'https://www.allrecipes.com/recipes/17889/everyday-cooking/family-friendly/family-dinners/',
+        ],
+      },
+      {
+        id: 'healthy-light',
+        name: 'Healthy and Light',
+        description: 'Nutrient-forward options with lighter prep.',
+        estimatedRecipes: 190,
+        urls: [
+          'https://www.allrecipes.com/recipes/84/healthy-recipes/',
+          'https://www.allrecipes.com/recipes/741/healthy-recipes/gluten-free/',
+          'https://www.allrecipes.com/recipes/739/healthy-recipes/diabetic/',
+          'https://www.allrecipes.com/recipes/22959/healthy-recipes/keto-diet/',
+          'https://www.allrecipes.com/recipes/87/everyday-cooking/vegetarian/',
+          'https://www.allrecipes.com/recipes/96/salad/',
+        ],
+      },
+      {
+        id: 'breakfast-brunch',
+        name: 'Breakfast and Brunch',
+        description: 'Morning staples and weekend brunch favorites.',
+        estimatedRecipes: 170,
+        urls: [
+          'https://www.allrecipes.com/recipes/78/breakfast-and-brunch/',
+          'https://www.allrecipes.com/recipes/144/breakfast-and-brunch/breakfast-casseroles/',
+          'https://www.allrecipes.com/recipes/151/breakfast-and-brunch/pancakes/',
+          'https://www.allrecipes.com/recipes/149/breakfast-and-brunch/french-toast/',
+          'https://www.allrecipes.com/recipes/1316/breakfast-and-brunch/waffles/',
+          'https://www.allrecipes.com/recipes/23121/breakfast-and-brunch/cereals/oatmeal/overnight-oats/',
+        ],
+      },
+      {
+        id: 'baking-desserts',
+        name: 'Baking and Desserts',
+        description: 'Cakes, cookies, pies, and dessert classics.',
+        estimatedRecipes: 260,
+        urls: [
+          'https://www.allrecipes.com/recipes/79/desserts/',
+          'https://www.allrecipes.com/recipes/276/desserts/cakes/',
+          'https://www.allrecipes.com/recipes/362/desserts/cookies/',
+          'https://www.allrecipes.com/recipes/367/desserts/pies/',
+          'https://www.allrecipes.com/recipes/387/desserts/cakes/cheesecake/',
+          'https://www.allrecipes.com/recipes/836/desserts/cookies/bar-cookies/',
+        ],
+      },
+      {
+        id: 'global-flavors',
+        name: 'Global Flavors',
+        description: 'Popular world cuisines and international staples.',
+        estimatedRecipes: 230,
+        urls: [
+          'https://www.allrecipes.com/recipes/695/world-cuisine/asian/chinese/',
+          'https://www.allrecipes.com/recipes/723/world-cuisine/european/italian/',
+          'https://www.allrecipes.com/recipes/728/world-cuisine/latin-american/mexican/',
+          'https://www.allrecipes.com/recipes/731/world-cuisine/european/greek/',
+          'https://www.allrecipes.com/recipes/233/world-cuisine/asian/indian/',
+          'https://www.allrecipes.com/recipes/86/world-cuisine/',
+        ],
+      },
     ];
   }
 

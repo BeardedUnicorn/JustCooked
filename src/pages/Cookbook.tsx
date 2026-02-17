@@ -850,10 +850,6 @@ const Cookbook: React.FC = () => {
       <BatchImportDialog
         open={batchImportOpen}
         onClose={() => setBatchImportOpen(false)}
-        onTaskAdded={() => {
-          setBatchImportOpen(false);
-          setImportSuccess(true);
-        }}
       />
 
       {/* Success Snackbar */}

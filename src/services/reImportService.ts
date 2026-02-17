@@ -102,13 +102,16 @@ export class ReImportService {
   /**
    * Get the count of recipes with source URLs available for re-import
    */
-  async getReImportableRecipesCount(): Promise<number> {
+  async getReImportableRecipesCount(options?: { throwOnError?: boolean }): Promise<number> {
     try {
       const count: number = await invoke('get_recipes_with_source_urls_count');
       await logger.debug('Retrieved re-importable recipes count', { count });
       return count;
     } catch (error) {
       await logger.logError(error, 'Failed to get re-importable recipes count');
+      if (options?.throwOnError) {
+        throw new Error(`Failed to get re-importable recipes count: ${error instanceof Error ? error.message : String(error)}`);
+      }
       return 0;
     }
   }

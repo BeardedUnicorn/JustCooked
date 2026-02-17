@@ -68,6 +68,17 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     }
   }, [isMobile]);
 
+  useEffect(() => {
+    const handleOpenImportQueue = () => {
+      setQueuePopupOpen(true);
+    };
+
+    window.addEventListener('justcooked:open-import-queue', handleOpenImportQueue);
+    return () => {
+      window.removeEventListener('justcooked:open-import-queue', handleOpenImportQueue);
+    };
+  }, []);
+
   // Generate breadcrumbs
   const generateBreadcrumbs = () => {
     const pathSegments = location.pathname.split('/').filter(Boolean);

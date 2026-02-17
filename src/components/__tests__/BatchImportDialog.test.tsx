@@ -4,348 +4,339 @@ import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { vi, describe, test, expect, beforeEach } from 'vitest';
 import BatchImportDialog from '@components/BatchImportDialog';
-import { batchImportService } from '@services/batchImport';
-import { getExistingRecipeUrls } from '@services/recipeStorage';
 import importQueueReducer from '@store/slices/importQueueSlice';
 
-// Mock the batch import service
+import { batchImportService } from '@services/batchImport';
+import { reImportService } from '@services/reImportService';
+import { getExistingRecipeUrls } from '@services/recipeStorage';
+
 vi.mock('@services/batchImport');
-const mockBatchImportService = vi.mocked(batchImportService);
-
-// Mock recipe storage
+vi.mock('@services/reImportService');
 vi.mock('@services/recipeStorage');
-const mockGetExistingRecipeUrls = vi.mocked(getExistingRecipeUrls);
 
-// Mock Tauri API
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-// Import the mocked invoke function
 import { invoke } from '@tauri-apps/api/core';
+
+const mockBatchImportService = vi.mocked(batchImportService);
+const mockReImportService = vi.mocked(reImportService);
+const mockGetExistingRecipeUrls = vi.mocked(getExistingRecipeUrls);
 const mockInvoke = vi.mocked(invoke);
 
-const createTestStore = () => {
-  return configureStore({
+const createTestStore = () =>
+  configureStore({
     reducer: {
       importQueue: importQueueReducer,
     },
   });
+
+const defaultProps = {
+  open: true,
+  onClose: vi.fn(),
+  onTaskAdded: vi.fn(),
+};
+
+const renderWithRedux = (props = defaultProps) => {
+  const store = createTestStore();
+  return render(
+    <Provider store={store}>
+      <BatchImportDialog {...props} />
+    </Provider>
+  );
+};
+
+const siteValidation = (url: string, site: string) => {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (site === 'allrecipes') {
+      return host.includes('allrecipes.com') && path.includes('/recipes/') && !path.includes('/recipe/');
+    }
+    if (site === 'americasTestKitchen') {
+      return host.includes('americastestkitchen.com') && path.includes('/recipes/');
+    }
+    if (site === 'seriousEats') {
+      return host.includes('seriouseats.com') && /^\/all-recipes-\d+\/?$/.test(path);
+    }
+    if (site === 'bonAppetit') {
+      return host.includes('bonappetit.com') && (path === '/recipes' || path === '/recipes/');
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
 };
 
 describe('BatchImportDialog', () => {
-  const defaultProps = {
-    open: true,
-    onClose: vi.fn(),
-    onTaskAdded: vi.fn(),
-  };
-
-  const renderWithRedux = (props = defaultProps) => {
-    const store = createTestStore();
-    return render(
-      <Provider store={store}>
-        <BatchImportDialog {...props} />
-      </Provider>
-    );
-  };
-
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockBatchImportService.getQuickStartPacks.mockReturnValue([
+      {
+        id: 'pack-a',
+        name: 'Pack A',
+        description: 'Pack A description',
+        estimatedRecipes: 120,
+        urls: ['https://www.allrecipes.com/recipes/79/desserts', 'https://www.allrecipes.com/recipes/76/appetizers-and-snacks'],
+      },
+      {
+        id: 'pack-b',
+        name: 'Pack B',
+        description: 'Pack B description',
+        estimatedRecipes: 80,
+        urls: ['https://www.allrecipes.com/recipes/78/breakfast-and-brunch'],
+      },
+    ]);
+
     mockBatchImportService.getSuggestedCategoryUrls.mockReturnValue([
       {
         name: 'Desserts',
         url: 'https://www.allrecipes.com/recipes/79/desserts',
-        description: 'All dessert recipes',
+        description: 'Dessert recipes',
       },
       {
-        name: 'Main Dishes',
-        url: 'https://www.allrecipes.com/recipes/17562/dinner/main-dishes',
-        description: 'Main course recipes',
+        name: 'Serious Eats All Recipes',
+        url: 'https://www.seriouseats.com/all-recipes-5117985',
+        description: 'Serious Eats index',
       },
     ]);
-    mockBatchImportService.estimateImportTime.mockReturnValue({
-      minMinutes: 5,
-      maxMinutes: 10,
-      description: 'Medium import',
+
+    mockBatchImportService.validateUrlForSite.mockImplementation(siteValidation as any);
+    mockBatchImportService.detectSiteFromUrl.mockImplementation((url: string) => {
+      if (siteValidation(url, 'allrecipes')) return 'allrecipes';
+      if (siteValidation(url, 'americasTestKitchen')) return 'americasTestKitchen';
+      if (siteValidation(url, 'seriousEats')) return 'seriousEats';
+      if (siteValidation(url, 'bonAppetit')) return 'bonAppetit';
+      return null;
     });
-    mockBatchImportService.getPopularCategoryUrls.mockReturnValue([
-      'https://www.allrecipes.com/recipes/17057/everyday-cooking/more-meal-ideas/5-ingredients/main-dishes/',
-      'https://www.allrecipes.com/recipes/15436/everyday-cooking/one-pot-meals/',
-      'https://www.allrecipes.com/recipes/1947/everyday-cooking/quick-and-easy/',
-    ]);
+
+    mockBatchImportService.getImportPreflight.mockResolvedValue({
+      startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+      estimatedCategories: 12,
+      estimatedRecipes: 180,
+      estimatedDuplicates: 20,
+      estimatedNewRecipes: 160,
+      estimatedEtaMinMinutes: 8,
+      estimatedEtaMaxMinutes: 15,
+      warnings: [],
+    });
+
+    mockReImportService.getReImportableRecipesCount.mockResolvedValue(42);
+    mockReImportService.getTaskDescription.mockReturnValue('Re-import all existing recipes');
+    mockReImportService.addToQueue.mockResolvedValue('reimport-task-1');
+
     mockGetExistingRecipeUrls.mockResolvedValue([]);
 
-    // Set up default mock responses for Tauri commands
     mockInvoke.mockImplementation((command: string) => {
-      switch (command) {
-        case 'get_import_queue_status':
-          return Promise.resolve({
-            tasks: [],
-            currentTaskId: null,
-            isProcessing: false,
-            totalPending: 0,
-            totalCompleted: 0,
-            totalFailed: 0,
-          });
-        case 'add_to_import_queue':
-          return Promise.resolve('task-123');
-        default:
-          return Promise.resolve();
+      if (command === 'add_to_import_queue') {
+        return Promise.resolve('task-123');
       }
+      if (command === 'get_import_queue_status') {
+        return Promise.resolve({
+          tasks: [],
+          currentTaskId: null,
+          isProcessing: false,
+          totalPending: 0,
+          totalCompleted: 0,
+          totalFailed: 0,
+        });
+      }
+      return Promise.resolve(undefined);
     });
   });
 
-  test('renders dialog with initial state', () => {
+  test('renders mode cards and switches between modes', async () => {
+    const user = userEvent.setup();
     renderWithRedux();
 
-    expect(screen.getByText('Add Batch Import to Queue')).toBeInTheDocument();
-    expect(screen.getByLabelText('Category URL')).toBeInTheDocument();
-    expect(screen.getByText('Add to Queue')).toBeDisabled();
-    expect(screen.getByText('Suggested Categories')).toBeInTheDocument();
+    expect(screen.getByText('Choose Import Type')).toBeInTheDocument();
+    expect(screen.getByTestId('batchImportDialog-card-mode-url')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('batchImportDialog-card-mode-reImport'));
+    expect(screen.getByText(/Re-import updates existing recipes/i)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('batchImportDialog-card-mode-quickStart'));
+    expect(screen.getByText(/Curated packs are grouped category URLs/i)).toBeInTheDocument();
   });
 
-  test('does not render when closed', () => {
-    renderWithRedux({ ...defaultProps, open: false });
-
-    expect(screen.queryByText('Add Batch Import to Queue')).not.toBeInTheDocument();
-  });
-
-  test('enables add to queue button when valid URL is entered', async () => {
+  test('blocks invalid URL and keeps queue action disabled', async () => {
     const user = userEvent.setup();
     renderWithRedux();
 
     const urlInput = screen.getByLabelText('Category URL');
-    const addButton = screen.getByText('Add to Queue');
+    const queueButton = screen.getByTestId('batchImportDialog-button-addToQueue');
 
-    expect(addButton).toBeDisabled();
+    await user.type(urlInput, 'https://example.com/recipes');
 
+    expect(screen.getByText('Use a valid AllRecipes listing URL.')).toBeInTheDocument();
+    expect(queueButton).toBeDisabled();
+  });
+
+  test('runs debounced preflight and shows preview panel', async () => {
+    const user = userEvent.setup();
+    renderWithRedux();
+
+    const urlInput = screen.getByLabelText('Category URL');
     await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
 
-    expect(addButton).toBeEnabled();
+    await waitFor(() => {
+      expect(mockBatchImportService.getImportPreflight).toHaveBeenCalled();
+    });
+
+    expect(screen.getByTestId('batchImportDialog-preflight-panel')).toBeInTheDocument();
+    expect(screen.getByText('Import Preview')).toBeInTheDocument();
   });
 
-  test('shows error for invalid URL', async () => {
+  test('requires confirmation for large URL imports and queues after confirmation', async () => {
     const user = userEvent.setup();
-    renderWithRedux();
-
-    const urlInput = screen.getByLabelText('Category URL');
-
-    await user.type(urlInput, 'https://example.com/invalid');
-
-    expect(
-      screen.getByText(
-        "Please enter a valid AllRecipes, America's Test Kitchen, Serious Eats, or Bon Appétit category URL"
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByText('Add to Queue')).toBeDisabled();
-  });
-
-  test('allows selecting suggested URLs', async () => {
-    const user = userEvent.setup();
-    renderWithRedux();
-
-    // Expand suggested categories
-    const suggestedAccordion = screen.getByText('Suggested Categories');
-    await user.click(suggestedAccordion);
-
-    // Click on a suggested URL
-    const dessertOption = screen.getByText('Desserts');
-    await user.click(dessertOption);
-
-    const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
-    expect(urlInput.value).toBe('https://www.allrecipes.com/recipes/79/desserts');
-  });
-
-  test('shows info about queue system', () => {
-    renderWithRedux();
-
-    expect(screen.getByText(/queue system/i)).toBeInTheDocument();
-    expect(screen.getByText(/processed in the background/i)).toBeInTheDocument();
-  });
-
-  test('adds task to queue when form is submitted', async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue('task-123');
+    mockBatchImportService.getImportPreflight.mockResolvedValueOnce({
+      startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+      estimatedCategories: 60,
+      estimatedRecipes: 500,
+      estimatedDuplicates: 40,
+      estimatedNewRecipes: 460,
+      estimatedEtaMinMinutes: 20,
+      estimatedEtaMaxMinutes: 45,
+      warnings: ['This import is large and may run for a while.'],
+    });
 
     renderWithRedux();
 
-    const urlInput = screen.getByLabelText('Category URL');
-    const addButton = screen.getByText('Add to Queue');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(addButton);
+    await user.type(screen.getByLabelText('Category URL'), 'https://www.allrecipes.com/recipes/79/desserts');
 
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
-        description: expect.stringContaining('AllRecipes'),
-        request: expect.objectContaining({
-          startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
-        }),
-      }));
+      expect(screen.getByTestId('batchImportDialog-preflight-panel')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('batchImportDialog-button-addToQueue'));
+
+    expect(screen.getByText('Confirm large URL import')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Queue Anyway' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Queued')).toBeInTheDocument();
+    });
+
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
+  });
+
+  test('shows retryable warning when re-import count load fails', async () => {
+    const user = userEvent.setup();
+    mockReImportService.getReImportableRecipesCount
+      .mockRejectedValueOnce(new Error('Count fetch failed'))
+      .mockResolvedValueOnce(42);
+
+    renderWithRedux();
+
+    await user.click(screen.getByTestId('batchImportDialog-card-mode-reImport'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('batchImportDialog-reimport-error')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('42 recipes available for re-import')).toBeInTheDocument();
     });
   });
 
-  test('handles queue add error', async () => {
+  test('requires confirmation for large re-import queue requests', async () => {
     const user = userEvent.setup();
-    mockInvoke.mockRejectedValue(new Error('Queue failed'));
+    mockReImportService.getReImportableRecipesCount.mockResolvedValueOnce(420);
 
     renderWithRedux();
 
-    const urlInput = screen.getByLabelText('Category URL');
-    const addButton = screen.getByText('Add to Queue');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(addButton);
-
+    await user.click(screen.getByTestId('batchImportDialog-card-mode-reImport'));
     await waitFor(() => {
-      expect(screen.getByText(/failed to add task to queue/i)).toBeInTheDocument();
+      expect(screen.getByText('420 recipes available for re-import')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId('batchImportDialog-button-addToQueue'));
+    expect(screen.getByText('Confirm large re-import')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Queue Anyway' }));
+    await waitFor(() => {
+      expect(screen.getByText('Queued')).toBeInTheDocument();
     });
   });
 
-  test('closes modal when task is added successfully', async () => {
+  test('requires confirmation for quick-start selections above URL threshold', async () => {
     const user = userEvent.setup();
-    mockInvoke.mockResolvedValue('task-123');
+
+    mockBatchImportService.getQuickStartPacks.mockReturnValue([
+      {
+        id: 'pack-one',
+        name: 'Pack One',
+        description: 'One',
+        estimatedRecipes: 400,
+        urls: Array.from({ length: 13 }, (_, i) => `https://www.allrecipes.com/recipes/${100 + i}/one`),
+      },
+      {
+        id: 'pack-two',
+        name: 'Pack Two',
+        description: 'Two',
+        estimatedRecipes: 350,
+        urls: Array.from({ length: 13 }, (_, i) => `https://www.allrecipes.com/recipes/${300 + i}/two`),
+      },
+    ]);
 
     renderWithRedux();
 
-    const urlInput = screen.getByLabelText('Category URL');
-    const addButton = screen.getByText('Add to Queue');
+    await user.click(screen.getByTestId('batchImportDialog-card-mode-quickStart'));
+    await user.click(screen.getByTestId('batchImportDialog-pack-pack-one'));
+    await user.click(screen.getByTestId('batchImportDialog-pack-pack-two'));
+    await user.click(screen.getByTestId('batchImportDialog-button-addToQueue'));
 
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(addButton);
+    expect(screen.getByText('Confirm quick-start workload')).toBeInTheDocument();
+  });
+
+  test('queued state supports Open Queue, Queue Another, and Done actions', async () => {
+    const user = userEvent.setup();
+    const openQueueSpy = vi.fn();
+
+    renderWithRedux({ ...defaultProps, onOpenQueue: openQueueSpy });
+
+    await user.type(screen.getByLabelText('Category URL'), 'https://www.allrecipes.com/recipes/79/desserts');
 
     await waitFor(() => {
-      expect(defaultProps.onClose).toHaveBeenCalled();
+      expect(screen.getByTestId('batchImportDialog-preflight-panel')).toBeInTheDocument();
     });
-  });
 
-  test('calls onTaskAdded when task is successfully added', async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue('task-123');
-
-    renderWithRedux();
-
-    const urlInput = screen.getByLabelText('Category URL');
-    const addButton = screen.getByText('Add to Queue');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.click(addButton);
+    await user.click(screen.getByTestId('batchImportDialog-button-addToQueue'));
 
     await waitFor(() => {
-      expect(defaultProps.onTaskAdded).toHaveBeenCalledWith('task-123');
+      expect(screen.getByText('Queued')).toBeInTheDocument();
     });
-  });
 
-  test('includes optional fields in queue request', async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue('task-123');
+    await user.click(screen.getByTestId('batchImportDialog-button-openQueue'));
+    expect(openQueueSpy).toHaveBeenCalled();
 
-    renderWithRedux();
+    await user.click(screen.getByTestId('batchImportDialog-button-queueAnother'));
+    expect(screen.queryByText('Queued')).not.toBeInTheDocument();
 
-    const urlInput = screen.getByLabelText('Category URL');
-    const maxRecipesInput = screen.getByLabelText('Max Recipes');
-    const maxDepthInput = screen.getByLabelText('Max Depth');
-    const addButton = screen.getByText('Add to Queue');
-
-    await user.type(urlInput, 'https://www.allrecipes.com/recipes/79/desserts');
-    await user.type(maxRecipesInput, '100');
-    await user.type(maxDepthInput, '3');
-    await user.click(addButton);
-
+    await user.type(screen.getByLabelText('Category URL'), 'https://www.allrecipes.com/recipes/79/desserts');
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
-        request: expect.objectContaining({
-          startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
-          maxRecipes: 100,
-          maxDepth: 3,
-        }),
-      }));
+      expect(screen.getByTestId('batchImportDialog-preflight-panel')).toBeInTheDocument();
     });
-  });
 
-  test('resets state when dialog reopens', () => {
-    const { rerender } = renderWithRedux({ ...defaultProps, open: false });
-
-    // Open dialog
-    rerender(
-      <Provider store={createTestStore()}>
-        <BatchImportDialog {...defaultProps} open={true} />
-      </Provider>
-    );
-
-    const urlInput = screen.getByLabelText('Category URL') as HTMLInputElement;
-    expect(urlInput.value).toBe('');
-    expect(screen.getByText('Add to Queue')).toBeDisabled();
-  });
-
-  test('displays Quick Start section with Load Popular Categories button', () => {
-    renderWithRedux();
-
-    expect(screen.getByText('Quick Start')).toBeInTheDocument();
-    expect(screen.getByText('Load Popular Categories')).toBeInTheDocument();
-    expect(screen.getByTestId('batchImportDialog-button-loadPopular')).toBeInTheDocument();
-  });
-
-  test('loads popular categories when button is clicked', async () => {
-    const user = userEvent.setup();
-
-    renderWithRedux();
-
-    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
-
-    // Check initial state
-    expect(loadButton).toHaveTextContent('Load Popular Categories');
-    expect(loadButton).not.toBeDisabled();
-
-    // Click the button - this should trigger the action
-    await user.click(loadButton);
-
-    // For now, just verify the button was clicked successfully
-    // The actual Redux integration will be tested in integration tests
-    expect(loadButton).toBeInTheDocument();
-  });
-
-  test('disables buttons when loading popular categories', async () => {
-    const user = userEvent.setup();
-    // Make the promise hang to test loading state
-    mockInvoke.mockImplementation(() => new Promise(() => {}));
-
-    renderWithRedux();
-
-    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
-    const cancelButton = screen.getByTestId('batchImportDialog-button-cancel');
-    const addButton = screen.getByTestId('batchImportDialog-button-addToQueue');
-
-    await user.click(loadButton);
-
-    // All buttons should be disabled during loading
-    expect(loadButton).toBeDisabled();
-    expect(cancelButton).toBeDisabled();
-    expect(addButton).toBeDisabled();
-  });
-
-  test('includes max recipes and max depth options when loading popular categories', async () => {
-    const user = userEvent.setup();
-    mockInvoke.mockResolvedValue('task-123');
-
-    renderWithRedux();
-
-    // Set optional parameters
-    const maxRecipesInput = screen.getByLabelText('Max Recipes');
-    const maxDepthInput = screen.getByLabelText('Max Depth');
-    await user.type(maxRecipesInput, '50');
-    await user.type(maxDepthInput, '2');
-
-    const loadButton = screen.getByTestId('batchImportDialog-button-loadPopular');
-    await user.click(loadButton);
-
+    await user.click(screen.getByTestId('batchImportDialog-button-addToQueue'));
     await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('add_to_import_queue', expect.objectContaining({
-        request: expect.objectContaining({
-          maxRecipes: 50,
-          maxDepth: 2,
-        }),
-      }));
+      expect(screen.getByText('Queued')).toBeInTheDocument();
     });
+
+    await user.click(screen.getByTestId('batchImportDialog-button-done'));
+    expect(defaultProps.onClose).toHaveBeenCalled();
+  });
+
+  test('exposes an aria-live region for status announcements', () => {
+    renderWithRedux();
+    expect(document.querySelector('[aria-live=\"polite\"]')).toBeInTheDocument();
   });
 });

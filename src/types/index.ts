@@ -36,12 +36,17 @@ export { SHOPPING_CATEGORIES, getCategoryDisplayName, getCategoryOrder, categori
 // Batch import types
 export type {
   BatchImportRequest,
+  BatchImportMode,
+  BatchImportSite,
   BatchImportProgress,
   BatchImportResult,
   BatchImportError,
   CategoryInfo,
   RecipeUrlInfo,
-  BatchImportConfig
+  BatchImportConfig,
+  BatchImportPreflightRequest,
+  BatchImportPreflightResponse,
+  QuickStartPack
 } from './batchImport';
 export { BatchImportStatus, DEFAULT_BATCH_IMPORT_CONFIG } from './batchImport';
 

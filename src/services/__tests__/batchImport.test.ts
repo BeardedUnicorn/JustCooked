@@ -324,6 +324,62 @@ describe('BatchImportService', () => {
       expect(popularUrls).toContain('https://www.allrecipes.com/recipes/85/holidays-and-events/');
     });
 
+    test('validateUrlForSite should enforce site-specific rules', () => {
+      expect(service.validateUrlForSite('https://www.allrecipes.com/recipes/79/desserts', 'allrecipes')).toBe(true);
+      expect(service.validateUrlForSite('https://www.allrecipes.com/recipe/12345/example', 'allrecipes')).toBe(false);
+
+      expect(service.validateUrlForSite('https://www.americastestkitchen.com/recipes/all', 'americasTestKitchen')).toBe(true);
+      expect(service.validateUrlForSite('https://www.americastestkitchen.com/recipes/12345-example', 'americasTestKitchen')).toBe(false);
+
+      expect(service.validateUrlForSite('https://www.seriouseats.com/all-recipes-5117985', 'seriousEats')).toBe(true);
+      expect(service.validateUrlForSite('https://www.seriouseats.com/recipes', 'seriousEats')).toBe(false);
+
+      expect(service.validateUrlForSite('https://www.bonappetit.com/recipes', 'bonAppetit')).toBe(true);
+      expect(service.validateUrlForSite('https://www.bonappetit.com/recipe/something', 'bonAppetit')).toBe(false);
+    });
+
+    test('detectSiteFromUrl should identify supported URL patterns', () => {
+      expect(service.detectSiteFromUrl('https://www.allrecipes.com/recipes/79/desserts')).toBe('allrecipes');
+      expect(service.detectSiteFromUrl('https://www.americastestkitchen.com/recipes/all')).toBe('americasTestKitchen');
+      expect(service.detectSiteFromUrl('https://www.seriouseats.com/all-recipes-5117985')).toBe('seriousEats');
+      expect(service.detectSiteFromUrl('https://www.bonappetit.com/recipes')).toBe('bonAppetit');
+      expect(service.detectSiteFromUrl('https://example.com/recipes')).toBeNull();
+    });
+
+    test('getQuickStartPacks should return six curated packs with URLs', () => {
+      const packs = service.getQuickStartPacks();
+      expect(packs).toHaveLength(6);
+      packs.forEach(pack => {
+        expect(pack.urls.length).toBeGreaterThan(0);
+        expect(pack.estimatedRecipes).toBeGreaterThan(0);
+      });
+    });
+
+    test('getImportPreflight should call preview_batch_import command', async () => {
+      const preview = {
+        startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+        estimatedCategories: 12,
+        estimatedRecipes: 180,
+        estimatedDuplicates: 20,
+        estimatedNewRecipes: 160,
+        estimatedEtaMinMinutes: 8,
+        estimatedEtaMaxMinutes: 15,
+        warnings: [],
+      };
+      mockInvoke.mockResolvedValueOnce(preview);
+
+      const result = await service.getImportPreflight({
+        startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+      });
+
+      expect(result).toEqual(preview);
+      expect(mockInvoke).toHaveBeenCalledWith('preview_batch_import', {
+        request: {
+          startUrl: 'https://www.allrecipes.com/recipes/79/desserts',
+        },
+      });
+    });
+
     test('estimateImportTime should provide reasonable estimates', () => {
       const estimates = [
         { recipes: 10, expected: { minMinutes: 1, maxMinutes: 1 } },

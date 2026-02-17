@@ -5,6 +5,40 @@ export interface BatchImportRequest {
   existingUrls?: string[];
 }
 
+export type BatchImportMode = 'url' | 'reImport' | 'quickStart';
+
+export type BatchImportSite =
+  | 'allrecipes'
+  | 'americasTestKitchen'
+  | 'seriousEats'
+  | 'bonAppetit';
+
+export interface BatchImportPreflightRequest {
+  startUrl: string;
+  maxRecipes?: number;
+  maxDepth?: number;
+  existingUrls?: string[];
+}
+
+export interface BatchImportPreflightResponse {
+  startUrl: string;
+  estimatedCategories: number;
+  estimatedRecipes: number;
+  estimatedDuplicates: number;
+  estimatedNewRecipes: number;
+  estimatedEtaMinMinutes: number;
+  estimatedEtaMaxMinutes: number;
+  warnings: string[];
+}
+
+export interface QuickStartPack {
+  id: string;
+  name: string;
+  description: string;
+  urls: string[];
+  estimatedRecipes: number;
+}
+
 export interface BatchImportProgress {
   status: BatchImportStatus;
   currentUrl?: string;

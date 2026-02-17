@@ -21,7 +21,7 @@ mod e2e_tests;
 
 use recipe_import::{import_recipe_from_url, ImportedRecipe};
 use image_storage::{download_and_store_image, get_app_data_dir, get_local_image_as_base64, delete_stored_image, StoredImage};
-use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress, ReImporter, ReImportRequest};
+use batch_import::{BatchImporter, BatchImportRequest, BatchImportProgress, BatchImportPreflightResponse, ReImporter, ReImportRequest};
 use import_queue::{ImportQueue, ImportQueueStatus};
 use database::{Database, Recipe as DbRecipe, Ingredient as DbIngredient, IngredientDatabase, PantryItem, RecipeCollection, RecentSearch, RawIngredient, DatabaseExport, DatabaseImportResult, MealPlan, MealPlanRecipe, ShoppingList, ShoppingListItem, ProductSearchResult, ProductIngredientMapping};
 use logging::{log_info, log_warn, log_error, log_debug, get_log_file_path, get_log_directory_path, open_log_directory};
@@ -1322,6 +1322,21 @@ async fn start_batch_import(
     Ok(import_id)
 }
 
+#[tauri::command]
+async fn preview_batch_import(
+    app: tauri::AppHandle,
+    mut request: BatchImportRequest,
+) -> Result<BatchImportPreflightResponse, String> {
+    if request.existing_urls.is_none() {
+        let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+        let existing_urls = db.get_existing_recipe_urls().await.map_err(|e| e.to_string())?;
+        request.existing_urls = Some(existing_urls);
+    }
+
+    let importer = BatchImporter::new();
+    importer.preview_batch_import(request).await
+}
+
 // Helper function to capture raw ingredients for analysis
 pub async fn capture_raw_ingredients(
     db: &Database,
@@ -2154,6 +2169,7 @@ pub fn run() {
             re_import_recipe,
             parse_ingredients_with_ingredient_crate_command,
             start_batch_import,
+            preview_batch_import,
             get_batch_import_progress,
             cancel_batch_import,
             start_re_import,

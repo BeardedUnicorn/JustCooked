@@ -25,6 +25,13 @@ fn host_matches_domain(host: &str, domain: &str) -> bool {
     host == domain || host.ends_with(&format!(".{}", domain))
 }
 
+fn is_supported_batch_site(host: &str) -> bool {
+    host_matches_domain(host, "allrecipes.com")
+        || host_matches_domain(host, "americastestkitchen.com")
+        || host_matches_domain(host, "seriouseats.com")
+        || host_matches_domain(host, "bonappetit.com")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BatchImportRequest {
@@ -32,6 +39,19 @@ pub struct BatchImportRequest {
     pub max_recipes: Option<u32>,
     pub max_depth: Option<u32>,
     pub existing_urls: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchImportPreflightResponse {
+    pub start_url: String,
+    pub estimated_categories: u32,
+    pub estimated_recipes: u32,
+    pub estimated_duplicates: u32,
+    pub estimated_new_recipes: u32,
+    pub estimated_eta_min_minutes: u32,
+    pub estimated_eta_max_minutes: u32,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -257,11 +277,7 @@ impl BatchImporter {
         };
 
         let host = start_url.host_str().unwrap_or("").to_ascii_lowercase();
-        let is_supported_batch_site = host_matches_domain(&host, "allrecipes.com")
-            || host_matches_domain(&host, "americastestkitchen.com")
-            || host_matches_domain(&host, "seriouseats.com")
-            || host_matches_domain(&host, "bonappetit.com");
-        if !is_supported_batch_site {
+        if !is_supported_batch_site(&host) {
             return Err("Only AllRecipes.com, America's Test Kitchen, Serious Eats, and Bon Appétit URLs are supported for batch import".to_string());
         }
 
@@ -365,6 +381,62 @@ impl BatchImporter {
         info!("Imported recipe IDs: {:?}", result.imported_recipe_ids);
 
         Ok(result)
+    }
+
+    #[instrument(skip_all, fields(start_url = %request.start_url, max_recipes = ?request.max_recipes))]
+    pub async fn preview_batch_import(&self, request: BatchImportRequest) -> Result<BatchImportPreflightResponse, String> {
+        let start_url = Url::parse(&request.start_url)
+            .map_err(|_| "Invalid start URL".to_string())?;
+
+        let host = start_url.host_str().unwrap_or("").to_ascii_lowercase();
+        if !is_supported_batch_site(&host) {
+            return Err("Only AllRecipes.com, America's Test Kitchen, Serious Eats, and Bon Appétit URLs are supported for batch import".to_string());
+        }
+
+        let categories = self.crawl_categories(&request.start_url).await?;
+        let categories = self.apply_max_depth_limit(categories, request.max_depth, &request.start_url);
+
+        let recipe_urls = self.extract_all_recipe_urls(&categories).await?;
+        let estimated_recipes = recipe_urls.len() as u32;
+
+        let (filtered_urls, estimated_duplicates) = self.filter_existing_urls(recipe_urls, &request.existing_urls);
+        let filtered_count = filtered_urls.len() as u32;
+
+        let estimated_new_recipes = if let Some(max) = request.max_recipes {
+            filtered_count.min(max)
+        } else {
+            filtered_count
+        };
+
+        let (estimated_eta_min_minutes, estimated_eta_max_minutes) =
+            Self::estimate_eta_range_minutes(estimated_new_recipes);
+
+        let mut warnings: Vec<String> = Vec::new();
+        if estimated_new_recipes == 0 {
+            warnings.push("No new recipes were detected for this URL after duplicate filtering.".to_string());
+        }
+        if estimated_recipes > 200 {
+            warnings.push("This import is large and may run for a while.".to_string());
+        }
+        if categories.len() > 50 {
+            warnings.push("A high number of categories were discovered and will increase runtime.".to_string());
+        }
+        if let Some(max) = request.max_recipes {
+            if filtered_count > max {
+                warnings.push(format!("Max recipes limit will cap this import at {} recipes.", max));
+            }
+        }
+
+        Ok(BatchImportPreflightResponse {
+            start_url: request.start_url,
+            estimated_categories: categories.len() as u32,
+            estimated_recipes,
+            estimated_duplicates,
+            estimated_new_recipes,
+            estimated_eta_min_minutes,
+            estimated_eta_max_minutes,
+            warnings,
+        })
     }
 
     async fn crawl_categories(&self, start_url: &str) -> Result<Vec<CategoryInfo>, String> {
@@ -669,6 +741,19 @@ impl BatchImporter {
             // No existing URLs provided, return all URLs with 0 skipped
             (recipe_urls, 0)
         }
+    }
+
+    fn estimate_eta_range_minutes(estimated_new_recipes: u32) -> (u32, u32) {
+        if estimated_new_recipes == 0 {
+            return (0, 0);
+        }
+
+        // Rough estimate: 3-5 seconds per recipe with a 1 minute crawl/setup floor.
+        let min_seconds = estimated_new_recipes * 3 + 60;
+        let max_seconds = estimated_new_recipes * 5 + 60;
+        let min_minutes = ((min_seconds as f64) / 60.0).ceil() as u32;
+        let max_minutes = ((max_seconds as f64) / 60.0).ceil() as u32;
+        (min_minutes, max_minutes)
     }
 
     async fn import_recipes(&self, app: tauri::AppHandle, recipe_urls: Vec<String>) {
