@@ -132,7 +132,7 @@ const Cookbook: React.FC = () => {
     // Load data for the selected tab
     if (newValue === 1 && collections.length === 0) {
       loadCollections();
-    } else if (newValue === 2 && smartRecipes.length === 0) {
+    } else if (newValue === 2) {
       loadSmartCookbookData();
     }
   };
