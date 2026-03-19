@@ -23,6 +23,7 @@ vi.mock('@hooks/useImageUrl', () => ({
 
 vi.mock('@utils/timeUtils', () => ({
   calculateTotalTime: vi.fn(() => '27 minutes'),
+  getTodayLocalDateString: vi.fn(() => '2024-01-15'),
 }));
 
 // Mock react-router-dom

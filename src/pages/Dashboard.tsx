@@ -21,6 +21,7 @@ import { getAllMealPlans, getMealPlanRecipes, groupMealPlanRecipesByDate } from 
 import { getAllShoppingLists } from '@services/shoppingListStorage';
 import { getExpiringItems } from '@services/pantryStorage';
 import RecipeCard from '@components/RecipeCard';
+import { getTodayLocalDateString } from '@utils/timeUtils';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -57,11 +58,9 @@ const Dashboard: React.FC = () => {
         setExpiringItems(expiringItemsData);
 
         // Find today's meal plan recipes
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayLocalDateString();
         const activeMealPlan = mealPlansData.find(plan => {
-          const startDate = new Date(plan.startDate).toISOString().split('T')[0];
-          const endDate = new Date(plan.endDate).toISOString().split('T')[0];
-          return today >= startDate && today <= endDate;
+          return today >= plan.startDate && today <= plan.endDate;
         });
 
         if (activeMealPlan) {

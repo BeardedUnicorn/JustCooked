@@ -1,27 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Box, Typography, Tabs, Tab, FormControl, InputLabel, Select, MenuItem,
-  Button, CircularProgress, Alert, Paper, List, ListItem, ListItemText,
-  Divider, Card, CardContent, Chip
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Divider,
+  FormControl,
+  InputLabel,
+  List,
+  ListItem,
+  ListItemText,
+  MenuItem,
+  Paper,
+  Select,
+  Tab,
+  Tabs,
+  Typography,
 } from '@mui/material';
 import {
   Add as AddIcon,
   CalendarToday as CalendarIcon,
+  EventNote as EventNoteIcon,
   ShoppingCart as ShoppingCartIcon,
-  EventNote as EventNoteIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { MealPlan, ShoppingList, isMealPlanActive, isMealPlanUpcoming, isMealPlanPast } from '@app-types';
-import { getAllMealPlans } from '@services/mealPlanStorage';
+import { useSearchParams } from 'react-router-dom';
+import { MealPlan, ShoppingList, isMealPlanActive, isMealPlanPast, isMealPlanUpcoming } from '@app-types';
+import { createNewMealPlan, getAllMealPlans, saveMealPlan } from '@services/mealPlanStorage';
 import { getAllShoppingLists } from '@services/shoppingListStorage';
 import MealPlanView from '@pages/MealPlanView';
 import ShoppingListView from '@components/ShoppingListView';
+import MealPlanDialog, { MealPlanFormValues } from '@components/MealPlanDialog';
+import { getCurrentTimestamp } from '@utils/timeUtils';
 
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
   value: number;
 }
+
+const PLANNER_TABS = {
+  mealPlans: 'meal-plans',
+  shoppingLists: 'shopping-lists',
+} as const;
+
+type PlannerTab = typeof PLANNER_TABS[keyof typeof PLANNER_TABS];
 
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
@@ -34,11 +59,11 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`planner-tab-${index}`}
       {...other}
     >
-      {value === index && (
+      {value === index ? (
         <Box sx={{ py: 3 }}>
           {children}
         </Box>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -50,94 +75,225 @@ function a11yProps(index: number) {
   };
 }
 
-const Planner: React.FC = () => {
-  const navigate = useNavigate();
-  const [tabValue, setTabValue] = useState(0);
+function getPlannerTab(searchParams: URLSearchParams): PlannerTab {
+  return searchParams.get('tab') === PLANNER_TABS.shoppingLists
+    ? PLANNER_TABS.shoppingLists
+    : PLANNER_TABS.mealPlans;
+}
 
-  // Meal Plans state
+function getPlannerTabIndex(tab: PlannerTab): number {
+  return tab === PLANNER_TABS.shoppingLists ? 1 : 0;
+}
+
+function getDefaultMealPlan(mealPlans: MealPlan[]): MealPlan | undefined {
+  const activePlan = mealPlans.find((plan) => isMealPlanActive(plan));
+  const upcomingPlan = mealPlans.find((plan) => isMealPlanUpcoming(plan));
+  return activePlan || upcomingPlan || mealPlans[0];
+}
+
+const Planner: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
-  const [selectedMealPlan, setSelectedMealPlan] = useState<MealPlan | null>(null);
   const [mealPlansLoading, setMealPlansLoading] = useState(false);
   const [mealPlansError, setMealPlansError] = useState<string | null>(null);
-
-  // Shopping Lists state
   const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
-  const [selectedShoppingList, setSelectedShoppingList] = useState<ShoppingList | null>(null);
   const [shoppingListsLoading, setShoppingListsLoading] = useState(false);
   const [shoppingListsError, setShoppingListsError] = useState<string | null>(null);
+  const [shoppingListsLoaded, setShoppingListsLoaded] = useState(false);
+  const [mealPlanDialogOpen, setMealPlanDialogOpen] = useState(false);
+  const [editingMealPlan, setEditingMealPlan] = useState<MealPlan | null>(null);
 
-  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const activeTab = getPlannerTab(searchParams);
+  const selectedMealPlanId = searchParams.get('mealPlanId') || '';
+  const selectedShoppingListId = searchParams.get('shoppingListId') || '';
 
-    // Load data for the selected tab
-    if (newValue === 0 && mealPlans.length === 0) {
-      loadMealPlans();
-    } else if (newValue === 1 && shoppingLists.length === 0) {
-      loadShoppingLists();
-    }
-  };
+  const updatePlannerSearchParams = useCallback((updates: Record<string, string | null>, replace = false) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
 
-  const loadMealPlans = async () => {
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value) {
+        nextSearchParams.set(key, value);
+      } else {
+        nextSearchParams.delete(key);
+      }
+    });
+
+    setSearchParams(nextSearchParams, { replace });
+  }, [searchParams, setSearchParams]);
+
+  const loadMealPlans = useCallback(async (): Promise<MealPlan[]> => {
     try {
       setMealPlansLoading(true);
       const mealPlansData = await getAllMealPlans();
-      // Sort by date created (most recent first)
-      const sortedMealPlans = mealPlansData.sort((a, b) =>
-        new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime()
+      const sortedMealPlans = [...mealPlansData].sort(
+        (a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime()
       );
       setMealPlans(sortedMealPlans);
-
-      // Auto-select the first active meal plan, or the first upcoming, or the first one
-      const activePlan = sortedMealPlans.find(plan => isMealPlanActive(plan));
-      const upcomingPlan = sortedMealPlans.find(plan => isMealPlanUpcoming(plan));
-      const defaultPlan = activePlan || upcomingPlan || sortedMealPlans[0];
-
-      if (defaultPlan) {
-        setSelectedMealPlan(defaultPlan);
-      }
-
       setMealPlansError(null);
-    } catch (err) {
+      return sortedMealPlans;
+    } catch (error) {
       setMealPlansError('Failed to load meal plans');
-      console.error('Error loading meal plans:', err);
+      console.error('Error loading meal plans:', error);
+      return [];
     } finally {
       setMealPlansLoading(false);
     }
-  };
+  }, []);
 
-  const loadShoppingLists = async () => {
+  const loadShoppingLists = useCallback(async (): Promise<ShoppingList[]> => {
     try {
       setShoppingListsLoading(true);
       const shoppingListsData = await getAllShoppingLists();
-      // Sort by date created (most recent first)
-      const sortedShoppingLists = shoppingListsData.sort((a, b) =>
-        new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime()
+      const sortedShoppingLists = [...shoppingListsData].sort(
+        (a, b) => new Date(b.dateCreated).getTime() - new Date(a.dateCreated).getTime()
       );
       setShoppingLists(sortedShoppingLists);
       setShoppingListsError(null);
-    } catch (err) {
+      setShoppingListsLoaded(true);
+      return sortedShoppingLists;
+    } catch (error) {
       setShoppingListsError('Failed to load shopping lists');
-      console.error('Error loading shopping lists:', err);
+      console.error('Error loading shopping lists:', error);
+      setShoppingListsLoaded(true);
+      return [];
     } finally {
       setShoppingListsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    loadMealPlans();
+  }, [loadMealPlans]);
+
+  useEffect(() => {
+    if (activeTab === PLANNER_TABS.shoppingLists || selectedShoppingListId) {
+      loadShoppingLists();
+    }
+  }, [activeTab, selectedShoppingListId, loadShoppingLists]);
+
+  useEffect(() => {
+    if (mealPlansLoading) {
+      return;
+    }
+
+    if (mealPlans.length === 0) {
+      if (selectedMealPlanId) {
+        updatePlannerSearchParams({ mealPlanId: null }, true);
+      }
+      return;
+    }
+
+    if (mealPlans.some((mealPlan) => mealPlan.id === selectedMealPlanId)) {
+      return;
+    }
+
+    const defaultMealPlan = getDefaultMealPlan(mealPlans);
+    if (defaultMealPlan) {
+      updatePlannerSearchParams({ mealPlanId: defaultMealPlan.id }, true);
+    }
+  }, [mealPlans, mealPlansLoading, selectedMealPlanId, updatePlannerSearchParams]);
+
+  useEffect(() => {
+    if (!shoppingListsLoaded || shoppingListsLoading || !selectedShoppingListId) {
+      return;
+    }
+
+    if (!shoppingLists.some((shoppingList) => shoppingList.id === selectedShoppingListId)) {
+      updatePlannerSearchParams({ shoppingListId: null }, true);
+    }
+  }, [shoppingLists, shoppingListsLoaded, shoppingListsLoading, selectedShoppingListId, updatePlannerSearchParams]);
+
+  const selectedMealPlan = useMemo(
+    () => mealPlans.find((mealPlan) => mealPlan.id === selectedMealPlanId) || null,
+    [mealPlans, selectedMealPlanId]
+  );
+
+  const selectedShoppingList = useMemo(
+    () => shoppingLists.find((shoppingList) => shoppingList.id === selectedShoppingListId) || null,
+    [shoppingLists, selectedShoppingListId]
+  );
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
+    updatePlannerSearchParams({
+      tab: newValue === 1 ? PLANNER_TABS.shoppingLists : PLANNER_TABS.mealPlans,
+    });
+  };
+
+  const handleOpenCreateMealPlanDialog = () => {
+    setEditingMealPlan(null);
+    setMealPlanDialogOpen(true);
+  };
+
+  const handleOpenEditMealPlanDialog = (mealPlan: MealPlan) => {
+    setEditingMealPlan(mealPlan);
+    setMealPlanDialogOpen(true);
+  };
+
+  const handleCloseMealPlanDialog = () => {
+    setMealPlanDialogOpen(false);
+    setEditingMealPlan(null);
+  };
+
+  const handleSaveMealPlan = async (values: MealPlanFormValues) => {
+    const mealPlanToSave = editingMealPlan
+      ? {
+          ...editingMealPlan,
+          name: values.name,
+          description: values.description || undefined,
+          startDate: values.startDate,
+          endDate: values.endDate,
+          settings: {
+            enabledMealTypes: values.enabledMealTypes,
+            defaultServings: values.defaultServings,
+          },
+          dateModified: getCurrentTimestamp(),
+        }
+      : {
+          ...createNewMealPlan(
+            values.name,
+            values.startDate,
+            values.endDate,
+            values.description || undefined
+          ),
+          settings: {
+            enabledMealTypes: values.enabledMealTypes,
+            defaultServings: values.defaultServings,
+          },
+        };
+
+    await saveMealPlan(mealPlanToSave);
+    await loadMealPlans();
+
+    updatePlannerSearchParams({
+      tab: PLANNER_TABS.mealPlans,
+      mealPlanId: mealPlanToSave.id,
+    });
+
+    handleCloseMealPlanDialog();
+  };
+
+  const handleSelectShoppingList = (shoppingListId: string) => {
+    updatePlannerSearchParams({
+      tab: PLANNER_TABS.shoppingLists,
+      shoppingListId,
+    });
   };
 
   const getMealPlanStatusChip = (mealPlan: MealPlan) => {
     if (isMealPlanActive(mealPlan)) {
       return <Chip label="Active" color="success" size="small" />;
-    } else if (isMealPlanUpcoming(mealPlan)) {
+    }
+
+    if (isMealPlanUpcoming(mealPlan)) {
       return <Chip label="Upcoming" color="info" size="small" />;
-    } else if (isMealPlanPast(mealPlan)) {
+    }
+
+    if (isMealPlanPast(mealPlan)) {
       return <Chip label="Past" color="default" size="small" />;
     }
+
     return null;
   };
-
-  // Initialize with meal plans
-  useEffect(() => {
-    loadMealPlans();
-  }, []);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -146,14 +302,13 @@ const Planner: React.FC = () => {
       </Typography>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }} data-testid="plannerPage-tabs-main">
-        <Tabs value={tabValue} onChange={handleTabChange} aria-label="planner tabs">
+        <Tabs value={getPlannerTabIndex(activeTab)} onChange={handleTabChange} aria-label="planner tabs">
           <Tab label="Meal Plan" {...a11yProps(0)} data-testid="plannerPage-tab-mealPlan" />
           <Tab label="Shopping Lists" {...a11yProps(1)} data-testid="plannerPage-tab-shoppingLists" />
         </Tabs>
       </Box>
 
-      {/* Meal Plan Tab */}
-      <TabPanel value={tabValue} index={0}>
+      <TabPanel value={getPlannerTabIndex(activeTab)} index={0}>
         {mealPlansLoading ? (
           <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px" data-testid="plannerPage-mealPlan-loading">
             <CircularProgress />
@@ -176,7 +331,7 @@ const Planner: React.FC = () => {
                 variant="contained"
                 size="large"
                 startIcon={<AddIcon />}
-                onClick={() => navigate('/meal-plans')}
+                onClick={handleOpenCreateMealPlanDialog}
                 data-testid="plannerPage-mealPlan-button-createFirst"
               >
                 Create Meal Plan
@@ -185,24 +340,20 @@ const Planner: React.FC = () => {
           </Card>
         ) : (
           <Box>
-            {/* Meal Plan Selector */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, gap: 2, flexWrap: 'wrap' }}>
               <FormControl sx={{ minWidth: 300 }}>
                 <InputLabel>Select Meal Plan</InputLabel>
                 <Select
                   value={selectedMealPlan?.id || ''}
-                  onChange={(e) => {
-                    const plan = mealPlans.find(p => p.id === e.target.value);
-                    setSelectedMealPlan(plan || null);
-                  }}
+                  onChange={(event) => updatePlannerSearchParams({ mealPlanId: event.target.value })}
                   label="Select Meal Plan"
                   data-testid="plannerPage-mealPlan-select-plan"
                 >
-                  {mealPlans.map((plan) => (
-                    <MenuItem key={plan.id} value={plan.id}>
+                  {mealPlans.map((mealPlan) => (
+                    <MenuItem key={mealPlan.id} value={mealPlan.id}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <Typography sx={{ flexGrow: 1 }}>{plan.name}</Typography>
-                        {getMealPlanStatusChip(plan)}
+                        <Typography sx={{ flexGrow: 1 }}>{mealPlan.name}</Typography>
+                        {getMealPlanStatusChip(mealPlan)}
                       </Box>
                     </MenuItem>
                   ))}
@@ -212,21 +363,21 @@ const Planner: React.FC = () => {
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => navigate('/meal-plans')}
+                onClick={handleOpenCreateMealPlanDialog}
                 data-testid="plannerPage-mealPlan-button-createNewPlan"
               >
                 Create New Plan
               </Button>
             </Box>
 
-            {/* Selected Meal Plan View */}
             {selectedMealPlan ? (
-              <Box sx={{
-                '& > div': {
-                  p: 0 // Remove padding from MealPlanView since we're already in a padded container
-                }
-              }}>
-                <MealPlanView />
+              <Box sx={{ '& > div': { p: 0 } }}>
+                <MealPlanView
+                  mealPlanId={selectedMealPlan.id}
+                  embedded
+                  onEditPlan={handleOpenEditMealPlanDialog}
+                  onSelectShoppingList={handleSelectShoppingList}
+                />
               </Box>
             ) : (
               <Paper sx={{ p: 4, textAlign: 'center' }} data-testid="plannerPage-mealPlans-text-selectPlan">
@@ -239,14 +390,12 @@ const Planner: React.FC = () => {
         )}
       </TabPanel>
 
-      {/* Shopping Lists Tab */}
-      <TabPanel value={tabValue} index={1}>
+      <TabPanel value={getPlannerTabIndex(activeTab)} index={1}>
         {selectedShoppingList ? (
-          /* Shopping List View */
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
               <Button
-                onClick={() => setSelectedShoppingList(null)}
+                onClick={() => updatePlannerSearchParams({ shoppingListId: null })}
                 startIcon={<CalendarIcon />}
                 data-testid="plannerPage-shoppingLists-button-back"
               >
@@ -257,17 +406,15 @@ const Planner: React.FC = () => {
             <ShoppingListView
               shoppingList={selectedShoppingList}
               onItemsChanged={() => {
-                // Refresh shopping lists
                 loadShoppingLists();
               }}
               onDelete={() => {
-                setSelectedShoppingList(null);
+                updatePlannerSearchParams({ shoppingListId: null });
                 loadShoppingLists();
               }}
             />
           </Box>
         ) : (
-          /* Shopping Lists List */
           <Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h5">
@@ -275,18 +422,18 @@ const Planner: React.FC = () => {
               </Typography>
               <Button
                 variant="outlined"
-                onClick={() => setTabValue(0)}
+                onClick={() => updatePlannerSearchParams({ tab: PLANNER_TABS.mealPlans })}
                 data-testid="plannerPage-shoppingLists-button-createFromMealPlan"
               >
                 Create from Meal Plan
               </Button>
             </Box>
 
-            {shoppingListsError && (
+            {shoppingListsError ? (
               <Alert severity="error" sx={{ mb: 3 }} data-testid="plannerPage-shoppingLists-alert-error">
                 {shoppingListsError}
               </Alert>
-            )}
+            ) : null}
 
             {shoppingListsLoading ? (
               <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px" data-testid="plannerPage-shoppingLists-loading">
@@ -305,7 +452,7 @@ const Planner: React.FC = () => {
                   <Button
                     variant="contained"
                     size="large"
-                    onClick={() => setTabValue(0)}
+                    onClick={() => updatePlannerSearchParams({ tab: PLANNER_TABS.mealPlans })}
                     data-testid="plannerPage-shoppingLists-button-goToMealPlans"
                   >
                     Go to Meal Plans
@@ -315,20 +462,20 @@ const Planner: React.FC = () => {
             ) : (
               <Paper data-testid="plannerPage-shoppingLists-list-main">
                 <List>
-                  {shoppingLists.map((list, index) => (
-                    <React.Fragment key={list.id}>
+                  {shoppingLists.map((shoppingList, index) => (
+                    <React.Fragment key={shoppingList.id}>
                       <ListItem
                         component="button"
-                        onClick={() => setSelectedShoppingList(list)}
-                        data-testid={`plannerPage-shoppingLists-listItem-${list.id}`}
+                        onClick={() => handleSelectShoppingList(shoppingList.id)}
+                        data-testid={`plannerPage-shoppingLists-listItem-${shoppingList.id}`}
                         sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
                       >
                         <ListItemText
-                          primary={list.name}
-                          secondary={`${list.dateRangeStart} to ${list.dateRangeEnd}`}
+                          primary={shoppingList.name}
+                          secondary={`${shoppingList.dateRangeStart} to ${shoppingList.dateRangeEnd}`}
                         />
                       </ListItem>
-                      {index < shoppingLists.length - 1 && <Divider />}
+                      {index < shoppingLists.length - 1 ? <Divider /> : null}
                     </React.Fragment>
                   ))}
                 </List>
@@ -337,6 +484,14 @@ const Planner: React.FC = () => {
           </Box>
         )}
       </TabPanel>
+
+      <MealPlanDialog
+        open={mealPlanDialogOpen}
+        mode={editingMealPlan ? 'edit' : 'create'}
+        initialMealPlan={editingMealPlan}
+        onClose={handleCloseMealPlanDialog}
+        onSave={handleSaveMealPlan}
+      />
     </Box>
   );
 };

@@ -3,6 +3,9 @@ import {
   parseIsoDuration,
   formatTimeForDisplay,
   calculateTotalTime,
+  formatLocalDate,
+  parseDateOnly,
+  getTodayLocalDateString,
 } from '@utils/timeUtils';
 
 describe('timeUtils', () => {
@@ -97,6 +100,30 @@ describe('timeUtils', () => {
     test('should handle whitespace in total time', () => {
       expect(calculateTotalTime('PT15M', 'PT30M', '   ')).toBe('15 minutes + 30 minutes');
       expect(calculateTotalTime('PT15M', 'PT30M', ' PT45M ')).toBe(' PT45M '); // formatTimeForDisplay doesn't trim whitespace
+    });
+  });
+
+  describe('local date helpers', () => {
+    test('formatLocalDate uses the local calendar date instead of UTC normalization', () => {
+      expect(formatLocalDate(new Date(2024, 0, 15, 23, 45))).toBe('2024-01-15');
+      expect(formatLocalDate(new Date(2024, 10, 5, 0, 5))).toBe('2024-11-05');
+    });
+
+    test('parseDateOnly creates a local midnight date', () => {
+      const parsed = parseDateOnly('2024-03-18');
+
+      expect(parsed.getFullYear()).toBe(2024);
+      expect(parsed.getMonth()).toBe(2);
+      expect(parsed.getDate()).toBe(18);
+      expect(parsed.getHours()).toBe(0);
+      expect(parsed.getMinutes()).toBe(0);
+    });
+
+    test('getTodayLocalDateString returns the local date string for now', () => {
+      const today = new Date();
+      const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      expect(getTodayLocalDateString()).toBe(expected);
     });
   });
 });

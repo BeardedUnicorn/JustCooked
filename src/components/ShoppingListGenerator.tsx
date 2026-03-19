@@ -39,6 +39,7 @@ import {
   consolidateIngredients,
   ConsolidatedIngredient,
 } from '@services/shoppingListStorage';
+import { formatLocalDate, parseDateOnly } from '@utils/timeUtils';
 
 interface ShoppingListGeneratorProps {
   open: boolean;
@@ -54,8 +55,8 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
   onShoppingListCreated,
 }) => {
   const [name, setName] = useState('');
-  const [startDate, setStartDate] = useState<Date>(new Date(mealPlan.startDate));
-  const [endDate, setEndDate] = useState<Date>(new Date(mealPlan.endDate));
+  const [startDate, setStartDate] = useState<Date>(parseDateOnly(mealPlan.startDate));
+  const [endDate, setEndDate] = useState<Date>(parseDateOnly(mealPlan.endDate));
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +67,8 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
     if (open) {
       const defaultName = `Shopping List - ${mealPlan.name}`;
       setName(defaultName);
-      setStartDate(new Date(mealPlan.startDate));
-      setEndDate(new Date(mealPlan.endDate));
+      setStartDate(parseDateOnly(mealPlan.startDate));
+      setEndDate(parseDateOnly(mealPlan.endDate));
       setError(null);
       setShowPreview(false);
       setConsolidatedIngredients([]);
@@ -79,8 +80,8 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
       setPreviewLoading(true);
       setError(null);
 
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const startDateStr = formatLocalDate(startDate);
+      const endDateStr = formatLocalDate(endDate);
 
       // Get all recipes and meal plan recipes
       const [allRecipes, allMealPlanRecipes] = await Promise.all([
@@ -115,8 +116,8 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
       setLoading(true);
       setError(null);
 
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const startDateStr = formatLocalDate(startDate);
+      const endDateStr = formatLocalDate(endDate);
 
       // Get all recipes and meal plan recipes
       const [allRecipes, allMealPlanRecipes] = await Promise.all([
@@ -220,8 +221,8 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
                 label="Start Date"
                 value={startDate}
                 onChange={(date) => date && setStartDate(date)}
-                minDate={new Date(mealPlan.startDate)}
-                maxDate={new Date(mealPlan.endDate)}
+                minDate={parseDateOnly(mealPlan.startDate)}
+                maxDate={parseDateOnly(mealPlan.endDate)}
                 slotProps={{
                   textField: {
                     fullWidth: true,
@@ -234,7 +235,7 @@ const ShoppingListGenerator: React.FC<ShoppingListGeneratorProps> = ({
                 value={endDate}
                 onChange={(date) => date && setEndDate(date)}
                 minDate={startDate}
-                maxDate={new Date(mealPlan.endDate)}
+                maxDate={parseDateOnly(mealPlan.endDate)}
                 slotProps={{
                   textField: {
                     fullWidth: true,

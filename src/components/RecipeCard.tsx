@@ -25,7 +25,7 @@ import { deleteRecipe, updateRecipe } from '@services/recipeStorage';
 import { getAllMealPlans, createNewMealPlanRecipe, saveMealPlanRecipe } from '@services/mealPlanStorage';
 import { getAllCollections, addRecipeToCollection } from '@services/recipeCollectionStorage';
 import { useImageUrl } from '@hooks/useImageUrl';
-import { calculateTotalTime } from '@utils/timeUtils';
+import { calculateTotalTime, getTodayLocalDateString } from '@utils/timeUtils';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -148,7 +148,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, onDelete, onUpdate }) =
       setMealPlans(mealPlansData);
       setMealPlanDialogOpen(true);
       // Set default date to today
-      setSelectedDate(new Date().toISOString().split('T')[0]);
+      setSelectedDate(getTodayLocalDateString());
       setSelectedMealType('dinner'); // Default meal type
     } catch (error) {
       console.error('Failed to load meal plans:', error);

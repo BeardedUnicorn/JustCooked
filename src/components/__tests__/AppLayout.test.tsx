@@ -192,6 +192,7 @@ describe('AppLayout Component', () => {
       // Use getAllByText to handle multiple "Home" elements (breadcrumbs)
       const homeElements = screen.getAllByText('Home');
       expect(homeElements.length).toBeGreaterThan(0);
+      expect(screen.getByRole('link', { name: 'Cookbook' })).toBeInTheDocument();
       expect(screen.getByText('Recipe Details')).toBeInTheDocument();
     });
 
@@ -200,11 +201,10 @@ describe('AppLayout Component', () => {
       mockLocation.pathname = '/recipe/123';
       renderAppLayout();
 
-      // Find the breadcrumb link specifically
-      const homeLink = screen.getByRole('link', { name: 'Home' });
-      await user.click(homeLink);
+      const cookbookLink = screen.getByRole('link', { name: 'Cookbook' });
+      await user.click(cookbookLink);
 
-      expect(mockNavigate).toHaveBeenCalledWith('/');
+      expect(mockNavigate).toHaveBeenCalledWith('/cookbook');
     });
   });
 

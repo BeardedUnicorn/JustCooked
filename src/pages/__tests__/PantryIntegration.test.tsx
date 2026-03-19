@@ -101,6 +101,19 @@ describe('Pantry Integration Tests - Bug Fix Verification', () => {
     expect(screen.getByText('Your pantry is empty. Add some items to get started!')).toBeInTheDocument();
   });
 
+  test('should not render a duplicate floating add menu when PantryManager already provides add flows', async () => {
+    mockGetPantryItems.mockResolvedValue([]);
+
+    render(<Pantry />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Pantry Items')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('pantryHubPage-myPantry-fab-addItem')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pantryHubPage-myPantry-menu-addItem')).not.toBeInTheDocument();
+  });
+
   test('should display pantry items when they exist', async () => {
     const existingItem: PantryItem = {
       id: 'existing-id',

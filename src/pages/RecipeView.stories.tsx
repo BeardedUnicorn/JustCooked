@@ -240,7 +240,7 @@ export const DeleteConfirmInteraction: Story = {
 
     // Verify delete service was called and navigation occurred
     await expect(mockDeleteRecipe).toHaveBeenCalledWith('test-recipe-123');
-    await expect(mockNavigate).toHaveBeenCalledWith('/search');
+    await expect(mockNavigate).toHaveBeenCalledWith('/cookbook');
   },
 };
 

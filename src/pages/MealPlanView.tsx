@@ -1,121 +1,166 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Button,
-  Paper,
-  Grid,
-  Chip,
-  IconButton,
-  CircularProgress,
   Alert,
+  Box,
   Breadcrumbs,
-  Link,
+  Button,
+  Chip,
+  CircularProgress,
   Dialog,
-  DialogTitle,
   DialogContent,
+  DialogTitle,
+  Divider,
+  Grid,
+  IconButton,
+  Link,
   List,
   ListItem,
-  ListItemText,
   ListItemSecondaryAction,
-  Divider,
+  ListItemText,
+  Paper,
+  Typography,
 } from '@mui/material';
 import {
-  ArrowBack as ArrowBackIcon,
   Add as AddIcon,
-  ShoppingCart as ShoppingCartIcon,
+  ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   List as ListIcon,
+  ShoppingCart as ShoppingCartIcon,
 } from '@mui/icons-material';
-import RecipeAssignmentDialog from '@components/RecipeAssignmentDialog';
-import ShoppingListGenerator from '@components/ShoppingListGenerator';
-
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   MealPlan,
   MealPlanRecipe,
   Recipe,
+  getMealPlanDates,
   getMealTypeDisplayName,
   getMealTypeOrder,
-  getMealPlanDates,
   isMealPlanActive,
-  isMealPlanUpcoming,
   isMealPlanPast,
+  isMealPlanUpcoming,
 } from '@app-types';
 import {
+  deleteMealPlanRecipe,
   getMealPlanById,
   getMealPlanRecipes,
   groupMealPlanRecipesByDate,
-  deleteMealPlanRecipe,
 } from '@services/mealPlanStorage';
 import { getAllRecipes } from '@services/recipeStorage';
 import { getShoppingListsByMealPlan } from '@services/shoppingListStorage';
+import RecipeAssignmentDialog from '@components/RecipeAssignmentDialog';
+import ShoppingListGenerator from '@components/ShoppingListGenerator';
+import { parseDateOnly } from '@utils/timeUtils';
 
-const MealPlanView: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+interface MealPlanViewProps {
+  mealPlanId?: string;
+  embedded?: boolean;
+  onEditPlan?: (mealPlan: MealPlan) => void;
+  onSelectShoppingList?: (shoppingListId: string) => void;
+}
+
+const PLANNER_MEAL_PLANS_PATH = '/planner?tab=meal-plans';
+
+const MealPlanView: React.FC<MealPlanViewProps> = ({
+  mealPlanId,
+  embedded = false,
+  onEditPlan,
+  onSelectShoppingList,
+}) => {
+  const { id: routeMealPlanId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
+  const resolvedMealPlanId = mealPlanId || routeMealPlanId;
+
   const [mealPlan, setMealPlan] = useState<MealPlan | null>(null);
   const [mealPlanRecipes, setMealPlanRecipes] = useState<MealPlanRecipe[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Dialog states
   const [recipeAssignmentOpen, setRecipeAssignmentOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>('');
-  const [selectedMealType, setSelectedMealType] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedMealType, setSelectedMealType] = useState('');
   const [shoppingListGeneratorOpen, setShoppingListGeneratorOpen] = useState(false);
   const [shoppingListsDialogOpen, setShoppingListsDialogOpen] = useState(false);
   const [shoppingLists, setShoppingLists] = useState<any[]>([]);
 
   useEffect(() => {
-    if (id) {
-      loadMealPlanData();
+    if (!resolvedMealPlanId) {
+      setMealPlan(null);
+      setMealPlanRecipes([]);
+      setLoading(false);
+      setError('Meal plan not found');
+      return;
     }
-  }, [id]);
 
-  const loadMealPlanData = async () => {
-    if (!id) return;
+    const loadMealPlanData = async () => {
+      try {
+        setLoading(true);
+
+        const [mealPlanData, mealPlanRecipesData, recipesData] = await Promise.all([
+          getMealPlanById(resolvedMealPlanId),
+          getMealPlanRecipes(resolvedMealPlanId),
+          getAllRecipes(),
+        ]);
+
+        if (!mealPlanData) {
+          setMealPlan(null);
+          setMealPlanRecipes([]);
+          setRecipes([]);
+          setError('Meal plan not found');
+          return;
+        }
+
+        setMealPlan(mealPlanData);
+        setMealPlanRecipes(mealPlanRecipesData);
+        setRecipes(recipesData);
+        setError(null);
+      } catch (loadError) {
+        setError('Failed to load meal plan data');
+        console.error('Error loading meal plan data:', loadError);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMealPlanData();
+  }, [resolvedMealPlanId]);
+
+  const loadShoppingLists = async () => {
+    if (!mealPlan) {
+      return;
+    }
 
     try {
-      setLoading(true);
-      const [mealPlanData, mealPlanRecipesData, recipesData] = await Promise.all([
-        getMealPlanById(id),
-        getMealPlanRecipes(id),
-        getAllRecipes(),
-      ]);
-
-      if (!mealPlanData) {
-        setError('Meal plan not found');
-        return;
-      }
-
-      setMealPlan(mealPlanData);
-      setMealPlanRecipes(mealPlanRecipesData);
-      setRecipes(recipesData);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load meal plan data');
-      console.error('Error loading meal plan data:', err);
-    } finally {
-      setLoading(false);
+      const lists = await getShoppingListsByMealPlan(mealPlan.id);
+      setShoppingLists(lists);
+    } catch (loadError) {
+      console.error('Error loading shopping lists:', loadError);
     }
   };
 
-  const getMealPlanStatusChip = (mealPlan: MealPlan) => {
-    if (isMealPlanActive(mealPlan)) {
+  useEffect(() => {
+    if (mealPlan) {
+      loadShoppingLists();
+    }
+  }, [mealPlan]);
+
+  const getMealPlanStatusChip = (value: MealPlan) => {
+    if (isMealPlanActive(value)) {
       return <Chip label="Active" color="success" size="small" />;
-    } else if (isMealPlanUpcoming(mealPlan)) {
+    }
+
+    if (isMealPlanUpcoming(value)) {
       return <Chip label="Upcoming" color="info" size="small" />;
-    } else if (isMealPlanPast(mealPlan)) {
+    }
+
+    if (isMealPlanPast(value)) {
       return <Chip label="Past" color="default" size="small" />;
     }
+
     return null;
   };
 
   const getRecipeById = (recipeId: string): Recipe | undefined => {
-    return recipes.find(recipe => recipe.id === recipeId);
+    return recipes.find((recipe) => recipe.id === recipeId);
   };
 
   const handleAddRecipe = (date: string, mealType: string) => {
@@ -125,40 +170,67 @@ const MealPlanView: React.FC = () => {
   };
 
   const handleRecipeAssigned = () => {
-    loadMealPlanData(); // Reload data to show the new assignment
+    if (!resolvedMealPlanId) {
+      return;
+    }
+
+    setLoading(true);
+    Promise.all([
+      getMealPlanById(resolvedMealPlanId),
+      getMealPlanRecipes(resolvedMealPlanId),
+      getAllRecipes(),
+    ]).then(([mealPlanData, mealPlanRecipesData, recipesData]) => {
+      if (!mealPlanData) {
+        setMealPlan(null);
+        setMealPlanRecipes([]);
+        setRecipes([]);
+        setError('Meal plan not found');
+        return;
+      }
+
+      setMealPlan(mealPlanData);
+      setMealPlanRecipes(mealPlanRecipesData);
+      setRecipes(recipesData);
+      setError(null);
+    }).catch((loadError) => {
+      setError('Failed to load meal plan data');
+      console.error('Error loading meal plan data:', loadError);
+    }).finally(() => {
+      setLoading(false);
+    });
   };
 
   const handleRemoveRecipe = async (mealPlanRecipeId: string) => {
     try {
       await deleteMealPlanRecipe(mealPlanRecipeId);
-      loadMealPlanData(); // Reload data to reflect the removal
-    } catch (err) {
+      handleRecipeAssigned();
+    } catch (removeError) {
       setError('Failed to remove recipe from meal plan');
-      console.error('Error removing recipe:', err);
+      console.error('Error removing recipe:', removeError);
     }
+  };
+
+  const handleOpenEditPlan = () => {
+    if (mealPlan && onEditPlan) {
+      onEditPlan(mealPlan);
+    }
+  };
+
+  const handleViewShoppingList = (shoppingListId: string) => {
+    setShoppingListsDialogOpen(false);
+
+    if (onSelectShoppingList) {
+      onSelectShoppingList(shoppingListId);
+      return;
+    }
+
+    navigate(`/planner?tab=shopping-lists&shoppingListId=${shoppingListId}`);
   };
 
   const handleShoppingListCreated = (shoppingListId: string) => {
-    // Navigate to shopping list view or show success message
-    console.log('Shopping list created:', shoppingListId);
-    loadShoppingLists(); // Reload shopping lists
+    loadShoppingLists();
+    handleViewShoppingList(shoppingListId);
   };
-
-  const loadShoppingLists = async () => {
-    if (!mealPlan) return;
-    try {
-      const lists = await getShoppingListsByMealPlan(mealPlan.id);
-      setShoppingLists(lists);
-    } catch (err) {
-      console.error('Error loading shopping lists:', err);
-    }
-  };
-
-  useEffect(() => {
-    if (mealPlan) {
-      loadShoppingLists();
-    }
-  }, [mealPlan]);
 
   if (loading) {
     return (
@@ -170,17 +242,19 @@ const MealPlanView: React.FC = () => {
 
   if (error || !mealPlan) {
     return (
-      <Box sx={{ maxWidth: 1200, mx: 'auto', py: 3 }}>
+      <Box sx={{ maxWidth: embedded ? undefined : 1200, mx: embedded ? 0 : 'auto', py: embedded ? 0 : 3 }}>
         <Alert severity="error" data-testid="mealPlanViewPage-alert-error">
           {error || 'Meal plan not found'}
         </Alert>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/meal-plans')}
-          sx={{ mt: 2 }}
-        >
-          Back to Meal Plans
-        </Button>
+        {!embedded ? (
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate(PLANNER_MEAL_PLANS_PATH)}
+            sx={{ mt: 2 }}
+          >
+            Back to Planner
+          </Button>
+        ) : null}
       </Box>
     );
   }
@@ -189,24 +263,24 @@ const MealPlanView: React.FC = () => {
   const mealPlanDates = getMealPlanDates(mealPlan);
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', py: 3 }}>
-      {/* Breadcrumbs */}
-      <Breadcrumbs sx={{ mb: 2 }}>
-        <Link
-          component="button"
-          variant="body1"
-          onClick={() => navigate('/meal-plans')}
-          sx={{ textDecoration: 'none' }}
-        >
-          Meal Plans
-        </Link>
-        <Typography color="text.primary">{mealPlan.name}</Typography>
-      </Breadcrumbs>
+    <Box sx={{ maxWidth: embedded ? undefined : 1200, mx: embedded ? 0 : 'auto', py: embedded ? 0 : 3 }}>
+      {!embedded ? (
+        <Breadcrumbs sx={{ mb: 2 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() => navigate(PLANNER_MEAL_PLANS_PATH)}
+            sx={{ textDecoration: 'none' }}
+          >
+            Meal Plans
+          </Link>
+          <Typography color="text.primary">{mealPlan.name}</Typography>
+        </Breadcrumbs>
+      ) : null}
 
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3, gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
             <Typography variant="h4" component="h1" data-testid="mealPlanViewPage-text-title">
               {mealPlan.name}
             </Typography>
@@ -215,18 +289,18 @@ const MealPlanView: React.FC = () => {
             </Box>
           </Box>
 
-          {mealPlan.description && (
+          {mealPlan.description ? (
             <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }} data-testid="mealPlanViewPage-text-description">
               {mealPlan.description}
             </Typography>
-          )}
+          ) : null}
 
           <Typography variant="body2" color="text.secondary" data-testid="mealPlanViewPage-text-dateRange">
             {mealPlan.startDate} to {mealPlan.endDate} ({mealPlanDates.length} days)
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             variant="outlined"
             startIcon={<ShoppingCartIcon />}
@@ -243,17 +317,19 @@ const MealPlanView: React.FC = () => {
           >
             View Lists ({shoppingLists.length})
           </Button>
-          <Button
-            variant="outlined"
-            startIcon={<EditIcon />}
-            data-testid="meal-plan-edit-button"
-          >
-            Edit Plan
-          </Button>
+          {onEditPlan ? (
+            <Button
+              variant="outlined"
+              startIcon={<EditIcon />}
+              onClick={handleOpenEditPlan}
+              data-testid="meal-plan-edit-button"
+            >
+              Edit Plan
+            </Button>
+          ) : null}
         </Box>
       </Box>
 
-      {/* Meal Plan Calendar */}
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" sx={{ mb: 3 }}>
           Meal Calendar
@@ -265,11 +341,12 @@ const MealPlanView: React.FC = () => {
           </Typography>
         ) : (
           <Grid container spacing={2}>
-            {mealPlanDates.map((date: string) => {
+            {mealPlanDates.map((date) => {
               const dayRecipes = groupedRecipes[date] || {};
-              const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
-              const dayOfMonth = new Date(date).toLocaleDateString('en-US', { day: 'numeric' });
-              const month = new Date(date).toLocaleDateString('en-US', { month: 'short' });
+              const localDate = parseDateOnly(date);
+              const dayOfWeek = localDate.toLocaleDateString('en-US', { weekday: 'short' });
+              const dayOfMonth = localDate.toLocaleDateString('en-US', { day: 'numeric' });
+              const month = localDate.toLocaleDateString('en-US', { month: 'short' });
 
               return (
                 <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={date}>
@@ -283,7 +360,6 @@ const MealPlanView: React.FC = () => {
                     }}
                     data-testid={`meal-plan-day-${date}`}
                   >
-                    {/* Date Header */}
                     <Box sx={{ textAlign: 'center', mb: 2 }}>
                       <Typography variant="h6" component="div">
                         {dayOfWeek}
@@ -293,13 +369,12 @@ const MealPlanView: React.FC = () => {
                       </Typography>
                     </Box>
 
-                    {/* Meals for this day */}
                     <Box sx={{ flexGrow: 1 }}>
                       {mealPlan.settings.enabledMealTypes
                         .sort((a, b) => getMealTypeOrder(a) - getMealTypeOrder(b))
                         .map((mealType) => {
                           const mealRecipes = dayRecipes[mealType] || [];
-                          
+
                           return (
                             <Box key={mealType} sx={{ mb: 2 }}>
                               <Typography
@@ -309,7 +384,7 @@ const MealPlanView: React.FC = () => {
                               >
                                 {getMealTypeDisplayName(mealType)}
                               </Typography>
-                              
+
                               {mealRecipes.length === 0 ? (
                                 <Box
                                   sx={{
@@ -333,6 +408,7 @@ const MealPlanView: React.FC = () => {
                               ) : (
                                 mealRecipes.map((mealPlanRecipe) => {
                                   const recipe = getRecipeById(mealPlanRecipe.recipeId);
+
                                   return (
                                     <Box
                                       key={mealPlanRecipe.id}
@@ -357,11 +433,11 @@ const MealPlanView: React.FC = () => {
                                       <Typography variant="body2" sx={{ fontWeight: 'medium', pr: 3 }}>
                                         {recipe?.title || 'Unknown Recipe'}
                                       </Typography>
-                                      {mealPlanRecipe.servingMultiplier !== 1 && (
+                                      {mealPlanRecipe.servingMultiplier !== 1 ? (
                                         <Typography variant="caption" color="text.secondary">
                                           {mealPlanRecipe.servingMultiplier}x servings
                                         </Typography>
-                                      )}
+                                      ) : null}
                                       <IconButton
                                         className="remove-button"
                                         size="small"
@@ -377,8 +453,8 @@ const MealPlanView: React.FC = () => {
                                             color: 'error.contrastText',
                                           },
                                         }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
+                                        onClick={(event) => {
+                                          event.stopPropagation();
                                           handleRemoveRecipe(mealPlanRecipe.id);
                                         }}
                                         data-testid={`meal-plan-remove-recipe-${mealPlanRecipe.id}`}
@@ -401,7 +477,6 @@ const MealPlanView: React.FC = () => {
         )}
       </Paper>
 
-      {/* Quick Actions */}
       <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
         <Button
           variant="contained"
@@ -421,7 +496,6 @@ const MealPlanView: React.FC = () => {
         </Button>
       </Box>
 
-      {/* Recipe Assignment Dialog */}
       <RecipeAssignmentDialog
         open={recipeAssignmentOpen}
         onClose={() => setRecipeAssignmentOpen(false)}
@@ -432,7 +506,6 @@ const MealPlanView: React.FC = () => {
         onRecipeAssigned={handleRecipeAssigned}
       />
 
-      {/* Shopping List Generator Dialog */}
       <ShoppingListGenerator
         open={shoppingListGeneratorOpen}
         onClose={() => setShoppingListGeneratorOpen(false)}
@@ -440,7 +513,6 @@ const MealPlanView: React.FC = () => {
         onShoppingListCreated={handleShoppingListCreated}
       />
 
-      {/* Shopping Lists Dialog */}
       <Dialog
         open={shoppingListsDialogOpen}
         onClose={() => setShoppingListsDialogOpen(false)}
@@ -470,26 +542,23 @@ const MealPlanView: React.FC = () => {
             </Box>
           ) : (
             <List>
-              {shoppingLists.map((list, index) => (
-                <React.Fragment key={list.id}>
+              {shoppingLists.map((shoppingList, index) => (
+                <React.Fragment key={shoppingList.id}>
                   <ListItem>
                     <ListItemText
-                      primary={list.name}
-                      secondary={`${list.dateRangeStart} to ${list.dateRangeEnd}`}
+                      primary={shoppingList.name}
+                      secondary={`${shoppingList.dateRangeStart} to ${shoppingList.dateRangeEnd}`}
                     />
                     <ListItemSecondaryAction>
                       <Button
                         size="small"
-                        onClick={() => {
-                          setShoppingListsDialogOpen(false);
-                          navigate(`/shopping-lists/${list.id}`);
-                        }}
+                        onClick={() => handleViewShoppingList(shoppingList.id)}
                       >
                         View
                       </Button>
                     </ListItemSecondaryAction>
                   </ListItem>
-                  {index < shoppingLists.length - 1 && <Divider />}
+                  {index < shoppingLists.length - 1 ? <Divider /> : null}
                 </React.Fragment>
               ))}
             </List>

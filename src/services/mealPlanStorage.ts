@@ -1,6 +1,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { MealPlan, MealPlanRecipe } from '@app-types';
-import { getCurrentTimestamp } from '@utils/timeUtils';
+import {
+  formatLocalDate,
+  getCurrentTimestamp,
+  getTodayLocalDateString,
+  parseDateOnly,
+} from '@utils/timeUtils';
 
 // Meal Plan CRUD operations
 export async function saveMealPlan(mealPlan: MealPlan): Promise<void> {
@@ -113,36 +118,36 @@ export function createNewMealPlanRecipe(
 
 // Utility functions for meal plan management
 export function getMealPlanDuration(mealPlan: MealPlan): number {
-  const startDate = new Date(mealPlan.startDate);
-  const endDate = new Date(mealPlan.endDate);
+  const startDate = parseDateOnly(mealPlan.startDate);
+  const endDate = parseDateOnly(mealPlan.endDate);
   const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
 }
 
 export function getMealPlanDates(mealPlan: MealPlan): string[] {
   const dates: string[] = [];
-  const startDate = new Date(mealPlan.startDate);
-  const endDate = new Date(mealPlan.endDate);
-  
+  const startDate = parseDateOnly(mealPlan.startDate);
+  const endDate = parseDateOnly(mealPlan.endDate);
+
   for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-    dates.push(date.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+    dates.push(formatLocalDate(date));
   }
-  
+
   return dates;
 }
 
 export function isMealPlanActive(mealPlan: MealPlan): boolean {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayLocalDateString();
   return today >= mealPlan.startDate && today <= mealPlan.endDate;
 }
 
 export function isMealPlanUpcoming(mealPlan: MealPlan): boolean {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayLocalDateString();
   return today < mealPlan.startDate;
 }
 
 export function isMealPlanPast(mealPlan: MealPlan): boolean {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayLocalDateString();
   return today > mealPlan.endDate;
 }
 

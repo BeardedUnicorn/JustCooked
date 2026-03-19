@@ -2,6 +2,10 @@
  * Utility functions for parsing and formatting time durations
  */
 
+function padDatePart(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
 /**
  * Parse ISO 8601 duration string (e.g., "PT50M", "PT1H30M", "PT2H") to human-readable format
  * @param duration - ISO 8601 duration string
@@ -90,6 +94,34 @@ export function calculateTotalTime(prepTime: string, cookTime: string, totalTime
   }
   
   return '';
+}
+
+/**
+ * Format a Date object as a local YYYY-MM-DD string.
+ * This preserves the user's calendar day instead of normalizing to UTC.
+ */
+export function formatLocalDate(date: Date): string {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+/**
+ * Parse a YYYY-MM-DD date string into a local Date at midnight.
+ */
+export function parseDateOnly(dateString: string): Date {
+  const [year, month, day] = dateString.split('-').map(Number);
+
+  if (!year || !month || !day) {
+    return new Date(dateString);
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Get today's date as a local YYYY-MM-DD string.
+ */
+export function getTodayLocalDateString(): string {
+  return formatLocalDate(new Date());
 }
 
 /**

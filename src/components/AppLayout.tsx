@@ -89,7 +89,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       if (currentItem) {
         breadcrumbs.push({ label: currentItem.text, path: location.pathname });
       } else if (pathSegments[0] === 'recipe') {
-        breadcrumbs.push({ label: 'Search Recipes', path: '/search' });
+        breadcrumbs.push({ label: 'Cookbook', path: '/cookbook' });
         breadcrumbs.push({ label: 'Recipe Details', path: location.pathname });
       } else if (pathSegments[0] === 'collections') {
         breadcrumbs.push({ label: 'Collections', path: '/collections' });

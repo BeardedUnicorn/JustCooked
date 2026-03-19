@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Tabs, Tab, Paper, Button, Menu, MenuItem,
+  Box, Typography, Tabs, Tab, Paper, Button, MenuItem,
   TextField, FormControl, InputLabel, Select, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, TablePagination,
   Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
@@ -11,9 +11,6 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
-  QrCodeScanner as QrCodeScannerIcon,
-  ShoppingCart as ShoppingCartIcon,
-  Create as CreateIcon
 } from '@mui/icons-material';
 import { PantryItem, IngredientDatabase, INGREDIENT_CATEGORIES } from '@app-types';
 import { getPantryItems, addPantryItem, updatePantryItem, deletePantryItem } from '@services/pantryStorage';
@@ -64,7 +61,6 @@ const PantryHub: React.FC = () => {
 
   // My Pantry tab state
   const [pantryItems, setPantryItems] = useState<PantryItem[]>([]);
-  const [addMenuAnchorEl, setAddMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   // Ingredient Database tab state
   const [ingredients, setIngredients] = useState<IngredientDatabase[]>([]);
@@ -274,63 +270,6 @@ const PantryHub: React.FC = () => {
             onDeleteItem={handleDeletePantryItem}
           />
         </Paper>
-
-        {/* Enhanced Add Item FAB with Menu */}
-        <Fab
-          color="primary"
-          aria-label="add pantry item"
-          data-testid="pantryHubPage-myPantry-fab-addItem"
-          sx={{
-            position: 'fixed',
-            bottom: 80, // Above bottom navigation on mobile
-            right: 16,
-          }}
-          onClick={(event) => setAddMenuAnchorEl(event.currentTarget)}
-        >
-          <AddIcon />
-        </Fab>
-
-        {/* Add Item Menu */}
-        <Menu
-          anchorEl={addMenuAnchorEl}
-          open={Boolean(addMenuAnchorEl)}
-          onClose={() => setAddMenuAnchorEl(null)}
-          data-testid="pantryHubPage-myPantry-menu-addItem"
-        >
-          <MenuItem
-            onClick={() => {
-              setAddMenuAnchorEl(null);
-              // TODO: Implement barcode scanner
-              console.log('Scan Barcode clicked');
-            }}
-            data-testid="pantry-scan-barcode-menu-item"
-          >
-            <QrCodeScannerIcon sx={{ mr: 1 }} />
-            Scan Barcode
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setAddMenuAnchorEl(null);
-              // TODO: Implement product search modal
-              console.log('Search Product clicked');
-            }}
-            data-testid="pantry-search-product-menu-item"
-          >
-            <ShoppingCartIcon sx={{ mr: 1 }} />
-            Search Product
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              setAddMenuAnchorEl(null);
-              // TODO: Implement manual add
-              console.log('Add Manually clicked');
-            }}
-            data-testid="pantry-add-manually-menu-item"
-          >
-            <CreateIcon sx={{ mr: 1 }} />
-            Add Manually
-          </MenuItem>
-        </Menu>
       </TabPanel>
 
       {/* Ingredient Database Tab */}

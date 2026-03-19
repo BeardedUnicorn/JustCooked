@@ -52,7 +52,7 @@ const RecipeView: React.FC = () => {
 
     try {
       await deleteRecipe(id);
-      navigate('/search');
+      navigate('/cookbook');
     } catch (err) {
       console.error('Failed to delete recipe:', err);
       alert('Failed to delete recipe');

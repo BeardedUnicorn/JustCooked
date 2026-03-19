@@ -44,6 +44,7 @@ import {
   calculateShoppingListProgress,
   exportShoppingListAsText,
 } from '@services/shoppingListStorage';
+import { parseDateOnly } from '@utils/timeUtils';
 
 interface ShoppingListViewProps {
   shoppingList: ShoppingList;
@@ -188,8 +189,8 @@ const ShoppingListView: React.FC<ShoppingListViewProps> = ({
   };
 
   const formatDateRange = () => {
-    const startDate = new Date(shoppingList.dateRangeStart).toLocaleDateString();
-    const endDate = new Date(shoppingList.dateRangeEnd).toLocaleDateString();
+    const startDate = parseDateOnly(shoppingList.dateRangeStart).toLocaleDateString();
+    const endDate = parseDateOnly(shoppingList.dateRangeEnd).toLocaleDateString();
     return startDate === endDate ? startDate : `${startDate} - ${endDate}`;
   };
 

@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import RecipeView from '../RecipeView';
-import { getRecipeById } from '@services/recipeStorage';
+import { getRecipeById, deleteRecipe } from '@services/recipeStorage';
 import darkTheme from '@styles/theme';
 
 // Mock the services
@@ -84,6 +84,25 @@ describe('RecipeView', () => {
     fireEvent.click(startCookingButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/recipe/test-recipe-id/cook');
+  });
+
+  it('should navigate back to the cookbook after deleting a recipe', async () => {
+    (getRecipeById as any).mockResolvedValue(mockRecipe);
+    (deleteRecipe as any).mockResolvedValue(undefined);
+
+    renderWithProviders(<RecipeView />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Recipe')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('recipeViewPage-button-delete'));
+    fireEvent.click(screen.getByTestId('recipeViewPage-dialog-deleteConfirm-button-confirm'));
+
+    await waitFor(() => {
+      expect(deleteRecipe).toHaveBeenCalledWith('test-recipe-id');
+      expect(mockNavigate).toHaveBeenCalledWith('/cookbook');
+    });
   });
 
   it('should not render start cooking button when recipe is not loaded', () => {

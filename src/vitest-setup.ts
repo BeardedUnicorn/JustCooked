@@ -3,7 +3,8 @@ import { TextEncoder, TextDecoder } from 'util';
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder as any;
 
-import { vi, beforeEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 
 // Mock crypto.randomUUID for consistent test results
@@ -75,4 +76,9 @@ beforeEach(() => {
   localStorageMock.setItem.mockClear();
   localStorageMock.removeItem.mockClear();
   localStorageMock.clear.mockClear();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
 });
