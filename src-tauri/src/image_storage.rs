@@ -3,6 +3,7 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
 use tokio::fs;
 use url::Url;
 use uuid::Uuid;
@@ -43,7 +44,7 @@ pub async fn download_and_store_image(
     })?;
 
     // Create images directory if it doesn't exist
-    let images_dir = app_data_dir.join("images");
+    let images_dir = get_image_storage_dir(app_data_dir);
     fs::create_dir_all(&images_dir).await.map_err(|e| ImageStorageError {
         message: format!("Failed to create images directory: {}", e),
         error_type: "FileSystemError".to_string(),
@@ -165,9 +166,16 @@ pub async fn delete_stored_image(local_path: &str) -> Result<(), ImageStorageErr
     Ok(())
 }
 
-pub fn get_app_data_dir() -> Result<PathBuf, ImageStorageError> {
-    // For now, use a simple approach - we'll pass the app data dir from the frontend
-    // or use a default location
+pub fn get_image_storage_dir(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("images")
+}
+
+pub fn legacy_app_data_dir_from_home(home_dir: &Path) -> PathBuf {
+    home_dir.join(".justcooked")
+}
+
+#[allow(dead_code)]
+pub fn legacy_app_data_dir() -> Result<PathBuf, ImageStorageError> {
     let home_dir = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .map_err(|_| ImageStorageError {
@@ -175,7 +183,19 @@ pub fn get_app_data_dir() -> Result<PathBuf, ImageStorageError> {
             error_type: "FileSystemError".to_string(),
         })?;
 
-    Ok(PathBuf::from(home_dir).join(".justcooked"))
+    Ok(legacy_app_data_dir_from_home(Path::new(&home_dir)))
+}
+
+#[allow(dead_code)]
+pub fn get_app_data_dir() -> Result<PathBuf, ImageStorageError> {
+    legacy_app_data_dir()
+}
+
+pub fn get_app_local_data_dir(app: &AppHandle) -> Result<PathBuf, ImageStorageError> {
+    app.path().app_local_data_dir().map_err(|e| ImageStorageError {
+        message: format!("Failed to get app data directory: {}", e),
+        error_type: "FileSystemError".to_string(),
+    })
 }
 
 #[allow(dead_code)]

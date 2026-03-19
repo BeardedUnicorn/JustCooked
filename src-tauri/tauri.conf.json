@@ -24,9 +24,8 @@
       }
     ],
     "security": {
-      "csp": null,
-      "capabilities": ["default"],
-      "dangerousDisableAssetCspModification": true
+      "csp": "default-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob: file: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data: asset: http://asset.localhost; media-src 'self' blob: data: file: https:; worker-src 'self' blob:",
+      "capabilities": ["default"]
     }
   },
   "bundle": {

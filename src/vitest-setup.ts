@@ -57,10 +57,6 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
   },
 }));
 
-vi.mock('@tauri-apps/plugin-http', () => ({
-  fetch: vi.fn(),
-}));
-
 // Mock console methods to reduce noise in tests
 global.console = {
   ...console,

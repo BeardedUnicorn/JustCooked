@@ -7,8 +7,6 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:default",
-    "core:webview:default",
     "fs:default",
     "fs:allow-write-text-file",
     "fs:allow-read-text-file",
@@ -16,14 +14,11 @@
     "fs:allow-mkdir",
     "fs:allow-remove",
     "dialog:default",
-    "http:default",
-    "http:allow-fetch",
-    "shell:default",
     {
       "identifier": "fs:scope",
       "allow": [
         {
-          "path": "$DATA/**",
+          "path": "$APPLOCALDATA/**",
           "read": true,
           "write": true
         }

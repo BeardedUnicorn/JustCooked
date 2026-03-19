@@ -47,11 +47,14 @@ mod tests {
 
     #[test]
     fn test_get_app_data_dir() {
-        let result = get_app_data_dir();
-        assert!(result.is_ok());
-        
-        let path = result.unwrap();
-        assert!(path.to_string_lossy().contains(".justcooked"));
+        let path = legacy_app_data_dir_from_home(std::path::Path::new("/Users/tester"));
+        assert_eq!(path, std::path::Path::new("/Users/tester/.justcooked"));
+    }
+
+    #[test]
+    fn test_get_image_storage_dir() {
+        let path = get_image_storage_dir(std::path::Path::new("/tmp/justcooked"));
+        assert_eq!(path, std::path::Path::new("/tmp/justcooked/images"));
     }
 
     #[tokio::test]
