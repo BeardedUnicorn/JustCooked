@@ -22,7 +22,7 @@ JustCooked is a desktop-first recipe manager built with Tauri, React, TypeScript
 
 ## Prerequisites
 
-- Node.js with npm
+- Node.js with Yarn
 - Rust toolchain
 - Tauri system prerequisites for your OS
 
@@ -30,32 +30,32 @@ Install the platform dependencies from the [official Tauri prerequisites guide](
 
 ## Getting Started
 
-This repository is currently set up around `npm` and `package-lock.json`.
+This repository uses Yarn for JavaScript dependency management.
 
 ```bash
-npm install
+yarn install
 ```
 
 ### Run the web frontend
 
 ```bash
-npm run dev
+yarn dev
 ```
 
 ### Run the Tauri desktop app
 
 ```bash
-npm run tauri -- dev
+yarn tauri dev
 ```
 
 ### Build
 
 ```bash
 # Frontend build
-npm run build
+yarn build
 
 # Desktop bundle
-npm run tauri -- build
+yarn tauri build
 ```
 
 ## Testing
@@ -63,25 +63,25 @@ npm run tauri -- build
 ### Frontend
 
 ```bash
-npm run test
-npm run test:watch
-npm run test:coverage
+yarn test
+yarn test:watch
+yarn test:coverage
 ```
 
 ### Rust backend
 
 ```bash
-npm run test:rust
-npm run test:rust:unit
-npm run test:rust:integration
-npm run test:rust:property
+yarn test:rust
+yarn test:rust:unit
+yarn test:rust:integration
+yarn test:rust:property
 ```
 
 ### Full suite
 
 ```bash
-npm run test:all
-npm run test:all:coverage
+yarn test:all
+yarn test:all:coverage
 ```
 
 Rust-specific testing notes live in [`src-tauri/TESTING.md`](./src-tauri/TESTING.md). Frontend test commands are defined in [`package.json`](./package.json) and [`vitest.config.ts`](./vitest.config.ts).
@@ -89,8 +89,8 @@ Rust-specific testing notes live in [`src-tauri/TESTING.md`](./src-tauri/TESTING
 ## Storybook
 
 ```bash
-npm run storybook
-npm run build-storybook
+yarn storybook
+yarn build-storybook
 ```
 
 ## Project Layout
