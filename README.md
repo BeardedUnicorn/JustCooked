@@ -84,7 +84,7 @@ npm run test:all
 npm run test:all:coverage
 ```
 
-More detail is available in [`TESTING.md`](./TESTING.md) and [`src-tauri/TESTING.md`](./src-tauri/TESTING.md).
+Rust-specific testing notes live in [`src-tauri/TESTING.md`](./src-tauri/TESTING.md). Frontend test commands are defined in [`package.json`](./package.json) and [`vitest.config.ts`](./vitest.config.ts).
 
 ## Storybook
 
@@ -99,7 +99,7 @@ npm run build-storybook
 .
 ├── src/                 # React app, routes, components, services, store
 ├── src-tauri/           # Rust backend, database, import pipeline, Tauri config
-├── TESTING.md           # Frontend and combined test guide
+├── LICENSE              # MIT license
 ├── src-tauri/TESTING.md # Rust-specific testing guide
 ├── vitest.config.ts     # Frontend test configuration
 └── package.json         # Scripts and frontend dependencies
@@ -126,6 +126,10 @@ Key backend areas:
 - App data is stored locally
 - The desktop bundle includes resources from `src-tauri/resources/`
 - On startup, the app attempts to migrate legacy JSON recipe data into the database
+
+## License
+
+JustCooked is licensed under the MIT License. See [`LICENSE`](./LICENSE).
 
 ## Recommended IDE Setup
 

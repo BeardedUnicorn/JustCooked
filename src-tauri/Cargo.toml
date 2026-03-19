@@ -3,6 +3,7 @@ name = "JustCooked"
 version = "0.1.0"
 description = "A modern digital cookbook app"
 authors = ["Mike Herold"]
+license = "MIT"
 edition = "2021"
 default-run = "JustCooked"
 
