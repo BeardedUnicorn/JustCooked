@@ -18,6 +18,7 @@ import {
   CloudDownload as ExportIcon,
   CloudUpload as ImportIcon,
   DeleteForever as ResetIcon,
+  AutoFixHigh as RepairIcon,
   ExpandMore as ExpandMoreIcon,
   Storage as DatabaseIcon,
 } from '@mui/icons-material';
@@ -90,6 +91,22 @@ const DatabaseManagementSection: React.FC = () => {
       setSuccess('Database reset successfully! All data has been cleared.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset database');
+    } finally {
+      setLoading(false);
+      setOperation(null);
+    }
+  };
+
+  const handleRepairIngredientCatalog = async () => {
+    clearMessages();
+    setLoading(true);
+    setOperation('repair');
+
+    try {
+      const result = await databaseManagementService.repairIngredientCatalog();
+      setSuccess(databaseManagementService.formatIngredientCatalogRepairResult(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to repair ingredient catalog');
     } finally {
       setLoading(false);
       setOperation(null);
@@ -185,6 +202,27 @@ const DatabaseManagementSection: React.FC = () => {
             data-testid="dbManagement-button-import"
           >
             {isOperationLoading('import') ? 'Importing...' : 'Import Database'}
+          </Button>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Repair Ingredient Catalog
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Re-canonicalize saved ingredient names, merge duplicates, and remove malformed catalog rows created by older imports.
+          </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={isOperationLoading('repair') ? <CircularProgress size={20} data-testid="dbManagement-loading-repair" /> : <RepairIcon />}
+            onClick={handleRepairIngredientCatalog}
+            disabled={loading}
+            data-testid="dbManagement-button-repair-ingredients"
+          >
+            {isOperationLoading('repair') ? 'Repairing...' : 'Repair Ingredient Catalog'}
           </Button>
         </Box>
 

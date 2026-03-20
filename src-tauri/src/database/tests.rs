@@ -552,6 +552,87 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn test_repair_ingredient_catalog_canonicalizes_and_merges_rows() {
+        let (db, _temp_dir) = create_test_database().await;
+
+        let older_duplicate = IngredientDatabase {
+            id: "ingredient-old-milk".to_string(),
+            name: "0.33333334326744 cup 1% milk".to_string(),
+            category: "dairy".to_string(),
+            aliases: vec!["low fat milk".to_string()],
+            date_added: "2024-01-01T00:00:00Z".to_string(),
+            date_modified: "2024-01-01T00:00:00Z".to_string(),
+        };
+        let newer_duplicate = IngredientDatabase {
+            id: "ingredient-new-milk".to_string(),
+            name: "1% milk".to_string(),
+            category: "dairy".to_string(),
+            aliases: vec!["milk".to_string()],
+            date_added: "2024-01-02T00:00:00Z".to_string(),
+            date_modified: "2024-01-02T00:00:00Z".to_string(),
+        };
+        let size_fragment = IngredientDatabase {
+            id: "ingredient-ginger".to_string(),
+            name: "-inch knob ginger".to_string(),
+            category: "herbs".to_string(),
+            aliases: vec![],
+            date_added: "2024-01-03T00:00:00Z".to_string(),
+            date_modified: "2024-01-03T00:00:00Z".to_string(),
+        };
+        let note_row = IngredientDatabase {
+            id: "ingredient-note".to_string(),
+            name: "* Raw egg is not recommended for the elderly".to_string(),
+            category: "other".to_string(),
+            aliases: vec![],
+            date_added: "2024-01-04T00:00:00Z".to_string(),
+            date_modified: "2024-01-04T00:00:00Z".to_string(),
+        };
+        let valid = IngredientDatabase {
+            id: "ingredient-onion".to_string(),
+            name: "yellow onion".to_string(),
+            category: "vegetables".to_string(),
+            aliases: vec![],
+            date_added: "2024-01-05T00:00:00Z".to_string(),
+            date_modified: "2024-01-05T00:00:00Z".to_string(),
+        };
+
+        db.save_ingredient(&older_duplicate).await.unwrap();
+        db.save_ingredient(&newer_duplicate).await.unwrap();
+        db.save_ingredient(&size_fragment).await.unwrap();
+        db.save_ingredient(&note_row).await.unwrap();
+        db.save_ingredient(&valid).await.unwrap();
+
+        db.create_product_ingredient_mapping("milk-sku", &older_duplicate.id)
+            .await
+            .unwrap();
+
+        let result = db.repair_ingredient_catalog().await.unwrap();
+        assert_eq!(result.scanned, 5);
+        assert!(result.updated >= 2);
+        assert!(result.merged >= 1);
+        assert!(result.removed >= 2);
+
+        let ingredients = db.get_all_ingredients().await.unwrap();
+        let names: Vec<String> = ingredients.iter().map(|ingredient| ingredient.name.clone()).collect();
+
+        assert!(names.contains(&"1% milk".to_string()));
+        assert!(names.contains(&"ginger".to_string()));
+        assert!(names.contains(&"yellow onion".to_string()));
+        assert!(!names.contains(&"0.33333334326744 cup 1% milk".to_string()));
+        assert!(!names.contains(&"-inch knob ginger".to_string()));
+        assert!(!names.contains(&"* Raw egg is not recommended for the elderly".to_string()));
+
+        let surviving_milk = ingredients.iter().find(|ingredient| ingredient.name == "1% milk").unwrap();
+        assert_eq!(surviving_milk.id, older_duplicate.id);
+        assert!(surviving_milk.aliases.contains(&"low fat milk".to_string()));
+        assert!(surviving_milk.aliases.contains(&"milk".to_string()));
+
+        let mapping = db.get_product_ingredient_mapping("milk-sku").await.unwrap().unwrap();
+        assert_eq!(mapping.ingredient_id, older_duplicate.id);
+        assert_eq!(mapping.ingredient_name, "1% milk");
+    }
+
     // Additional comprehensive duplicate detection tests
     #[tokio::test]
     async fn test_duplicate_url_detection_comprehensive() {

@@ -8,6 +8,7 @@ import {
   formatAmountForDisplay,
   shouldUseEmptyUnit,
   cleanIngredientName,
+  canonicalizeIngredientCatalogName,
   detectIngredientCategory,
   separatePreparationFromName,
   shouldIncludePreparation
@@ -332,6 +333,58 @@ describe('ingredientUtils', () => {
       expect(cleanIngredientName('SALT, DIVIDED')).toBe('SALT');
       expect(cleanIngredientName('Onion, Finely Chopped')).toBe('Onion');
       expect(cleanIngredientName('GROUND BEEF OR TURKEY')).toBe('GROUND BEEF');
+    });
+  });
+
+  describe('canonicalizeIngredientCatalogName', () => {
+    test('strips scaled quantity prefixes while preserving semantic qualifiers', () => {
+      expect(canonicalizeIngredientCatalogName({
+        name: '0.33333334326744 cup 1% milk',
+        amount: 0.33333334326744,
+        unit: 'cup',
+      })).toBe('1% milk');
+    });
+
+    test('removes package-size and size-fragment prefixes', () => {
+      expect(canonicalizeIngredientCatalogName({
+        name: '1 1/4-oz. envelope instant yeast (about 2 1/4 tsp.)',
+        amount: 1,
+        unit: 'package',
+      })).toBe('instant yeast');
+
+      expect(canonicalizeIngredientCatalogName({
+        name: '1 (4-inch) knob ginger, cut into 1/4- to 1/2-inch slices lengthwise',
+        amount: 1,
+        unit: '',
+      })).toBe('ginger');
+    });
+
+    test('decodes html entities and removes preparation tails', () => {
+      expect(canonicalizeIngredientCatalogName({
+        name: '&nbsp;1 medium onion, finely chopped',
+        amount: 1,
+        unit: '',
+      })).toBe('onion');
+    });
+
+    test('rejects note rows and bare container rows', () => {
+      expect(canonicalizeIngredientCatalogName({
+        name: '* Raw egg is not recommended for the elderly',
+        amount: 1,
+        unit: '',
+      })).toBeNull();
+
+      expect(canonicalizeIngredientCatalogName({
+        name: '1 can',
+        amount: 1,
+        unit: 'can',
+      })).toBeNull();
+
+      expect(canonicalizeIngredientCatalogName({
+        name: '1 clove',
+        amount: 1,
+        unit: 'clove',
+      })).toBeNull();
     });
   });
 

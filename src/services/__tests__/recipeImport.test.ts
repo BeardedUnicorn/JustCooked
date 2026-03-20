@@ -167,13 +167,13 @@ describe('recipeImport', () => {
     test('should auto-detect and save ingredients during import', async () => {
       await importRecipeFromUrl(url);
 
-      // Verify that autoDetectIngredients was called with ingredient names
+      // Verify that autoDetectIngredients was called with structured parsed ingredients
       expect(mockAutoDetectIngredients).toHaveBeenCalledWith([
-        'all-purpose flour',
-        'granulated sugar',
-        'eggs',
-        'milk',
-        'butter'
+        { name: 'all-purpose flour', amount: 2, unit: 'cups' },
+        { name: 'granulated sugar', amount: 1, unit: 'cup' },
+        { name: 'eggs', amount: 2, unit: '' },
+        { name: 'milk', amount: 0.5, unit: 'cup' },
+        { name: 'butter', amount: 0.25, unit: 'cup' },
       ]);
     });
 

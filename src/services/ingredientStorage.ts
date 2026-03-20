@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { IngredientDatabase, IngredientSearchResult } from '@app-types';
-import { cleanIngredientName, detectIngredientCategory } from '@utils/ingredientUtils';
+import { canonicalizeIngredientCatalogName, IngredientCatalogCandidate, detectIngredientCategory } from '@utils/ingredientUtils';
 import { getCurrentTimestamp } from '@utils/timeUtils';
 
 // Helper function to convert Tauri ingredient format to frontend format
@@ -173,11 +173,15 @@ export async function findIngredientByName(name: string): Promise<IngredientData
 }
 
 // Auto-detect and add new ingredients from recipe imports
-export async function autoDetectIngredients(ingredientNames: string[]): Promise<IngredientDatabase[]> {
+export async function autoDetectIngredients(ingredientNames: IngredientCatalogCandidate[]): Promise<IngredientDatabase[]> {
   const newIngredients: IngredientDatabase[] = [];
 
-  for (const name of ingredientNames) {
-    const cleanName = cleanIngredientName(name);
+  for (const ingredient of ingredientNames) {
+    const cleanName = canonicalizeIngredientCatalogName(ingredient);
+    if (!cleanName) {
+      continue;
+    }
+
     const existing = await findIngredientByName(cleanName);
 
     if (!existing) {

@@ -1,9 +1,121 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Ingredient, INGREDIENT_CATEGORIES } from '@app-types';
+import { decodeAllHtmlEntities } from './stringUtils';
 
 /**
  * Utility functions for ingredient parsing, formatting, and processing
  */
+
+export type IngredientCatalogCandidate = string | Pick<Ingredient, 'name' | 'amount' | 'unit'>;
+
+const CATALOG_AMOUNT_PATTERN = /^(?:an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|\d+(?:\.\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]+)\s+/i;
+const CATALOG_PARENTHESES_PATTERN = /^\([^)]*\)\s*/i;
+const CATALOG_SIZE_FRAGMENT_PATTERN = /^-?(?:\d+(?:\.\d+)?|\d+\s+\d+\/\d+|\d+\/\d+)?-(?:inch|inches|oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters)\.?\s+/i;
+const CATALOG_CONTAINER_PATTERN = /^(?:cups?|tablespoons?|tbsp\.?|teaspoons?|tsp\.?|ounces?|oz\.?|pounds?|lb\.?|lbs\.?|grams?|kilograms?|milliliters?|liters?|cans?|packages?|jars?|bottles?|bags?|boxes?|containers?|cloves?|heads?|bunches?|stalks?|sprigs?|slices?|pieces?|envelopes?|packets?)\s+/i;
+const CATALOG_FRAGMENT_WORD_PATTERN = /^-?(?:inch|inches|knob|piece|pieces|chunk|chunks|length|lengths|segment|segments|section|sections|slice|slices|stick|sticks|round|rounds|cube|cubes|disk|disks|strip|strips|matchstick|matchsticks|packet|packets|envelope|envelopes)\s+/i;
+const CATALOG_SIZE_WORD_PATTERN = /^(?:small|medium|large)\s+/i;
+const CATALOG_PREPARATION_WORD_PATTERN = /^(?:peeled|seeded|stemmed|trimmed|cut|cubed|halved|quartered|roughly|finely|thinly|thickly|lightly|minced|chopped|diced|sliced|grated|julienned|crushed)\s+/i;
+const CATALOG_BARE_NAME_PATTERN = /^(?:can|package|cup|cups|clove|cloves|jar|bottle|box|bag|pound|pounds|ounce|ounces|oz|lb|package|packages|packet|packets|envelope|envelopes)$/i;
+const CATALOG_INVALID_ONLY_PATTERN = /^(?:hot|plain|light|optional|note|warning)$/i;
+
+function normalizeIngredientCandidateText(raw: string): string {
+  return decodeAllHtmlEntities(raw)
+    .replace(/\u00a0/g, ' ')
+    .replace(/_/g, ' ')
+    .replace(/⁄/g, '/')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateConcatenatedIngredientText(text: string): string {
+  const match = text.match(/\)\s*(?=(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞]))/);
+  if (!match || typeof match.index !== 'number') {
+    return text;
+  }
+
+  return text.slice(0, match.index + 1).trim();
+}
+
+function isIngredientNoteRow(text: string): boolean {
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return normalized.startsWith('*') ||
+    normalized.startsWith('note:') ||
+    normalized.startsWith('options:') ||
+    normalized.startsWith('option:') ||
+    normalized.startsWith('to make oat flour') ||
+    normalized.includes('not recommended for the elderly') ||
+    normalized.includes('if you are concerned');
+}
+
+function stripIngredientCatalogPrefix(text: string): string {
+  let cleaned = text.trim();
+
+  for (;;) {
+    const next = cleaned
+      .replace(/^["']+/, '')
+      .replace(/^\[[^\]]+\]\s*/, '')
+      .replace(CATALOG_AMOUNT_PATTERN, '')
+      .replace(CATALOG_PARENTHESES_PATTERN, '')
+      .replace(CATALOG_SIZE_FRAGMENT_PATTERN, '')
+      .replace(CATALOG_CONTAINER_PATTERN, '')
+      .replace(CATALOG_FRAGMENT_WORD_PATTERN, '')
+      .replace(CATALOG_SIZE_WORD_PATTERN, '')
+      .replace(CATALOG_PREPARATION_WORD_PATTERN, '')
+      .replace(/^(?:of|from)\s+/i, '')
+      .replace(/^[-\s]+/, '')
+      .trim();
+
+    if (next === cleaned) {
+      return next;
+    }
+
+    cleaned = next;
+  }
+}
+
+export function canonicalizeIngredientCatalogName(candidate: IngredientCatalogCandidate): string | null {
+  const candidateName = typeof candidate === 'string' ? candidate : candidate.name;
+  let cleaned = normalizeIngredientCandidateText(candidateName);
+
+  if (!cleaned || isIngredientNoteRow(cleaned)) {
+    return null;
+  }
+
+  cleaned = truncateConcatenatedIngredientText(cleaned)
+    .replace(/;\s*for table salt.*$/i, '')
+    .replace(/;\s*use half as much by volume.*$/i, '')
+    .replace(/\s*,\s*(?:for serving|for garnish|for dusting).*$/i, '')
+    .trim();
+
+  if (cleaned.includes(',')) {
+    cleaned = cleaned.split(',')[0].trim();
+  }
+
+  cleaned = cleaned
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  cleaned = stripIngredientCatalogPrefix(cleaned)
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (!cleaned || CATALOG_BARE_NAME_PATTERN.test(cleaned) || CATALOG_INVALID_ONLY_PATTERN.test(cleaned)) {
+    return null;
+  }
+
+  if (/^(?:&|[-*]|\d(?!%))/.test(cleaned) || !/[a-z]/i.test(cleaned)) {
+    return null;
+  }
+
+  return cleaned;
+}
 
 // Helper function to determine if an ingredient should use an empty unit (for count-based items)
 export function shouldUseEmptyUnit(ingredientName: string): boolean {

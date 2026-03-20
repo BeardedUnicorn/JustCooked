@@ -223,6 +223,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_canonicalizes_size_fragments_into_real_ingredient_names() {
+        let parser = IngredientParser::new();
+
+        let result = parser
+            .parse_ingredient(
+                "1 (4-inch) knob ginger, cut into 1/4- to 1/2-inch slices lengthwise",
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let ingredient = result.unwrap();
+        assert_eq!(ingredient.name, "ginger");
+    }
+
+    #[tokio::test]
+    async fn test_canonicalizes_package_size_prefixes() {
+        let parser = IngredientParser::new();
+
+        let result = parser
+            .parse_ingredient("1 1/4-oz. envelope instant yeast (about 2 1/4 tsp.)", None)
+            .await
+            .unwrap();
+
+        assert!(result.is_some());
+        let ingredient = result.unwrap();
+        assert_eq!(ingredient.name, "instant yeast");
+    }
+
+    #[tokio::test]
+    async fn test_rejects_bare_container_rows() {
+        let parser = IngredientParser::new();
+
+        assert!(parser.parse_ingredient("1 can", None).await.unwrap().is_none());
+        assert!(parser.parse_ingredient("1 clove", None).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
     async fn test_preparation_method_filtering() {
         let parser = IngredientParser::new();
 

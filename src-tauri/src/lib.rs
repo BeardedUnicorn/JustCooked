@@ -8,6 +8,7 @@ pub mod import_queue;
 pub mod ingredient_parsing;
 pub mod parsing_feedback;
 pub mod conversions;
+pub mod ingredient_catalog;
 mod app;
 
 #[cfg(test)]

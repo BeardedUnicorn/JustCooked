@@ -5,6 +5,7 @@ use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing::{debug, info};
 use ingredient::{from_str as parse_ingredient_str, Ingredient as ParsedIngredient};
+use crate::ingredient_catalog::{canonicalize_ingredient_catalog_name, is_suspicious_catalog_name};
 
 /// Simple ingredient structure for parsing results
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -150,8 +151,18 @@ impl IngredientParser {
     ) -> Result<Option<crate::database::Ingredient>> {
         // Clean and validate the ingredient name
         let cleaned_name = self.clean_ingredient_name(&parsed.name);
+        let repaired_name = if is_suspicious_catalog_name(&cleaned_name) {
+            canonicalize_ingredient_catalog_name(&cleaned_name)
+        } else {
+            Some(cleaned_name.clone())
+        };
 
         // Validate the parsed ingredient
+        let Some(cleaned_name) = repaired_name else {
+            debug!("Parsed ingredient has invalid name: '{}'", cleaned_name);
+            return Ok(None);
+        };
+
         if cleaned_name.is_empty() || self.is_preparation_method(&cleaned_name) {
             debug!("Parsed ingredient has invalid name: '{}'", cleaned_name);
             return Ok(None);
@@ -192,9 +203,15 @@ impl IngredientParser {
         ingredient_text: &str,
         section: Option<String>,
     ) -> Result<Option<crate::database::Ingredient>> {
-        let cleaned_name = self.clean_ingredient_name(ingredient_text);
+        let fallback_name = self.clean_ingredient_name(ingredient_text);
+        let cleaned_name = canonicalize_ingredient_catalog_name(ingredient_text)
+            .or_else(|| canonicalize_ingredient_catalog_name(&fallback_name))
+            .unwrap_or(fallback_name);
 
-        if cleaned_name.is_empty() || self.is_preparation_method(&cleaned_name) {
+        if cleaned_name.is_empty()
+            || self.is_preparation_method(&cleaned_name)
+            || is_suspicious_catalog_name(&cleaned_name)
+        {
             return Ok(None);
         }
 

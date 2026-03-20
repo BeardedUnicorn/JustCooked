@@ -37,6 +37,23 @@ mod tests {
             clean_raw_ingredient_string("  1   cup    milk  "),
             "1 cup milk"
         );
+
+        assert_eq!(
+            clean_raw_ingredient_string("&nbsp;1 medium onion, finely chopped&nbsp;"),
+            "1 medium onion, finely chopped"
+        );
+
+        assert_eq!(
+            clean_raw_ingredient_string("* Raw egg is not recommended for the elderly"),
+            ""
+        );
+
+        assert_eq!(
+            clean_raw_ingredient_string(
+                "4 tablespoons (20g) Sichuan peppercorns (see notes)1 1/2 tablespoons (7g) cumin seeds1 tablespoon (6g) fennel seeds&nbsp;"
+            ),
+            "4 tablespoons (20g) Sichuan peppercorns (see notes)"
+        );
     }
 
     #[test]

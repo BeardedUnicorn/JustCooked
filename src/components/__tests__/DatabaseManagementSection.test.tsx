@@ -11,6 +11,8 @@ vi.mock('@services/databaseManagement', () => ({
     exportDatabase: vi.fn(),
     importDatabase: vi.fn(),
     resetDatabase: vi.fn(),
+    repairIngredientCatalog: vi.fn(),
+    formatIngredientCatalogRepairResult: vi.fn(),
     formatImportResult: vi.fn(),
   },
 }));
@@ -54,6 +56,7 @@ describe('DatabaseManagementSection', () => {
     expect(screen.getByTestId('dbManagement-button-export')).toBeInTheDocument();
     expect(screen.getByTestId('dbManagement-button-import')).toBeInTheDocument();
     expect(screen.getByTestId('dbManagement-button-reset')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-repair-ingredients')).toBeInTheDocument();
   });
 
   it('handles export database successfully', async () => {
@@ -239,6 +242,32 @@ describe('DatabaseManagementSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dbManagement-alert-error')).toBeInTheDocument();
       expect(screen.getByText(errorMessage)).toBeInTheDocument();
+    });
+  });
+
+  it('handles ingredient catalog repair successfully', async () => {
+    mockDatabaseManagementService.repairIngredientCatalog.mockResolvedValue({
+      scanned: 12,
+      updated: 7,
+      merged: 3,
+      removed: 4,
+    });
+    mockDatabaseManagementService.formatIngredientCatalogRepairResult.mockReturnValue(
+      'Ingredient catalog repaired: scanned 12, updated 7, merged 3, removed 4.'
+    );
+
+    renderWithTheme(<DatabaseManagementSection />);
+
+    const repairButton = screen.getByTestId('dbManagement-button-repair-ingredients');
+    fireEvent.click(repairButton);
+
+    await waitFor(() => {
+      expect(mockDatabaseManagementService.repairIngredientCatalog).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
+      expect(screen.getByText('Ingredient catalog repaired: scanned 12, updated 7, merged 3, removed 4.')).toBeInTheDocument();
     });
   });
 

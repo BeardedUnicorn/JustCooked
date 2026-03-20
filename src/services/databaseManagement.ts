@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { DatabaseExport, DatabaseImportResult } from '@app-types';
+import { DatabaseExport, DatabaseImportResult, IngredientCatalogRepairResult } from '@app-types';
 
 export class DatabaseManagementService {
   /**
@@ -121,6 +121,15 @@ export class DatabaseManagementService {
     }
   }
 
+  async repairIngredientCatalog(): Promise<IngredientCatalogRepairResult> {
+    try {
+      return await invoke<IngredientCatalogRepairResult>('db_repair_ingredient_catalog');
+    } catch (error) {
+      console.error('Failed to repair ingredient catalog:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to repair ingredient catalog');
+    }
+  }
+
   /**
    * Get database statistics
    */
@@ -224,6 +233,10 @@ export class DatabaseManagementService {
       : '';
 
     return successMessage + failureMessage;
+  }
+
+  formatIngredientCatalogRepairResult(result: IngredientCatalogRepairResult): string {
+    return `Ingredient catalog repaired: scanned ${result.scanned}, updated ${result.updated}, merged ${result.merged}, removed ${result.removed}.`;
   }
 }
 

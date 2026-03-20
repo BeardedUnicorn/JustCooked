@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePool, Row, Sqlite, Transaction};
 use tauri::{AppHandle, Manager};
+use crate::ingredient_catalog::{canonicalize_ingredient_catalog_name, canonicalize_recipe_ingredient_for_catalog};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ingredient {
@@ -233,6 +234,14 @@ pub struct DatabaseImportResult {
     pub raw_ingredients_imported: i32,
     pub raw_ingredients_failed: i32,
     pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IngredientCatalogRepairResult {
+    pub scanned: i32,
+    pub updated: i32,
+    pub merged: i32,
+    pub removed: i32,
 }
 
 pub struct Database {
@@ -1237,9 +1246,15 @@ impl Database {
 
         sqlx::query(
             r#"
-            INSERT OR REPLACE INTO ingredients (
+            INSERT INTO ingredients (
                 id, name, category, aliases, date_added, date_modified
             ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                aliases = excluded.aliases,
+                date_added = excluded.date_added,
+                date_modified = excluded.date_modified
             "#,
         )
         .bind(&ingredient.id)
@@ -1300,6 +1315,72 @@ impl Database {
         }
 
         Ok(ingredients)
+    }
+
+    pub async fn repair_ingredient_catalog(&self) -> Result<IngredientCatalogRepairResult> {
+        let ingredients = self.get_all_ingredients().await?;
+        let mut result = IngredientCatalogRepairResult {
+            scanned: ingredients.len() as i32,
+            ..Default::default()
+        };
+
+        let mut tx = self.begin_transaction().await?;
+        let mut grouped: std::collections::BTreeMap<String, Vec<IngredientDatabase>> = std::collections::BTreeMap::new();
+
+        for ingredient in ingredients {
+            if let Some(canonical_name) = canonicalize_ingredient_catalog_name(&ingredient.name) {
+                grouped.entry(canonical_name).or_default().push(ingredient);
+            } else {
+                self.delete_ingredient_with_transaction(&mut tx, &ingredient.id).await?;
+                result.removed += 1;
+            }
+        }
+
+        for (canonical_name, mut group) in grouped {
+            group.sort_by(|left, right| {
+                self.compare_ingredient_database_age(left, right)
+                    .then_with(|| left.id.cmp(&right.id))
+            });
+
+            let mut survivor = group[0].clone();
+            let merged_aliases = self.build_repaired_aliases(&canonical_name, &group);
+            let merged_category = self.select_repaired_category(&canonical_name, &group);
+
+            for duplicate in group.into_iter().skip(1) {
+                self.reassign_product_ingredient_mappings_with_transaction(
+                    &mut tx,
+                    &duplicate.id,
+                    &survivor.id,
+                    &survivor.name,
+                )
+                .await?;
+                self.delete_ingredient_with_transaction(&mut tx, &duplicate.id).await?;
+                result.merged += 1;
+                result.removed += 1;
+            }
+
+            let survivor_changed =
+                survivor.name != canonical_name ||
+                survivor.aliases != merged_aliases ||
+                survivor.category != merged_category;
+
+            if survivor_changed {
+                survivor.name = canonical_name.clone();
+                survivor.aliases = merged_aliases;
+                survivor.category = merged_category;
+                survivor.date_modified = Utc::now().to_rfc3339();
+
+                self.save_ingredient_with_transaction(&mut tx, &survivor).await?;
+                result.updated += 1;
+            }
+
+            self.refresh_product_ingredient_mappings_with_transaction(&mut tx, &survivor.id, &canonical_name)
+                .await?;
+        }
+
+        tx.commit().await.context("Failed to commit ingredient catalog repair")?;
+
+        Ok(result)
     }
 
     // Pantry database methods
@@ -1464,7 +1545,7 @@ impl Database {
     // Ingredient auto-detection methods
     pub async fn auto_detect_ingredients_from_recipe(&self, recipe: &Recipe) -> Result<()> {
         let ingredient_names: Vec<String> = recipe.ingredients.iter()
-            .map(|ingredient| self.clean_ingredient_name(&ingredient.name))
+            .filter_map(canonicalize_recipe_ingredient_for_catalog)
             .collect();
 
         for name in ingredient_names {
@@ -1509,6 +1590,66 @@ impl Database {
             Some(row) => Ok(Some(self.row_to_ingredient(row)?)),
             None => Ok(None),
         }
+    }
+
+    fn compare_ingredient_database_age(
+        &self,
+        left: &IngredientDatabase,
+        right: &IngredientDatabase,
+    ) -> std::cmp::Ordering {
+        let left_date = DateTime::parse_from_rfc3339(&left.date_added).ok();
+        let right_date = DateTime::parse_from_rfc3339(&right.date_added).ok();
+
+        match (left_date, right_date) {
+            (Some(left_date), Some(right_date)) => left_date.cmp(&right_date),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left.date_added.cmp(&right.date_added),
+        }
+    }
+
+    fn build_repaired_aliases(
+        &self,
+        canonical_name: &str,
+        ingredients: &[IngredientDatabase],
+    ) -> Vec<String> {
+        let mut aliases = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for ingredient in ingredients {
+            for alias in ingredient.aliases.iter().chain(std::iter::once(&ingredient.name)) {
+                if let Some(canonical_alias) = canonicalize_ingredient_catalog_name(alias) {
+                    if canonical_alias != canonical_name && seen.insert(canonical_alias.clone()) {
+                        aliases.push(canonical_alias);
+                    }
+                }
+            }
+        }
+
+        aliases.sort();
+        aliases
+    }
+
+    fn select_repaired_category(
+        &self,
+        canonical_name: &str,
+        ingredients: &[IngredientDatabase],
+    ) -> String {
+        let detected_category = self.detect_ingredient_category(canonical_name);
+        if detected_category != "other" {
+            return detected_category;
+        }
+
+        ingredients
+            .iter()
+            .find(|ingredient| !ingredient.category.is_empty() && ingredient.category != "other")
+            .map(|ingredient| ingredient.category.clone())
+            .unwrap_or_else(|| {
+                ingredients
+                    .first()
+                    .map(|ingredient| ingredient.category.clone())
+                    .unwrap_or_else(|| "other".to_string())
+            })
     }
 
     pub fn clean_ingredient_name(&self, name: &str) -> String {
@@ -2119,9 +2260,15 @@ impl Database {
 
         sqlx::query(
             r#"
-            INSERT OR REPLACE INTO ingredients (
+            INSERT INTO ingredients (
                 id, name, category, aliases, date_added, date_modified
             ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                aliases = excluded.aliases,
+                date_added = excluded.date_added,
+                date_modified = excluded.date_modified
             "#,
         )
         .bind(&ingredient.id)
@@ -2133,6 +2280,64 @@ impl Database {
         .execute(&mut **tx)
         .await
         .context("Failed to save ingredient")?;
+
+        Ok(())
+    }
+
+    async fn delete_ingredient_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, id: &str) -> Result<()> {
+        sqlx::query("DELETE FROM ingredients WHERE id = ?")
+            .bind(id)
+            .execute(&mut **tx)
+            .await
+            .context("Failed to delete ingredient")?;
+
+        Ok(())
+    }
+
+    async fn refresh_product_ingredient_mappings_with_transaction(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        ingredient_id: &str,
+        ingredient_name: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE product_ingredient_mappings
+            SET ingredient_name = ?, updated_at = ?
+            WHERE ingredient_id = ?
+            "#,
+        )
+        .bind(ingredient_name)
+        .bind(Utc::now().to_rfc3339())
+        .bind(ingredient_id)
+        .execute(&mut **tx)
+        .await
+        .context("Failed to refresh product ingredient mappings")?;
+
+        Ok(())
+    }
+
+    async fn reassign_product_ingredient_mappings_with_transaction(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        from_ingredient_id: &str,
+        to_ingredient_id: &str,
+        ingredient_name: &str,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE product_ingredient_mappings
+            SET ingredient_id = ?, ingredient_name = ?, updated_at = ?
+            WHERE ingredient_id = ?
+            "#,
+        )
+        .bind(to_ingredient_id)
+        .bind(ingredient_name)
+        .bind(Utc::now().to_rfc3339())
+        .bind(from_ingredient_id)
+        .execute(&mut **tx)
+        .await
+        .context("Failed to reassign product ingredient mappings")?;
 
         Ok(())
     }

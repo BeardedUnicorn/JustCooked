@@ -78,6 +78,7 @@ export type { RawIngredient } from './rawIngredient';
 export type {
   DatabaseExport,
   DatabaseImportResult,
+  IngredientCatalogRepairResult,
   DatabaseStats,
   DatabaseOperationProgress
 } from './databaseManagement';

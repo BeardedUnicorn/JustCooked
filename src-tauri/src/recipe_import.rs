@@ -3,6 +3,7 @@ use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use url::Url;
 use tracing::{info, warn, error, debug, instrument};
+use crate::ingredient_catalog::clean_scraped_ingredient_string;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportedRecipe {
@@ -455,7 +456,7 @@ pub fn extract_ingredients_from_json(recipe_data: &serde_json::Value) -> Vec<Str
         .map(|arr| {
             arr.iter()
                 .filter_map(|item| item.as_str())
-                .map(|s| clean_raw_ingredient_string(s))
+                .map(clean_raw_ingredient_string)
                 .filter(|s| !s.is_empty() && is_valid_ingredient_name(s))
                 .collect()
         })
@@ -464,47 +465,7 @@ pub fn extract_ingredients_from_json(recipe_data: &serde_json::Value) -> Vec<Str
 
 /// Clean raw ingredient strings from JSON-LD data before parsing
 pub fn clean_raw_ingredient_string(raw: &str) -> String {
-    let mut cleaned = raw.trim().to_string();
-
-    // Remove HTML entities and tags
-    cleaned = cleaned.replace("&amp;", "&")
-                    .replace("&lt;", "<")
-                    .replace("&gt;", ">")
-                    .replace("&quot;", "\"")
-                    .replace("&#39;", "'");
-
-    // Remove HTML tags if any
-    if cleaned.contains('<') && cleaned.contains('>') {
-        cleaned = regex::Regex::new(r"<[^>]*>").unwrap().replace_all(&cleaned, "").to_string();
-    }
-
-    // Fix common malformed patterns from AllRecipes
-    // Pattern: "ounce) package cream cheese" -> "8 ounce package cream cheese"
-    if let Some(captures) = regex::Regex::new(r"^([a-zA-Z]+)\)\s+(.+)$").unwrap().captures(&cleaned) {
-        let unit = &captures[1];
-        let rest = &captures[2];
-        // Try to infer a reasonable amount for common units
-        let amount = match unit.to_lowercase().as_str() {
-            "ounce" | "oz" => "8",
-            "pound" | "lb" => "1",
-            "cup" => "1",
-            "tablespoon" | "tbsp" => "2",
-            "teaspoon" | "tsp" => "1",
-            _ => "1"
-        };
-        cleaned = format!("{} {} {}", amount, unit, rest);
-    }
-
-    // Fix patterns like "pound) whole chicken" -> "1 pound whole chicken"
-    cleaned = regex::Regex::new(r"^([a-zA-Z]+)\)\s+")
-        .unwrap()
-        .replace(&cleaned, "1 $1 ")
-        .to_string();
-
-    // Remove extra whitespace
-    cleaned = regex::Regex::new(r"\s+").unwrap().replace_all(&cleaned, " ").trim().to_string();
-
-    cleaned
+    clean_scraped_ingredient_string(raw)
 }
 
 /// Validate that an ingredient name is reasonable
@@ -614,9 +575,10 @@ pub fn extract_sectioned_ingredients_from_html(document: &Html, host: &str) -> V
                         if let Ok(item_selector) = Selector::parse(".mm-recipes-structured-ingredients__list-item") {
                             for item in list.select(&item_selector) {
                                 let ingredient_text = item.text().collect::<Vec<_>>().join(" ").trim().to_string();
-                                if !ingredient_text.is_empty() {
+                                let cleaned_text = clean_raw_ingredient_string(&ingredient_text);
+                                if !cleaned_text.is_empty() {
                                     // Prefix ingredient with section name for parsing later
-                                    ingredients.push(format!("[{}] {}", section_name, ingredient_text));
+                                    ingredients.push(format!("[{}] {}", section_name, cleaned_text));
                                 }
                             }
                         }
@@ -647,7 +609,7 @@ pub fn extract_regular_ingredients_from_html(document: &Html) -> Vec<String> {
         if let Ok(selector) = Selector::parse(selector_str) {
             let found_ingredients: Vec<String> = document
                 .select(&selector)
-                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+                .map(|el| clean_raw_ingredient_string(&el.text().collect::<Vec<_>>().join(" ")))
                 .filter(|s| !s.is_empty())
                 .collect();
 

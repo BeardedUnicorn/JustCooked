@@ -199,6 +199,35 @@ describe('DatabaseManagementService', () => {
     });
   });
 
+  describe('repairIngredientCatalog', () => {
+    it('repairs ingredient catalog successfully', async () => {
+      const mockResult = {
+        scanned: 12,
+        updated: 7,
+        merged: 3,
+        removed: 4,
+      };
+
+      mockInvoke.mockResolvedValue(mockResult);
+
+      const result = await service.repairIngredientCatalog();
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_repair_ingredient_catalog');
+      expect(result).toEqual(mockResult);
+    });
+
+    it('formats repair results for display', () => {
+      const formatted = service.formatIngredientCatalogRepairResult({
+        scanned: 12,
+        updated: 7,
+        merged: 3,
+        removed: 4,
+      });
+
+      expect(formatted).toBe('Ingredient catalog repaired: scanned 12, updated 7, merged 3, removed 4.');
+    });
+  });
+
   describe('formatImportResult', () => {
     it('formats successful import result', () => {
       const result: DatabaseImportResult = {

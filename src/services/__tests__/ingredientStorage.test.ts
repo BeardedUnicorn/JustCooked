@@ -336,21 +336,28 @@ describe('ingredientStorage', () => {
 
       // Should only add the new ingredients (Sugar already exists)
       expect(newIngredients).toHaveLength(2);
-      expect(newIngredients[0].name).toBe('New Ingredient');
-      expect(newIngredients[1].name).toBe('Another New One');
+      expect(newIngredients[0].name).toBe('new ingredient');
+      expect(newIngredients[1].name).toBe('another new one');
     });
 
-    test('should clean ingredient names before processing', async () => {
+    test('should canonicalize parsed ingredients before saving them to the catalog', async () => {
       mockInvoke
         .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName
-        .mockResolvedValueOnce(undefined); // saveIngredient
+        .mockResolvedValueOnce(undefined) // saveIngredient for 1% milk
+        .mockResolvedValueOnce(createMockTauriIngredients()) // findIngredientByName
+        .mockResolvedValueOnce(undefined); // saveIngredient for onion
 
-      const ingredientNames = ['2 cups fresh tomatoes, diced'];
+      const ingredientNames = [
+        { name: '0.33333334326744 cup 1% milk', amount: 0.33333334326744, unit: 'cup' },
+        { name: '&nbsp;1 medium onion, finely chopped', amount: 1, unit: '' },
+        { name: '* Raw egg is not recommended for the elderly', amount: 1, unit: '' },
+      ];
 
       const newIngredients = await autoDetectIngredients(ingredientNames);
 
-      expect(newIngredients).toHaveLength(1);
-      expect(newIngredients[0].name).toBe('2 cups fresh tomatoes'); // cleanIngredientName removes ", diced"
+      expect(newIngredients).toHaveLength(2);
+      expect(newIngredients[0].name).toBe('1% milk');
+      expect(newIngredients[1].name).toBe('onion');
     });
   });
 });

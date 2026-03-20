@@ -1,5 +1,5 @@
 use crate::batch_import::{BatchImporter, BatchImportPreflightResponse, BatchImportProgress, BatchImportRequest, ReImportRequest, ReImporter};
-use crate::database::{Database, DatabaseExport, DatabaseImportResult, Ingredient as DbIngredient, IngredientDatabase, MealPlan, MealPlanRecipe, PantryItem, ProductIngredientMapping, ProductSearchResult, RawIngredient, Recipe as DbRecipe, RecipeCollection, RecentSearch, ShoppingList, ShoppingListItem};
+use crate::database::{Database, DatabaseExport, DatabaseImportResult, Ingredient as DbIngredient, IngredientCatalogRepairResult, IngredientDatabase, MealPlan, MealPlanRecipe, PantryItem, ProductIngredientMapping, ProductSearchResult, RawIngredient, Recipe as DbRecipe, RecipeCollection, RecentSearch, ShoppingList, ShoppingListItem};
 use crate::image_storage::{delete_stored_image, download_and_store_image, get_app_local_data_dir, get_local_image_as_base64, StoredImage};
 use crate::import_queue::{ImportQueue, ImportQueueStatus};
 use crate::ingredient_parsing::{get_ingredient_parser, ParsingMetrics};
@@ -244,45 +244,6 @@ async fn parse_ingredients_with_ingredient_crate_command(ingredients: Vec<String
         parsed_ingredients => Ok(parsed_ingredients),
     }
 }
-
-pub async fn convert_imported_recipe_to_frontend_async(imported: ImportedRecipe) -> FrontendRecipe {
-    let recipe_id = uuid::Uuid::new_v4().to_string();
-    let current_time = chrono::Utc::now().to_rfc3339();
-
-    // Parse ingredients using ingredient crate with fallback to regex parsing
-    let ingredients = parse_ingredients_with_ingredient_crate(&imported.ingredients).await;
-
-    // Parse tags from keywords
-    let tags: Vec<String> = if imported.keywords.is_empty() {
-        Vec::new()
-    } else {
-        imported.keywords.split(',').map(|s| s.trim().to_string()).collect()
-    };
-
-    FrontendRecipe {
-        id: recipe_id,
-        title: imported.name,
-        description: imported.description,
-        image: imported.image,
-        source_url: imported.source_url,
-        prep_time: imported.prep_time,
-        cook_time: imported.cook_time,
-        total_time: imported.total_time,
-        servings: imported.servings,
-        ingredients,
-        instructions: imported.instructions,
-        tags,
-        date_added: current_time.clone(),
-        date_modified: current_time,
-        rating: None,
-        difficulty: None,
-        is_favorite: Some(false),
-        personal_notes: None,
-        collections: None,
-    }
-}
-
-
 
 #[tauri::command]
 async fn save_imported_recipe(
@@ -579,6 +540,12 @@ async fn db_search_ingredients(app: tauri::AppHandle, query: String) -> Result<V
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     let ingredients = db.search_ingredients(&query).await.map_err(|e| e.to_string())?;
     Ok(ingredients)
+}
+
+#[tauri::command]
+async fn db_repair_ingredient_catalog(app: tauri::AppHandle) -> Result<IngredientCatalogRepairResult, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.repair_ingredient_catalog().await.map_err(|e| e.to_string())
 }
 
 // Pantry database commands
@@ -1313,34 +1280,6 @@ async fn preview_batch_import(
 
     let importer = BatchImporter::new();
     importer.preview_batch_import(request).await
-}
-
-// Helper function to capture raw ingredients for analysis
-pub async fn capture_raw_ingredients(
-    db: &Database,
-    imported_recipe: &ImportedRecipe,
-    recipe_id: Option<&str>,
-) -> Result<(), anyhow::Error> {
-    let now = chrono::Utc::now();
-    let mut raw_ingredients = Vec::new();
-
-    for raw_text in &imported_recipe.ingredients {
-        let raw_ingredient = RawIngredient {
-            id: uuid::Uuid::new_v4().to_string(),
-            raw_text: raw_text.clone(),
-            source_url: imported_recipe.source_url.clone(),
-            recipe_id: recipe_id.map(|id| id.to_string()),
-            recipe_title: Some(imported_recipe.name.clone()),
-            date_captured: now,
-        };
-        raw_ingredients.push(raw_ingredient);
-    }
-
-    if !raw_ingredients.is_empty() {
-        db.save_raw_ingredients_batch(&raw_ingredients).await?;
-    }
-
-    Ok(())
 }
 
 // Raw ingredients commands
@@ -2176,6 +2115,7 @@ pub fn run_app() {
             db_get_all_ingredients,
             db_delete_ingredient,
             db_search_ingredients,
+            db_repair_ingredient_catalog,
             db_save_pantry_item,
             db_get_all_pantry_items,
             db_delete_pantry_item,

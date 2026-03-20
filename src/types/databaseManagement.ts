@@ -32,6 +32,13 @@ export interface DatabaseImportResult {
   errors: string[];
 }
 
+export interface IngredientCatalogRepairResult {
+  scanned: number;
+  updated: number;
+  merged: number;
+  removed: number;
+}
+
 export interface DatabaseStats {
   total_recipes: number;
   total_ingredients: number;
