@@ -1,5 +1,5 @@
 use crate::batch_import::{BatchImporter, BatchImportPreflightResponse, BatchImportProgress, BatchImportRequest, ReImportRequest, ReImporter};
-use crate::database::{Database, DatabaseExport, DatabaseImportResult, Ingredient as DbIngredient, IngredientCatalogRepairResult, IngredientDatabase, MealPlan, MealPlanRecipe, PantryItem, ProductIngredientMapping, ProductSearchResult, RawIngredient, Recipe as DbRecipe, RecipeCollection, RecentSearch, ShoppingList, ShoppingListItem};
+use crate::database::{Database, DatabaseExport, DatabaseImportResult, Ingredient as DbIngredient, IngredientCatalogRepairResult, IngredientDatabase, MealPlan, MealPlanRecipe, PantryItem, ProductIngredientMapping, ProductSearchResult, RawIngredient, Recipe as DbRecipe, RecipeCollection, RecipeIngredientRepairResult, RecentSearch, ShoppingList, ShoppingListItem};
 use crate::image_storage::{delete_stored_image, download_and_store_image, get_app_local_data_dir, get_local_image_as_base64, StoredImage};
 use crate::import_queue::{ImportQueue, ImportQueueStatus};
 use crate::ingredient_parsing::{get_ingredient_parser, ParsingMetrics};
@@ -546,6 +546,12 @@ async fn db_search_ingredients(app: tauri::AppHandle, query: String) -> Result<V
 async fn db_repair_ingredient_catalog(app: tauri::AppHandle) -> Result<IngredientCatalogRepairResult, String> {
     let db = Database::new(&app).await.map_err(|e| e.to_string())?;
     db.repair_ingredient_catalog().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn db_repair_recipe_ingredients_from_raw(app: tauri::AppHandle) -> Result<RecipeIngredientRepairResult, String> {
+    let db = Database::new(&app).await.map_err(|e| e.to_string())?;
+    db.repair_recipe_ingredients_from_raw().await.map_err(|e| e.to_string())
 }
 
 // Pantry database commands
@@ -2116,6 +2122,7 @@ pub fn run_app() {
             db_delete_ingredient,
             db_search_ingredients,
             db_repair_ingredient_catalog,
+            db_repair_recipe_ingredients_from_raw,
             db_save_pantry_item,
             db_get_all_pantry_items,
             db_delete_pantry_item,

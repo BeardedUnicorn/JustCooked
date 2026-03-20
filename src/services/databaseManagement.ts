@@ -1,7 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
-import { DatabaseExport, DatabaseImportResult, IngredientCatalogRepairResult } from '@app-types';
+import {
+  DatabaseExport,
+  DatabaseImportResult,
+  IngredientCatalogRepairResult,
+  RecipeIngredientRepairResult,
+} from '@app-types';
 
 export class DatabaseManagementService {
   /**
@@ -130,6 +135,17 @@ export class DatabaseManagementService {
     }
   }
 
+  async repairRecipeIngredientsFromRaw(): Promise<RecipeIngredientRepairResult> {
+    try {
+      return await invoke<RecipeIngredientRepairResult>('db_repair_recipe_ingredients_from_raw');
+    } catch (error) {
+      console.error('Failed to repair recipe ingredients from raw captures:', error);
+      throw new Error(
+        error instanceof Error ? error.message : 'Failed to repair recipe ingredients from raw captures'
+      );
+    }
+  }
+
   /**
    * Get database statistics
    */
@@ -237,6 +253,10 @@ export class DatabaseManagementService {
 
   formatIngredientCatalogRepairResult(result: IngredientCatalogRepairResult): string {
     return `Ingredient catalog repaired: scanned ${result.scanned}, updated ${result.updated}, merged ${result.merged}, removed ${result.removed}.`;
+  }
+
+  formatRecipeIngredientRepairResult(result: RecipeIngredientRepairResult): string {
+    return `Recipe ingredients repaired from raw captures: scanned ${result.recipes_scanned} recipes, updated ${result.recipes_updated}, repaired ${result.ingredients_repaired} ingredients, skipped ${result.recipes_skipped}, missing raw batches for ${result.missing_raw_batches}.`;
   }
 }
 

@@ -79,6 +79,7 @@ export type {
   DatabaseExport,
   DatabaseImportResult,
   IngredientCatalogRepairResult,
+  RecipeIngredientRepairResult,
   DatabaseStats,
   DatabaseOperationProgress
 } from './databaseManagement';

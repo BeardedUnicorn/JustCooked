@@ -84,10 +84,21 @@ export function decodeAllHtmlEntities(str: string): string {
   if (!str) return str;
 
   let decoded = str;
+  for (let i = 0; i < 4; i++) {
+    const next = decodeHtmlEntitiesPass(decoded);
+    if (next === decoded) {
+      return next;
+    }
+    decoded = next;
+  }
 
+  return decoded;
+}
+
+function decodeHtmlEntitiesPass(str: string): string {
   // Handle malformed entities FIRST (before DOM decoding)
   // Handle common malformed entities (like &amp;#39 instead of &#39;)
-  decoded = decoded.replace(/&amp;#(\d+);?/g, (_match, dec) => {
+  let decoded = str.replace(/&amp;#(\d+);?/g, (_match, dec) => {
     return String.fromCharCode(parseInt(dec, 10));
   });
 

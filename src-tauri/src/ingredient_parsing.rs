@@ -123,7 +123,7 @@ impl IngredientParser {
             self.fallback_parse_simple(ingredient_text, section)
         } else {
             // Convert to our database format
-            self.convert_parsed_ingredient(parsed, section)
+            self.convert_parsed_ingredient(ingredient_text, parsed, section)
         };
 
         // Update metrics based on result
@@ -146,11 +146,14 @@ impl IngredientParser {
     /// Convert parsed ingredient from ingredient crate to our database format
     fn convert_parsed_ingredient(
         &self,
+        ingredient_text: &str,
         parsed: ParsedIngredient,
         section: Option<String>,
     ) -> Result<Option<crate::database::Ingredient>> {
         // Clean and validate the ingredient name
-        let cleaned_name = self.clean_ingredient_name(&parsed.name);
+        let cleaned_name = self
+            .repair_truncated_name(&parsed.name, ingredient_text)
+            .unwrap_or_else(|| self.clean_ingredient_name(&parsed.name));
         let repaired_name = if is_suspicious_catalog_name(&cleaned_name) {
             canonicalize_ingredient_catalog_name(&cleaned_name)
         } else {
@@ -244,7 +247,9 @@ impl IngredientParser {
         let cleaned = if let Some(comma_pos) = cleaned.find(',') {
             let before_comma = &cleaned[..comma_pos].trim();
             // Only keep the part before comma if it looks like an ingredient
-            if self.looks_like_ingredient(before_comma) {
+            if self.looks_like_ingredient(before_comma)
+                && !self.ends_with_leading_descriptor(before_comma)
+            {
                 before_comma.to_string()
             } else {
                 cleaned.to_string()
@@ -253,12 +258,11 @@ impl IngredientParser {
             cleaned.to_string()
         };
 
-        // Remove parenthetical preparation instructions
-        let cleaned = if let Some(paren_pos) = cleaned.find('(') {
-            cleaned[..paren_pos].trim().to_string()
-        } else {
-            cleaned
-        };
+        // Remove parenthetical notes without dropping the ingredient noun that follows them.
+        let cleaned = regex::Regex::new(r"\s*\([^)]*\)\s*")
+            .unwrap()
+            .replace_all(&cleaned, " ")
+            .to_string();
 
         // Normalize multiple spaces to single spaces
         let cleaned = regex::Regex::new(r"\s+").unwrap().replace_all(&cleaned, " ");
@@ -333,6 +337,75 @@ impl IngredientParser {
 
         // Should not be primarily preparation methods
         !self.is_preparation_method(text)
+    }
+
+    fn ends_with_leading_descriptor(&self, text: &str) -> bool {
+        regex::Regex::new(
+            r"(?:^|\s)(raw|fresh|dried|frozen|thawed|cooked|uncooked|melted|softened)$",
+        )
+        .unwrap()
+        .is_match(text.trim())
+    }
+
+    fn repair_truncated_name(&self, parsed_name: &str, ingredient_text: &str) -> Option<String> {
+        let cleaned_name = self.clean_ingredient_name(parsed_name);
+        if !self.ends_with_leading_descriptor(&cleaned_name) {
+            return None;
+        }
+
+        let recovered = self.recover_name_from_original_text(ingredient_text)?;
+        if recovered.eq_ignore_ascii_case(&cleaned_name) {
+            return None;
+        }
+
+        Some(recovered)
+    }
+
+    fn recover_name_from_original_text(&self, ingredient_text: &str) -> Option<String> {
+        let mut recovered = ingredient_text.trim().to_string();
+
+        recovered = regex::Regex::new(
+            r"^(?:\d+(?:\.\d+)?|\d+\s+\d+/\d+|\d+/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]+)(?:\s*(?:[-–—]|to)\s*(?:\d+(?:\.\d+)?|\d+\s+\d+/\d+|\d+/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]+))?\s+",
+        )
+        .unwrap()
+        .replace(&recovered, "")
+        .to_string();
+
+        recovered = regex::Regex::new(
+            r"^(?:cups?|tablespoons?|tbsp\.?|teaspoons?|tsp\.?|ounces?|oz\.?|pounds?|lb\.?|lbs\.?|grams?|g|kilograms?|kg|milliliters?|ml|liters?|l|cloves?|slices?|pieces?|heads?|bunches?|stalks?|sprigs?|leaves?|cans?|packages?|jars?|bottles?|bags?|boxes?|containers?)\s+",
+        )
+        .unwrap()
+        .replace(&recovered, "")
+        .to_string();
+
+        recovered = regex::Regex::new(r"^\([^)]*\)\s*")
+            .unwrap()
+            .replace(&recovered, "")
+            .to_string();
+
+        recovered = regex::Regex::new(r"\s+such as .*$")
+            .unwrap()
+            .replace(&recovered, "")
+            .to_string();
+
+        recovered = regex::Regex::new(r"\s*,?\s+or\s+.*$")
+            .unwrap()
+            .replace(&recovered, "")
+            .to_string();
+
+        recovered = regex::Regex::new(
+            r",\s*(?:finely\s+)?(?:diced|chopped|sliced|minced|grated|shredded|crushed|cut|cubed|peeled|seeded|trimmed|halved|quartered|split|julienned|for serving|for garnish|to taste|as needed).*$",
+        )
+        .unwrap()
+        .replace(&recovered, "")
+        .to_string();
+
+        let cleaned = self.clean_ingredient_name(&recovered);
+        if cleaned.is_empty() {
+            None
+        } else {
+            Some(cleaned)
+        }
     }
 }
 

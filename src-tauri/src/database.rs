@@ -3,7 +3,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqlitePool, Row, Sqlite, Transaction};
 use tauri::{AppHandle, Manager};
-use crate::ingredient_catalog::{canonicalize_ingredient_catalog_name, canonicalize_recipe_ingredient_for_catalog};
+use crate::ingredient_catalog::{canonicalize_ingredient_catalog_name, canonicalize_recipe_ingredient_for_catalog, is_suspicious_catalog_name};
+use crate::ingredient_parsing::get_ingredient_parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ingredient {
@@ -242,6 +243,15 @@ pub struct IngredientCatalogRepairResult {
     pub updated: i32,
     pub merged: i32,
     pub removed: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RecipeIngredientRepairResult {
+    pub recipes_scanned: i32,
+    pub recipes_updated: i32,
+    pub ingredients_repaired: i32,
+    pub recipes_skipped: i32,
+    pub missing_raw_batches: i32,
 }
 
 pub struct Database {
@@ -1383,6 +1393,98 @@ impl Database {
         Ok(result)
     }
 
+    pub async fn repair_recipe_ingredients_from_raw(&self) -> Result<RecipeIngredientRepairResult> {
+        let recipes = self.get_all_recipes().await?;
+        let mut result = RecipeIngredientRepairResult {
+            recipes_scanned: recipes.len() as i32,
+            ..Default::default()
+        };
+        let mut repaired_recipes = Vec::new();
+
+        for recipe in recipes {
+            let suspicious_indexes: Vec<usize> = recipe
+                .ingredients
+                .iter()
+                .enumerate()
+                .filter_map(|(index, ingredient)| {
+                    self.is_suspicious_recipe_ingredient_name(ingredient)
+                        .then_some(index)
+                })
+                .collect();
+
+            if suspicious_indexes.is_empty() {
+                continue;
+            }
+
+            let raw_ingredients = self.get_latest_raw_ingredients_for_recipe(&recipe).await?;
+            if raw_ingredients.is_empty() {
+                result.missing_raw_batches += 1;
+                continue;
+            }
+
+            let reparsed_ingredients = self.parse_raw_ingredients_for_recipe_repair(&raw_ingredients).await?;
+            if reparsed_ingredients.len() != recipe.ingredients.len() {
+                result.recipes_skipped += 1;
+                continue;
+            }
+
+            let mut repaired_recipe = recipe.clone();
+            let mut repaired_count = 0;
+
+            for suspicious_index in suspicious_indexes {
+                let existing = &recipe.ingredients[suspicious_index];
+                let reparsed = &reparsed_ingredients[suspicious_index];
+
+                if self.is_suspicious_recipe_ingredient_name(reparsed) {
+                    continue;
+                }
+
+                let repaired_ingredient = Ingredient {
+                    name: reparsed.name.clone(),
+                    amount: reparsed.amount.clone(),
+                    unit: reparsed.unit.clone(),
+                    category: existing.category.clone(),
+                    section: reparsed.section.clone(),
+                };
+
+                if existing.name == repaired_ingredient.name
+                    && existing.amount == repaired_ingredient.amount
+                    && existing.unit == repaired_ingredient.unit
+                    && existing.section == repaired_ingredient.section
+                {
+                    continue;
+                }
+
+                repaired_recipe.ingredients[suspicious_index] = repaired_ingredient;
+                repaired_count += 1;
+            }
+
+            if repaired_count == 0 {
+                result.recipes_skipped += 1;
+                continue;
+            }
+
+            repaired_recipe.date_modified = Utc::now();
+            result.recipes_updated += 1;
+            result.ingredients_repaired += repaired_count;
+            repaired_recipes.push(repaired_recipe);
+        }
+
+        if repaired_recipes.is_empty() {
+            return Ok(result);
+        }
+
+        let mut tx = self.begin_transaction().await?;
+        for recipe in &repaired_recipes {
+            self.update_recipe_with_transaction(&mut tx, recipe).await?;
+        }
+        tx.commit()
+            .await
+            .context("Failed to commit recipe ingredient repair")?;
+
+        Ok(result)
+    }
+
     // Pantry database methods
     pub async fn save_pantry_item(&self, item: &PantryItem) -> Result<()> {
         sqlx::query(
@@ -1898,24 +2000,9 @@ impl Database {
             .await
             .context("Failed to fetch raw ingredients by source")?;
 
-        let mut raw_ingredients = Vec::new();
-        for row in rows {
-            let date_captured_str: String = row.get("date_captured");
-            let date_captured = DateTime::parse_from_rfc3339(&date_captured_str)
-                .context("Failed to parse date_captured")?
-                .with_timezone(&Utc);
-
-            raw_ingredients.push(RawIngredient {
-                id: row.get("id"),
-                raw_text: row.get("raw_text"),
-                source_url: row.get("source_url"),
-                recipe_id: row.get("recipe_id"),
-                recipe_title: row.get("recipe_title"),
-                date_captured,
-            });
-        }
-
-        Ok(raw_ingredients)
+        rows.into_iter()
+            .map(|row| self.row_to_raw_ingredient(row))
+            .collect()
     }
 
     pub async fn get_raw_ingredients_count(&self) -> Result<i64> {
@@ -1927,7 +2014,132 @@ impl Database {
         Ok(count)
     }
 
+    async fn get_latest_raw_ingredients_for_recipe(&self, recipe: &Recipe) -> Result<Vec<RawIngredient>> {
+        let by_recipe_id = self.get_latest_raw_ingredients_by_recipe_id(&recipe.id).await?;
+        if !by_recipe_id.is_empty() {
+            return Ok(by_recipe_id);
+        }
+
+        if recipe.source_url.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        self.get_latest_raw_ingredients_by_source_url(&recipe.source_url).await
+    }
+
+    async fn get_latest_raw_ingredients_by_recipe_id(&self, recipe_id: &str) -> Result<Vec<RawIngredient>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT *
+            FROM raw_ingredients
+            WHERE recipe_id = ?
+              AND date_captured = (
+                SELECT MAX(date_captured)
+                FROM raw_ingredients
+                WHERE recipe_id = ?
+              )
+            ORDER BY rowid ASC
+            "#,
+        )
+        .bind(recipe_id)
+        .bind(recipe_id)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch latest raw ingredients by recipe id")?;
+
+        rows.into_iter()
+            .map(|row| self.row_to_raw_ingredient(row))
+            .collect()
+    }
+
+    async fn get_latest_raw_ingredients_by_source_url(&self, source_url: &str) -> Result<Vec<RawIngredient>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT *
+            FROM raw_ingredients
+            WHERE source_url = ?
+              AND date_captured = (
+                SELECT MAX(date_captured)
+                FROM raw_ingredients
+                WHERE source_url = ?
+              )
+            ORDER BY rowid ASC
+            "#,
+        )
+        .bind(source_url)
+        .bind(source_url)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to fetch latest raw ingredients by source URL")?;
+
+        rows.into_iter()
+            .map(|row| self.row_to_raw_ingredient(row))
+            .collect()
+    }
+
+    async fn parse_raw_ingredients_for_recipe_repair(
+        &self,
+        raw_ingredients: &[RawIngredient],
+    ) -> Result<Vec<Ingredient>> {
+        let parser = get_ingredient_parser();
+        let mut parsed_ingredients = Vec::new();
+
+        for raw_ingredient in raw_ingredients {
+            let (section, ingredient_text) =
+                self.split_sectioned_raw_ingredient(&raw_ingredient.raw_text);
+
+            if let Some(parsed) = parser.parse_ingredient(&ingredient_text, section).await? {
+                parsed_ingredients.push(parsed);
+            }
+        }
+
+        Ok(parsed_ingredients)
+    }
+
+    fn split_sectioned_raw_ingredient(&self, raw_text: &str) -> (Option<String>, String) {
+        if let Some(captures) = regex::Regex::new(r"^\[([^\]]+)\]\s*(.+)$")
+            .unwrap()
+            .captures(raw_text)
+        {
+            (Some(captures[1].to_string()), captures[2].to_string())
+        } else {
+            (None, raw_text.to_string())
+        }
+    }
+
+    fn is_suspicious_recipe_ingredient_name(&self, ingredient: &Ingredient) -> bool {
+        let name = ingredient.name.trim();
+        if name.is_empty() || is_suspicious_catalog_name(name) {
+            return true;
+        }
+
+        let last_word = name
+            .split_whitespace()
+            .last()
+            .unwrap_or_default()
+            .trim_matches(|ch: char| !ch.is_alphanumeric())
+            .to_ascii_lowercase();
+
+        matches!(
+            last_word.as_str(),
+            "raw" | "fresh" | "dried" | "frozen" | "thawed" | "cooked" | "uncooked" | "melted" | "softened"
+        )
+    }
+
     // Helper methods for row conversion
+    fn row_to_raw_ingredient(&self, row: sqlx::sqlite::SqliteRow) -> Result<RawIngredient> {
+        Ok(RawIngredient {
+            id: row.get("id"),
+            raw_text: row.get("raw_text"),
+            source_url: row.get("source_url"),
+            recipe_id: row.get("recipe_id"),
+            recipe_title: row.get("recipe_title"),
+            date_captured: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_captured"))
+                .context("Failed to parse date_captured")?
+                .with_timezone(&Utc),
+        })
+    }
+
     fn row_to_ingredient(&self, row: sqlx::sqlite::SqliteRow) -> Result<IngredientDatabase> {
         let aliases_json: String = row.get("aliases");
         let aliases: Vec<String> = serde_json::from_str(&aliases_json)
@@ -2186,21 +2398,9 @@ impl Database {
             .await
             .context("Failed to fetch raw ingredients")?;
 
-        let mut raw_ingredients = Vec::new();
-        for row in rows {
-            raw_ingredients.push(RawIngredient {
-                id: row.get("id"),
-                raw_text: row.get("raw_text"),
-                source_url: row.get("source_url"),
-                recipe_id: row.get("recipe_id"),
-                recipe_title: row.get("recipe_title"),
-                date_captured: DateTime::parse_from_rfc3339(&row.get::<String, _>("date_captured"))
-                    .context("Failed to parse date_captured")?
-                    .with_timezone(&Utc),
-            });
-        }
-
-        Ok(raw_ingredients)
+        rows.into_iter()
+            .map(|row| self.row_to_raw_ingredient(row))
+            .collect()
     }
 
     // Transaction helper methods
@@ -2250,6 +2450,27 @@ impl Database {
         .execute(&mut **tx)
         .await
         .context("Failed to save recipe")?;
+
+        Ok(())
+    }
+
+    async fn update_recipe_with_transaction(&self, tx: &mut Transaction<'_, Sqlite>, recipe: &Recipe) -> Result<()> {
+        let ingredients_json = serde_json::to_string(&recipe.ingredients)
+            .context("Failed to serialize ingredients")?;
+
+        sqlx::query(
+            r#"
+            UPDATE recipes
+            SET ingredients = ?, date_modified = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(&ingredients_json)
+        .bind(recipe.date_modified.to_rfc3339())
+        .bind(&recipe.id)
+        .execute(&mut **tx)
+        .await
+        .context("Failed to update recipe during repair")?;
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::database::{Database, Recipe, Ingredient, NutritionalInfo, IngredientDatabase};
+    use crate::database::{Database, Recipe, Ingredient, NutritionalInfo, IngredientDatabase, RawIngredient};
     use chrono::Utc;
     use tempfile::TempDir;
     use sqlx::sqlite::SqlitePool;
@@ -631,6 +631,67 @@ mod tests {
         let mapping = db.get_product_ingredient_mapping("milk-sku").await.unwrap().unwrap();
         assert_eq!(mapping.ingredient_id, older_duplicate.id);
         assert_eq!(mapping.ingredient_name, "1% milk");
+    }
+
+    #[tokio::test]
+    async fn test_repair_recipe_ingredients_from_raw_repairs_truncated_descriptor_names() {
+        let (db, _temp_dir) = create_test_database().await;
+        let mut recipe = create_test_recipe();
+        recipe.id = "repair-raw-recipe".to_string();
+        recipe.title = "Repair Raw Recipe".to_string();
+        recipe.source_url = "https://example.com/repair-raw".to_string();
+        recipe.ingredients = vec![
+            Ingredient {
+                name: "raw".to_string(),
+                amount: "0.75".to_string(),
+                unit: "cup".to_string(),
+                category: None,
+                section: None,
+            },
+            Ingredient {
+                name: "robust flavored raw".to_string(),
+                amount: "6".to_string(),
+                unit: "tbsp".to_string(),
+                category: None,
+                section: None,
+            },
+        ];
+
+        db.save_recipe(&recipe).await.unwrap();
+
+        let captured_at = Utc::now();
+        db.save_raw_ingredients_batch(&[
+            RawIngredient {
+                id: "raw-line-1".to_string(),
+                raw_text: "3/4 cup raw (turbinado) sugar".to_string(),
+                source_url: recipe.source_url.clone(),
+                recipe_id: Some(recipe.id.clone()),
+                recipe_title: Some(recipe.title.clone()),
+                date_captured: captured_at,
+            },
+            RawIngredient {
+                id: "raw-line-2".to_string(),
+                raw_text: "6 tablespoons robust flavored raw, unfiltered honey such as clover, or organic amber maple syrup".to_string(),
+                source_url: recipe.source_url.clone(),
+                recipe_id: Some(recipe.id.clone()),
+                recipe_title: Some(recipe.title.clone()),
+                date_captured: captured_at,
+            },
+        ])
+        .await
+        .unwrap();
+
+        let result = db.repair_recipe_ingredients_from_raw().await.unwrap();
+        assert_eq!(result.recipes_scanned, 1);
+        assert_eq!(result.recipes_updated, 1);
+        assert_eq!(result.ingredients_repaired, 2);
+        assert_eq!(result.recipes_skipped, 0);
+        assert_eq!(result.missing_raw_batches, 0);
+
+        let repaired = db.get_recipe_by_id(&recipe.id).await.unwrap().unwrap();
+        assert_eq!(repaired.ingredients[0].name, "raw sugar");
+        assert!(repaired.ingredients[1].name.contains("honey"));
+        assert_ne!(repaired.ingredients[1].name, "robust flavored raw");
     }
 
     // Additional comprehensive duplicate detection tests

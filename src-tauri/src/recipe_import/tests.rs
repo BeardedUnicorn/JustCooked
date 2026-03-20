@@ -293,6 +293,31 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_json_ld_recipe_decodes_html_entities_in_text_fields() {
+        let recipe_json = json!({
+            "@type": "Recipe",
+            "name": "Mom&amp;#39;s Cookies",
+            "description": "This doesn&amp;#39;t taste bland &amp;amp; stays chewy",
+            "image": "https://example.com/cookies.jpg",
+            "recipeIngredient": [
+                "2 cups flour"
+            ],
+            "recipeInstructions": [
+                "Don&amp;#39;t overmix",
+                "Bake until it&amp;#39;s golden"
+            ],
+            "recipeCategory": "Dessert &amp;amp; Snack"
+        });
+
+        let result = parse_json_ld_recipe(&recipe_json, "https://example.com/recipe").unwrap();
+
+        assert_eq!(result.name, "Mom's Cookies");
+        assert_eq!(result.description, "This doesn't taste bland & stays chewy");
+        assert_eq!(result.instructions, vec!["Don't overmix", "Bake until it's golden"]);
+        assert_eq!(result.keywords, "Dessert & Snack");
+    }
+
+    #[test]
     fn test_extract_from_json_ld() {
         let html_content = r#"
         <html>
@@ -346,6 +371,34 @@ mod tests {
         
         assert_eq!(result.name, "Test Recipe");
         assert_eq!(result.description, "A test recipe");
+    }
+
+    #[test]
+    fn test_extract_from_html_selectors_decodes_html_entities() {
+        let html_content = r#"
+        <html>
+        <head>
+            <title>Mom&amp;#39;s Cookies</title>
+            <meta name="description" content="This doesn&amp;#39;t taste bland &amp;amp; stays chewy">
+        </head>
+        <body>
+            <ul class="instructions">
+                <li>Don&amp;#39;t overmix</li>
+                <li>Bake until it&amp;#39;s golden</li>
+            </ul>
+            <ul class="ingredients">
+                <li>2 cups flour</li>
+            </ul>
+        </body>
+        </html>
+        "#;
+
+        let document = Html::parse_document(html_content);
+        let result = extract_from_html_selectors(&document, "https://example.com/recipe").unwrap();
+
+        assert_eq!(result.name, "Mom's Cookies");
+        assert_eq!(result.description, "This doesn't taste bland & stays chewy");
+        assert_eq!(result.instructions, vec!["Don't overmix", "Bake until it's golden"]);
     }
 
     #[test]

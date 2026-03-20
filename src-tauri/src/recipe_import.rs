@@ -206,15 +206,13 @@ pub fn extract_from_json_ld(document: &Html, source_url: &str) -> Result<Importe
 }
 
 pub fn parse_json_ld_recipe(recipe_data: &serde_json::Value, source_url: &str) -> Result<ImportedRecipe, RecipeImportError> {
-    let name = recipe_data.get("name")
+    let name = normalize_imported_text(recipe_data.get("name")
         .and_then(|v| v.as_str())
-        .unwrap_or("Untitled Recipe")
-        .to_string();
+        .unwrap_or("Untitled Recipe"));
 
-    let description = recipe_data.get("description")
+    let description = normalize_imported_text(recipe_data.get("description")
         .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+        .unwrap_or(""));
 
     let image = extract_image_from_json(recipe_data);
 
@@ -273,8 +271,8 @@ pub fn extract_from_html_selectors(document: &Html, source_url: &str) -> Result<
     let name = document.select(&title_selector)
         .next()
         .map(|el| {
-            let html = el.inner_html();
-            let text = html.trim();
+            let text = el.text().collect::<Vec<_>>().join(" ");
+            let text = normalize_imported_text(&text);
             // Clean up site-specific suffixes
             text.replace(" - Allrecipes", "")
                 .replace(" | Food Network", "")
@@ -295,8 +293,8 @@ pub fn extract_from_html_selectors(document: &Html, source_url: &str) -> Result<
     let description = document.select(&description_selector)
         .next()
         .and_then(|el| {
-            el.value().attr("content").map(|s| s.to_string())
-                .or_else(|| Some(el.inner_html().trim().to_string()))
+            el.value().attr("content").map(normalize_imported_text)
+                .or_else(|| Some(normalize_imported_text(&el.text().collect::<Vec<_>>().join(" "))))
         })
         .unwrap_or_else(|| String::new());
 
@@ -388,7 +386,7 @@ pub fn extract_instructions_from_html(document: &Html) -> Vec<String> {
         if let Ok(selector) = Selector::parse(selector_str) {
             let found_instructions: Vec<String> = document
                 .select(&selector)
-                .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+                .map(|el| normalize_imported_text(&el.text().collect::<Vec<_>>().join(" ")))
                 .filter(|s| !s.is_empty())
                 .collect();
 
@@ -634,7 +632,8 @@ pub fn extract_instructions_from_json(recipe_data: &serde_json::Value) -> Vec<St
                         item.get("text").and_then(|t| t.as_str())
                     }
                 })
-                .map(|s| s.to_string())
+                .map(normalize_imported_text)
+                .filter(|s| !s.is_empty())
                 .collect()
         })
         .unwrap_or_else(Vec::new)
@@ -649,12 +648,16 @@ pub fn extract_keywords_from_json(recipe_data: &serde_json::Value) -> String {
             if let Some(arr) = category_value.as_array() {
                 let category_vec: Vec<String> = arr.iter()
                     .filter_map(|item| item.as_str())
-                    .map(|s| s.to_string())
+                    .map(normalize_imported_text)
+                    .filter(|s| !s.is_empty())
                     .collect();
                 keyword_parts.extend(category_vec);
             }
         } else if let Some(s) = category_value.as_str() {
-            keyword_parts.push(s.to_string());
+            let normalized = normalize_imported_text(s);
+            if !normalized.is_empty() {
+                keyword_parts.push(normalized);
+            }
         }
     }
 
@@ -664,16 +667,85 @@ pub fn extract_keywords_from_json(recipe_data: &serde_json::Value) -> String {
             if let Some(arr) = cuisine_value.as_array() {
                 let cuisine_vec: Vec<String> = arr.iter()
                     .filter_map(|item| item.as_str())
-                    .map(|s| s.to_string())
+                    .map(normalize_imported_text)
+                    .filter(|s| !s.is_empty())
                     .collect();
                 keyword_parts.extend(cuisine_vec);
             }
         } else if let Some(s) = cuisine_value.as_str() {
-            keyword_parts.push(s.to_string());
+            let normalized = normalize_imported_text(s);
+            if !normalized.is_empty() {
+                keyword_parts.push(normalized);
+            }
         }
     }
 
     keyword_parts.join(", ")
+}
+
+fn normalize_imported_text(raw: &str) -> String {
+    regex::Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(&decode_all_html_entities(raw), " ")
+        .trim()
+        .to_string()
+}
+
+fn decode_all_html_entities(raw: &str) -> String {
+    let mut decoded = raw.replace('\u{00a0}', " ");
+
+    for _ in 0..4 {
+        let next = decode_html_entities_once(&decoded);
+        if next == decoded {
+            return next;
+        }
+        decoded = next;
+    }
+
+    decoded
+}
+
+fn decode_html_entities_once(raw: &str) -> String {
+    let mut decoded = raw
+        .replace("&nbsp;", " ")
+        .replace("&#160;", " ")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#39;", "'")
+        .replace("&lsquo;", "‘")
+        .replace("&rsquo;", "’")
+        .replace("&ldquo;", "“")
+        .replace("&rdquo;", "”")
+        .replace("&ndash;", "-")
+        .replace("&mdash;", "—")
+        .replace("&hellip;", "…");
+
+    decoded = regex::Regex::new(r"&#(\d+);?")
+        .unwrap()
+        .replace_all(&decoded, |captures: &regex::Captures| {
+            captures
+                .get(1)
+                .and_then(|value| value.as_str().parse::<u32>().ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_default()
+        })
+        .to_string();
+
+    regex::Regex::new(r"&#x([0-9a-fA-F]+);?")
+        .unwrap()
+        .replace_all(&decoded, |captures: &regex::Captures| {
+            captures
+                .get(1)
+                .and_then(|value| u32::from_str_radix(value.as_str(), 16).ok())
+                .and_then(char::from_u32)
+                .map(|ch| ch.to_string())
+                .unwrap_or_default()
+        })
+        .to_string()
 }
 
 #[cfg(test)]

@@ -254,6 +254,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_repairs_raw_descriptor_names_when_parser_drops_the_noun() {
+        let parser = IngredientParser::new();
+
+        let sugar = parser
+            .parse_ingredient("3/4 cup raw (turbinado) sugar", None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(sugar.name.contains("sugar"));
+        assert_ne!(sugar.name, "raw");
+
+        let honey = parser
+            .parse_ingredient(
+                "6 tablespoons robust flavored raw, unfiltered honey such as clover, or organic amber maple syrup",
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(honey.name.contains("honey"));
+        assert_ne!(honey.name, "robust flavored raw");
+    }
+
+    #[tokio::test]
     async fn test_rejects_bare_container_rows() {
         let parser = IngredientParser::new();
 

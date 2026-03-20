@@ -29,6 +29,7 @@ coverage/
 src-tauri/coverage/
 playwright-report/
 test-results/
+backup/
 
 # Editor directories and files
 .vscode/*

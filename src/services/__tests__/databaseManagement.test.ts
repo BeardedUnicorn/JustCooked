@@ -228,6 +228,39 @@ describe('DatabaseManagementService', () => {
     });
   });
 
+  describe('repairRecipeIngredientsFromRaw', () => {
+    it('repairs saved recipe ingredients successfully', async () => {
+      const mockResult = {
+        recipes_scanned: 12,
+        recipes_updated: 3,
+        ingredients_repaired: 5,
+        recipes_skipped: 1,
+        missing_raw_batches: 2,
+      };
+
+      mockInvoke.mockResolvedValue(mockResult);
+
+      const result = await service.repairRecipeIngredientsFromRaw();
+
+      expect(mockInvoke).toHaveBeenCalledWith('db_repair_recipe_ingredients_from_raw');
+      expect(result).toEqual(mockResult);
+    });
+
+    it('formats recipe ingredient repair results for display', () => {
+      const formatted = service.formatRecipeIngredientRepairResult({
+        recipes_scanned: 12,
+        recipes_updated: 3,
+        ingredients_repaired: 5,
+        recipes_skipped: 1,
+        missing_raw_batches: 2,
+      });
+
+      expect(formatted).toBe(
+        'Recipe ingredients repaired from raw captures: scanned 12 recipes, updated 3, repaired 5 ingredients, skipped 1, missing raw batches for 2.'
+      );
+    });
+  });
+
   describe('formatImportResult', () => {
     it('formats successful import result', () => {
       const result: DatabaseImportResult = {

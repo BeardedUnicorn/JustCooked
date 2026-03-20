@@ -290,6 +290,11 @@ describe('stringUtils', () => {
       expect(decodeAllHtmlEntities(input)).toBe(expected);
     });
 
+    test('should recursively decode doubly-encoded named entities', () => {
+      expect(decodeAllHtmlEntities('This doesn&amp;#39;t taste bland &amp;amp; stays chewy'))
+        .toBe("This doesn't taste bland & stays chewy");
+    });
+
     test('should handle ingredient lists with entities', () => {
       const input = '2 cups all-purpose flour&amp;#44; sifted';
       const expected = '2 cups all-purpose flour, sifted';

@@ -12,10 +12,7 @@ vi.mock('@tauri-apps/api/core');
 vi.mock('@services/recipeStorage');
 vi.mock('@services/ingredientStorage');
 vi.mock('@services/imageService');
-vi.mock('@utils/stringUtils', () => ({
-  parseTags: vi.fn((keywords: string) => keywords ? keywords.split(',').map(tag => tag.trim()) : []),
-  decodeAllHtmlEntities: vi.fn((str: string) => str || ''),
-}));
+vi.mock('@utils/stringUtils', async () => await vi.importActual('@utils/stringUtils'));
 vi.mock('@utils/timeUtils');
 
 // Mock urlUtils with specific implementation for isSupportedUrl
@@ -127,6 +124,26 @@ describe('recipeImport', () => {
       expect(savedRecipe.sourceUrl).toBe(url);
       expect(savedRecipe.ingredients).toHaveLength(5);
       expect(savedRecipe.image).toBe('processed-image-url');
+    });
+
+    test('should decode html entities in description and instructions before saving', async () => {
+      mockInvoke.mockResolvedValue({
+        ...mockImportedRecipe,
+        description: 'This doesn&amp;#39;t taste bland &amp;amp; stays chewy',
+        instructions: [
+          'Don&amp;#39;t overmix',
+          'Bake until it&amp;#39;s golden',
+        ],
+      });
+
+      await importRecipeFromUrl(url);
+
+      const savedRecipe = mockSaveRecipe.mock.calls[0][0];
+      expect(savedRecipe.description).toBe("This doesn't taste bland & stays chewy");
+      expect(savedRecipe.instructions).toEqual([
+        "Don't overmix",
+        "Bake until it's golden",
+      ]);
     });
 
     test('should throw error for unsupported URL', async () => {

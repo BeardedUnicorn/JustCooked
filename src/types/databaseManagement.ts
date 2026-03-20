@@ -39,6 +39,14 @@ export interface IngredientCatalogRepairResult {
   removed: number;
 }
 
+export interface RecipeIngredientRepairResult {
+  recipes_scanned: number;
+  recipes_updated: number;
+  ingredients_repaired: number;
+  recipes_skipped: number;
+  missing_raw_batches: number;
+}
+
 export interface DatabaseStats {
   total_recipes: number;
   total_ingredients: number;

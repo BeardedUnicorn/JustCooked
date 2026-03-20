@@ -100,13 +100,29 @@ const DatabaseManagementSection: React.FC = () => {
   const handleRepairIngredientCatalog = async () => {
     clearMessages();
     setLoading(true);
-    setOperation('repair');
+    setOperation('repair-catalog');
 
     try {
       const result = await databaseManagementService.repairIngredientCatalog();
       setSuccess(databaseManagementService.formatIngredientCatalogRepairResult(result));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to repair ingredient catalog');
+    } finally {
+      setLoading(false);
+      setOperation(null);
+    }
+  };
+
+  const handleRepairRecipeIngredients = async () => {
+    clearMessages();
+    setLoading(true);
+    setOperation('repair-recipe-ingredients');
+
+    try {
+      const result = await databaseManagementService.repairRecipeIngredientsFromRaw();
+      setSuccess(databaseManagementService.formatRecipeIngredientRepairResult(result));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to repair recipe ingredients');
     } finally {
       setLoading(false);
       setOperation(null);
@@ -217,12 +233,33 @@ const DatabaseManagementSection: React.FC = () => {
           <Button
             variant="contained"
             color="secondary"
-            startIcon={isOperationLoading('repair') ? <CircularProgress size={20} data-testid="dbManagement-loading-repair" /> : <RepairIcon />}
+            startIcon={isOperationLoading('repair-catalog') ? <CircularProgress size={20} data-testid="dbManagement-loading-repair" /> : <RepairIcon />}
             onClick={handleRepairIngredientCatalog}
             disabled={loading}
             data-testid="dbManagement-button-repair-ingredients"
           >
-            {isOperationLoading('repair') ? 'Repairing...' : 'Repair Ingredient Catalog'}
+            {isOperationLoading('repair-catalog') ? 'Repairing...' : 'Repair Ingredient Catalog'}
+          </Button>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Repair Recipe Ingredients
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Reparse saved recipe ingredients from the captured raw ingredient lines to fix malformed names like &quot;raw&quot;.
+          </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={isOperationLoading('repair-recipe-ingredients') ? <CircularProgress size={20} data-testid="dbManagement-loading-repair-recipe-ingredients" /> : <RepairIcon />}
+            onClick={handleRepairRecipeIngredients}
+            disabled={loading}
+            data-testid="dbManagement-button-repair-recipe-ingredients"
+          >
+            {isOperationLoading('repair-recipe-ingredients') ? 'Repairing...' : 'Repair Recipe Ingredients'}
           </Button>
         </Box>
 

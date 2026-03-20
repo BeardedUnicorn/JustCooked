@@ -12,7 +12,9 @@ vi.mock('@services/databaseManagement', () => ({
     importDatabase: vi.fn(),
     resetDatabase: vi.fn(),
     repairIngredientCatalog: vi.fn(),
+    repairRecipeIngredientsFromRaw: vi.fn(),
     formatIngredientCatalogRepairResult: vi.fn(),
+    formatRecipeIngredientRepairResult: vi.fn(),
     formatImportResult: vi.fn(),
   },
 }));
@@ -57,6 +59,7 @@ describe('DatabaseManagementSection', () => {
     expect(screen.getByTestId('dbManagement-button-import')).toBeInTheDocument();
     expect(screen.getByTestId('dbManagement-button-reset')).toBeInTheDocument();
     expect(screen.getByTestId('dbManagement-button-repair-ingredients')).toBeInTheDocument();
+    expect(screen.getByTestId('dbManagement-button-repair-recipe-ingredients')).toBeInTheDocument();
   });
 
   it('handles export database successfully', async () => {
@@ -268,6 +271,37 @@ describe('DatabaseManagementSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
       expect(screen.getByText('Ingredient catalog repaired: scanned 12, updated 7, merged 3, removed 4.')).toBeInTheDocument();
+    });
+  });
+
+  it('handles recipe ingredient repair successfully', async () => {
+    mockDatabaseManagementService.repairRecipeIngredientsFromRaw.mockResolvedValue({
+      recipes_scanned: 12,
+      recipes_updated: 3,
+      ingredients_repaired: 5,
+      recipes_skipped: 1,
+      missing_raw_batches: 2,
+    });
+    mockDatabaseManagementService.formatRecipeIngredientRepairResult.mockReturnValue(
+      'Recipe ingredients repaired from raw captures: scanned 12 recipes, updated 3, repaired 5 ingredients, skipped 1, missing raw batches for 2.'
+    );
+
+    renderWithTheme(<DatabaseManagementSection />);
+
+    const repairButton = screen.getByTestId('dbManagement-button-repair-recipe-ingredients');
+    fireEvent.click(repairButton);
+
+    await waitFor(() => {
+      expect(mockDatabaseManagementService.repairRecipeIngredientsFromRaw).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dbManagement-alert-success')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Recipe ingredients repaired from raw captures: scanned 12 recipes, updated 3, repaired 5 ingredients, skipped 1, missing raw batches for 2.'
+        )
+      ).toBeInTheDocument();
     });
   });
 
