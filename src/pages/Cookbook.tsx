@@ -25,9 +25,13 @@ import { getRecipesPaginated, getRecipeCount, searchRecipesPaginated, getSearchR
 import { saveSearch } from '@services/searchHistoryStorage';
 import { getAllCollections, createCollection, deleteCollection, saveCollection } from '@services/recipeCollectionStorage';
 import { importRecipeFromUrl } from '@services/recipeImport';
-import { getPantryItems } from '@services/pantryStorage';
+import { getPantryItems, getExpiringItems } from '@services/pantryStorage';
+import {
+  getExclusions, excludeIngredient, restoreIngredient,
+  excludeRecipe, restoreRecipe, normalizeIngredientKey,
+} from '@services/useItUpExclusionsStorage';
 
-import { cleanIngredientName } from '@utils/ingredientUtils';
+import { cleanIngredientName, normalizeUnit } from '@utils/ingredientUtils';
 import RecipeCard from '@components/RecipeCard';
 import BatchImportDialog from '@components/BatchImportDialog';
 import AdvancedSearchModal from '@components/AdvancedSearchModal';
@@ -126,6 +130,20 @@ const Cookbook: React.FC = () => {
   const [pantryItems, setPantryItems] = useState<any[]>([]);
   const [smartLoading, setSmartLoading] = useState(false);
 
+  // Use It Up tab state
+  interface UseItUpResult {
+    recipe: Recipe;
+    expiringCount: number;
+    missingCount: number;
+    bestShare?: { name: string; share: number };
+    soonestDaysLeft: number;
+  }
+  const [useItUpResults, setUseItUpResults] = useState<UseItUpResult[]>([]);
+  const [expiringItems, setExpiringItems] = useState<any[]>([]);
+  const [useItUpLoading, setUseItUpLoading] = useState(false);
+  const [exclusions, setExclusions] = useState(() => getExclusions());
+  const [excludedRecipeLabels, setExcludedRecipeLabels] = useState<{ id: string; title: string }[]>([]);
+
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
 
@@ -134,6 +152,8 @@ const Cookbook: React.FC = () => {
       loadCollections();
     } else if (newValue === 2) {
       loadSmartCookbookData();
+    } else if (newValue === 3) {
+      loadUseItUpData();
     }
   };
 
@@ -255,6 +275,127 @@ const Cookbook: React.FC = () => {
     }
   };
 
+  const loadUseItUpData = async (overrideExclusions?: ReturnType<typeof getExclusions>) => {
+    try {
+      setUseItUpLoading(true);
+      const [loadedRecipes, rawExpiring] = await Promise.all([
+        getAllRecipes(),
+        getExpiringItems(7),
+      ]);
+
+      const excl = overrideExclusions ?? getExclusions();
+      setExclusions(excl);
+      const excludedIngredients = new Set(excl.ingredients);
+      const excludedRecipeIds = new Set(excl.recipeIds);
+
+      setExcludedRecipeLabels(
+        loadedRecipes
+          .filter((r) => excludedRecipeIds.has(r.id))
+          .map((r) => ({ id: r.id, title: r.title })),
+      );
+
+      const loadedExpiring = rawExpiring.filter(
+        (item: any) => !excludedIngredients.has(normalizeIngredientKey(item.name)),
+      );
+      setExpiringItems(loadedExpiring);
+
+      if (loadedExpiring.length === 0) {
+        setUseItUpResults([]);
+        return;
+      }
+
+      const WINDOW_DAYS = 7;
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      const daysUntil = (expiry: string): number => {
+        const t = Date.parse(expiry);
+        if (Number.isNaN(t)) return WINDOW_DAYS;
+        return Math.min(WINDOW_DAYS, Math.max(0, (t - now) / DAY_MS));
+      };
+
+      interface ExpiringInfo { expiry: string; amount: number; unit: string; name: string; daysLeft: number }
+      const expiringByName = new Map<string, ExpiringInfo>();
+      for (const item of loadedExpiring) {
+        const key = cleanIngredientName(item.name).toLowerCase();
+        const existing = expiringByName.get(key);
+        if (!existing || (item.expiryDate && item.expiryDate < existing.expiry)) {
+          expiringByName.set(key, {
+            expiry: item.expiryDate ?? '',
+            amount: item.amount ?? 0,
+            unit: item.unit ?? '',
+            name: item.name,
+            daysLeft: daysUntil(item.expiryDate ?? ''),
+          });
+        }
+      }
+
+      // When recipe and pantry units can't be compared, assume a neutral
+      // contribution so incomparable matches are neither rewarded as
+      // meaningful nor punished below known-weak matches.
+      const NEUTRAL_SHARE = 0.25;
+
+      // Urgency weight: items expiring sooner contribute more. Linear decay
+      // from ~8 (expires today) down to 1 (expires at the edge of the window).
+      const urgencyWeight = (daysLeft: number) => 1 + (WINDOW_DAYS - daysLeft);
+
+      const ranked = loadedRecipes
+        .map((recipe) => {
+          let expiringCount = 0;
+          let soonestExpiry = '';
+          let soonestDaysLeft = Infinity;
+          let urgencyScore = 0;
+          let bestShare: { name: string; share: number } | undefined;
+          for (const ing of recipe.ingredients) {
+            const key = cleanIngredientName(ing.name).toLowerCase();
+            const info = expiringByName.get(key);
+            if (!info) continue;
+            expiringCount += 1;
+            if (!soonestExpiry || (info.expiry && info.expiry < soonestExpiry)) {
+              soonestExpiry = info.expiry;
+            }
+            if (info.daysLeft < soonestDaysLeft) {
+              soonestDaysLeft = info.daysLeft;
+            }
+
+            const pantryUnit = normalizeUnit(info.unit).toLowerCase();
+            const recipeUnit = normalizeUnit(ing.unit ?? '').toLowerCase();
+            const comparable =
+              pantryUnit && recipeUnit && pantryUnit === recipeUnit &&
+              info.amount > 0 && ing.amount > 0;
+
+            const weight = urgencyWeight(info.daysLeft);
+            if (comparable) {
+              const share = Math.min(ing.amount / info.amount, 1);
+              urgencyScore += share * weight;
+              if (!bestShare || share > bestShare.share) {
+                bestShare = { name: info.name, share };
+              }
+            } else {
+              urgencyScore += NEUTRAL_SHARE * weight;
+            }
+          }
+          const missingCount = recipe.ingredients.length - expiringCount;
+          return { recipe, expiringCount, missingCount, soonestExpiry, soonestDaysLeft, urgencyScore, bestShare };
+        })
+        .filter((r) => r.expiringCount > 0 && !excludedRecipeIds.has(r.recipe.id))
+        .sort((a, b) => {
+          if (b.expiringCount !== a.expiringCount) return b.expiringCount - a.expiringCount;
+          if (b.urgencyScore !== a.urgencyScore) return b.urgencyScore - a.urgencyScore;
+          if (a.missingCount !== b.missingCount) return a.missingCount - b.missingCount;
+          if (a.soonestExpiry !== b.soonestExpiry) return a.soonestExpiry.localeCompare(b.soonestExpiry);
+          return a.recipe.title.localeCompare(b.recipe.title);
+        })
+        .map(({ recipe, expiringCount, missingCount, bestShare, soonestDaysLeft }) =>
+          ({ recipe, expiringCount, missingCount, bestShare, soonestDaysLeft }));
+
+      setUseItUpResults(ranked);
+    } catch (error) {
+      console.error('Failed to load Use It Up data:', error);
+    } finally {
+      setUseItUpLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom data-testid="cookbook-title">
@@ -266,6 +407,7 @@ const Cookbook: React.FC = () => {
           <Tab label="All Recipes" {...a11yProps(0)} data-testid="cookbook-tab-all-recipes" />
           <Tab label="Collections" {...a11yProps(1)} data-testid="cookbook-tab-collections" />
           <Tab label="Smart Cookbook" {...a11yProps(2)} data-testid="cookbook-tab-smart" />
+          <Tab label="Use It Up" {...a11yProps(3)} data-testid="cookbook-tab-use-it-up" />
         </Tabs>
       </Box>
 
@@ -727,6 +869,184 @@ const Cookbook: React.FC = () => {
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                       {missing === 0 ? 'All ingredients available' : `${missing} ingredients missing`}
                     </Typography>
+                  </Box>
+                </Grid>
+              );
+            })}
+          </Grid>
+        )}
+      </TabPanel>
+
+      {/* Use It Up Tab */}
+      <TabPanel value={tabValue} index={3}>
+        <Typography variant="h5" sx={{ mb: 3 }}>
+          Use It Up
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+          Recipes that use pantry items expiring in the next 7 days.
+        </Typography>
+
+        {/* Expiring ingredient chips – click × to exclude */}
+        {expiringItems.length > 0 && (
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {Array.from(
+              new Map(
+                expiringItems.map((i: any) => [normalizeIngredientKey(i.name), i.name]),
+              ).entries(),
+            ).map(([key, label]) => {
+              const onExclude = () => {
+                const next = excludeIngredient(label);
+                setExclusions(next);
+                loadUseItUpData(next);
+              };
+              return (
+                <Chip
+                  key={key}
+                  label={label}
+                  onDelete={onExclude}
+                  deleteIcon={
+                    <DeleteIcon data-testid={`cookbookPage-useItUp-excludeIngredient-${key}`} />
+                  }
+                />
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Review strip for excluded items */}
+        {(exclusions.ingredients.length > 0 || excludedRecipeLabels.length > 0) && (
+          <Paper variant="outlined" sx={{ p: 2, mb: 3 }} data-testid="cookbookPage-useItUp-exclusionsReview">
+            <Typography variant="subtitle2" gutterBottom>
+              Excluded
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {exclusions.ingredients.map((key) => (
+                <Chip
+                  key={`ing-${key}`}
+                  label={key}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    const next = restoreIngredient(key);
+                    setExclusions(next);
+                    loadUseItUpData(next);
+                  }}
+                  data-testid={`cookbookPage-useItUp-excludedIngredient-${key}`}
+                  deleteIcon={<AddIcon data-testid={`cookbookPage-useItUp-restoreIngredient-${key}`} />}
+                  onDelete={() => {
+                    const next = restoreIngredient(key);
+                    setExclusions(next);
+                    loadUseItUpData(next);
+                  }}
+                />
+              ))}
+              {excludedRecipeLabels.map(({ id, title }) => (
+                <Chip
+                  key={`rec-${id}`}
+                  label={title}
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    const next = restoreRecipe(id);
+                    setExclusions(next);
+                    loadUseItUpData(next);
+                  }}
+                  data-testid={`cookbookPage-useItUp-excludedRecipe-${id}`}
+                  deleteIcon={<AddIcon data-testid={`cookbookPage-useItUp-restoreRecipe-${id}`} />}
+                  onDelete={() => {
+                    const next = restoreRecipe(id);
+                    setExclusions(next);
+                    loadUseItUpData(next);
+                  }}
+                />
+              ))}
+            </Box>
+          </Paper>
+        )}
+
+        {useItUpLoading ? (
+          <Box sx={{ textAlign: 'center', py: 6 }} data-testid="cookbookPage-useItUp-loading">
+            <CircularProgress />
+          </Box>
+        ) : expiringItems.length === 0 ? (
+          <Paper sx={{ p: 6, textAlign: 'center' }} data-testid="cookbookPage-useItUp-text-noExpiring">
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No expiring pantry items
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Nothing in your pantry is expiring in the next 7 days.
+            </Typography>
+          </Paper>
+        ) : useItUpResults.length === 0 ? (
+          <Paper sx={{ p: 6, textAlign: 'center' }} data-testid="cookbookPage-useItUp-text-noMatches">
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No recipes match your expiring items
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Try importing more recipes that use{' '}
+              {expiringItems.map((i: any) => i.name).join(', ')}.
+            </Typography>
+          </Paper>
+        ) : (
+          <Grid container spacing={3} data-testid="cookbookPage-useItUp-grid-recipes">
+            {useItUpResults.map(({ recipe, expiringCount, missingCount, bestShare, soonestDaysLeft }) => {
+              let explanation: string | null = null;
+              if (bestShare && bestShare.share >= 0.9) {
+                explanation = `Uses most of your ${bestShare.name}`;
+              } else if (bestShare && bestShare.share >= 0.5) {
+                explanation = `Consumes ${Math.round(bestShare.share * 100)}% of expiring ${bestShare.name}`;
+              }
+              let urgencyHint: string | null = null;
+              if (soonestDaysLeft <= 1) {
+                urgencyHint = 'Uses item expiring tomorrow';
+              } else if (soonestDaysLeft <= 2) {
+                urgencyHint = `Uses item expiring in ${Math.ceil(soonestDaysLeft)} days`;
+              }
+              return (
+                <Grid size={{ xs: 12, sm: 6, md: 4 }} key={recipe.id}>
+                  <Box data-testid={`cookbookPage-useItUp-result-${recipe.id}`}>
+                    <RecipeCard
+                      recipe={recipe}
+                      onDelete={() => loadUseItUpData()}
+                      onUpdate={() => loadUseItUpData()}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      Uses {expiringCount} expiring {expiringCount === 1 ? 'item' : 'items'} ·{' '}
+                      {missingCount} {missingCount === 1 ? 'ingredient' : 'ingredients'} missing
+                    </Typography>
+                    {urgencyHint && (
+                      <Typography
+                        variant="caption"
+                        color="warning.main"
+                        sx={{ display: 'block' }}
+                        data-testid={`cookbookPage-useItUp-urgency-${recipe.id}`}
+                      >
+                        {urgencyHint}
+                      </Typography>
+                    )}
+                    {explanation && (
+                      <Typography
+                        variant="caption"
+                        color="primary"
+                        sx={{ display: 'block' }}
+                        data-testid={`cookbookPage-useItUp-explanation-${recipe.id}`}
+                      >
+                        {explanation}
+                      </Typography>
+                    )}
+                    <Button
+                      size="small"
+                      color="inherit"
+                      sx={{ mt: 0.5, textTransform: 'none' }}
+                      onClick={() => {
+                        const next = excludeRecipe(recipe.id);
+                        setExclusions(next);
+                        loadUseItUpData(next);
+                      }}
+                      data-testid={`cookbookPage-useItUp-excludeRecipe-${recipe.id}`}
+                    >
+                      Hide this recipe
+                    </Button>
                   </Box>
                 </Grid>
               );

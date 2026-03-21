@@ -9,9 +9,14 @@ JustCooked is a desktop-first recipe manager built with Tauri, React, TypeScript
 - Store recipes, pantry data, meal plans, and related metadata locally in SQLite
 - Manage batch imports and queued import jobs
 - Track pantry items, product mappings, and barcode-based product workflows
+- Surface recipes that use soon-to-expire pantry items via **Use It Up**
 - Generate shopping lists from planned meals
 - Run a distraction-light cooking mode for individual recipes
 - Provide local logging and database management tools in the app
+
+### Use It Up
+
+**Use It Up** is a dedicated tab inside the Cookbook that ranks recipes by how well they help you clear pantry items expiring in the next seven days. It is quantity-aware and urgency-aware: recipes that consume a meaningful share of an expiring item score higher than those that reference it incidentally, and items expiring tomorrow outrank items expiring at the end of the window. Each result shows a short summary (e.g. "Uses 2 expiring items · 1 ingredient missing") plus, when confidence is high, hints like "Uses most of your spinach" or "Uses item expiring tomorrow". You can exclude ingredients you are tired of or hide individual recipes; exclusions are persisted locally and are easy to review and restore from the same tab.
 
 ## Stack
 
