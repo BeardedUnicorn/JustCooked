@@ -163,12 +163,15 @@ export const createStandardHookMocks = () => ({
  */
 export const createStandardLibraryMocks = () => ({
   zxing: {
-    BrowserMultiFormatReader: fn().mockImplementation(() => ({
-      decodeFromVideoDevice: fn().mockImplementation(() => new Promise(() => {})),
-      decodeFromVideoElement: fn().mockImplementation(() => new Promise(() => {})),
-      reset: fn(),
-      hints: new Map(),
-    })),
+    BrowserMultiFormatReader: class BrowserMultiFormatReaderMock {
+      static listVideoInputDevices = fn().mockResolvedValue([
+        { deviceId: 'camera1', label: 'Camera 1', kind: 'videoinput' },
+      ]);
+      decodeFromVideoDevice = fn().mockImplementation(() => new Promise(() => {}));
+      decodeFromVideoElement = fn().mockImplementation(() => new Promise(() => {}));
+      reset = fn();
+      hints = new Map();
+    },
     NotFoundException: class NotFoundException extends Error {
       constructor(message?: string) {
         super(message);

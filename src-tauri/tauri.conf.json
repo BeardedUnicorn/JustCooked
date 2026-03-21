@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.justcooked.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "yarn dev",
+    "beforeBuildCommand": "yarn build",
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
@@ -20,7 +20,8 @@
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "maximized": true
       }
     ],
     "security": {

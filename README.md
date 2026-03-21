@@ -27,7 +27,8 @@ JustCooked is a desktop-first recipe manager built with Tauri, React, TypeScript
 
 ## Prerequisites
 
-- Node.js with Yarn
+- Node.js `^20.19.0 || >=22.12.0`
+- Corepack-enabled Yarn 4
 - Rust toolchain
 - Tauri system prerequisites for your OS
 
@@ -35,9 +36,11 @@ Install the platform dependencies from the [official Tauri prerequisites guide](
 
 ## Getting Started
 
-This repository uses Yarn for JavaScript dependency management.
+This repository uses Yarn 4 with Plug'n'Play for JavaScript dependency management.
 
 ```bash
+corepack enable
+corepack use yarn@4.13.0
 yarn install
 ```
 
@@ -140,4 +143,5 @@ JustCooked is licensed under the MIT License. See [`LICENSE`](./LICENSE).
 
 - [VS Code](https://code.visualstudio.com/)
 - [Tauri VS Code extension](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode)
+- [ZipFS extension](https://marketplace.visualstudio.com/items?itemName=arcanis.vscode-zipfs) for Yarn Plug'n'Play
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)

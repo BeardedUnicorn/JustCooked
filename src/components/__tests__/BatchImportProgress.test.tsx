@@ -203,22 +203,14 @@ describe('BatchImportProgress', () => {
     // Mock current time to be 5 minutes and 30 seconds after start
     const startTime = '2024-01-01T10:00:00Z';
     const mockNow = new Date('2024-01-01T10:05:30Z');
-
-    const OriginalDate = global.Date;
-    global.Date = vi.fn((dateString?: string | number | Date) => {
-      if (dateString) {
-        return new OriginalDate(dateString);
-      }
-      return mockNow;
-    }) as any;
-    global.Date.now = vi.fn(() => mockNow.getTime());
+    vi.useFakeTimers();
+    vi.setSystemTime(mockNow);
 
     const progress = createMockProgress({ startTime });
     render(<BatchImportProgress progress={progress} />);
 
     expect(screen.getByText('5m 30s')).toBeInTheDocument();
-
-    global.Date = OriginalDate;
+    vi.useRealTimers();
   });
 
   test('formats estimated time remaining', () => {

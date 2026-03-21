@@ -36,15 +36,13 @@ if (typeof window !== 'undefined') {
 
 // Mock ZXing browser library for Storybook environment
 if (typeof window !== 'undefined') {
-  const BrowserMultiFormatReaderMock: any = fn().mockImplementation(() => ({
-    decodeFromVideoDevice: mockDecodeFromVideoDeviceImplementation,
-    decodeFromVideoElement: mockDecodeFromVideoElementImplementation,
-    reset: mockResetImplementation,
-    hints: new Map(),
-  }));
-
-  // Add static method
-  BrowserMultiFormatReaderMock.listVideoInputDevices = mockListVideoInputDevicesImplementation;
+  class BrowserMultiFormatReaderMock {
+    static listVideoInputDevices = mockListVideoInputDevicesImplementation;
+    decodeFromVideoDevice = mockDecodeFromVideoDeviceImplementation;
+    decodeFromVideoElement = mockDecodeFromVideoElementImplementation;
+    reset = mockResetImplementation;
+    hints = new Map();
+  }
 
   // @ts-ignore
   window.__STORYBOOK_ZXING_MOCKS__ = {

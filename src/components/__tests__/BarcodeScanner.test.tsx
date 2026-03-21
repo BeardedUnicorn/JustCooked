@@ -34,15 +34,13 @@ vi.mock('@zxing/browser', () => {
     { deviceId: 'camera1', label: 'Camera 1', kind: 'videoinput' }
   ]);
 
-  const BrowserMultiFormatReaderMock: any = vi.fn().mockImplementation(() => ({
-    decodeFromVideoDevice: mockDecodeFromVideoDevice,
-    decodeFromVideoElement: mockDecodeFromVideoElement,
-    reset: mockReset,
-    hints: new Map(),
-  }));
-
-  // Add static method
-  BrowserMultiFormatReaderMock.listVideoInputDevices = mockListVideoInputDevices;
+  class BrowserMultiFormatReaderMock {
+    static listVideoInputDevices = mockListVideoInputDevices;
+    decodeFromVideoDevice = mockDecodeFromVideoDevice;
+    decodeFromVideoElement = mockDecodeFromVideoElement;
+    reset = mockReset;
+    hints = new Map();
+  }
 
   global.zxingMocks = {
     mockReset,

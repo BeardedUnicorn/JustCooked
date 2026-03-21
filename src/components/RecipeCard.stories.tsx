@@ -5,9 +5,6 @@ import RecipeCard from './RecipeCard';
 import { mockRecipe } from '@/__tests__/fixtures/recipes';
 import { Recipe } from '@app-types';
 
-// Mock the useImageUrl hook
-import * as useImageUrlModule from '@hooks/useImageUrl';
-
 // Browser-compatible mock implementation variable
 let mockUseImageUrlImplementation = fn().mockReturnValue({
   imageUrl: 'https://via.placeholder.com/345x180?text=Mock+Image',
@@ -15,11 +12,28 @@ let mockUseImageUrlImplementation = fn().mockReturnValue({
   error: null,
 });
 
-// Mock useImageUrl for Storybook environment
-if (typeof window !== 'undefined') {
-  // @ts-ignore - Override the hook for Storybook
-  useImageUrlModule.useImageUrl = mockUseImageUrlImplementation;
-}
+const applyStorybookUseImageUrlMock = () => {
+  if (typeof window !== 'undefined') {
+    (
+      window as typeof window & {
+        __STORYBOOK_HOOK_MOCKS__?: {
+          useImageUrl?: (value: string | undefined) => ReturnType<typeof mockUseImageUrlImplementation>;
+        };
+      }
+    ).__STORYBOOK_HOOK_MOCKS__ = {
+      ...(
+        window as typeof window & {
+          __STORYBOOK_HOOK_MOCKS__?: {
+            useImageUrl?: (value: string | undefined) => ReturnType<typeof mockUseImageUrlImplementation>;
+          };
+        }
+      ).__STORYBOOK_HOOK_MOCKS__,
+      useImageUrl: (imageUrl) => mockUseImageUrlImplementation(imageUrl),
+    };
+  }
+};
+
+applyStorybookUseImageUrlMock();
 
 const meta: Meta<typeof RecipeCard> = {
   title: 'Cards/RecipeCard',
@@ -58,11 +72,7 @@ const configureMockUseImageUrl = (imageUrl: string, isLoading = false, error: st
     isLoading,
     error,
   });
-
-  if (typeof window !== 'undefined') {
-    // @ts-ignore - Override the hook for Storybook
-    useImageUrlModule.useImageUrl = mockUseImageUrlImplementation;
-  }
+  applyStorybookUseImageUrlMock();
 };
 
 // Default Story: Basic recipe card

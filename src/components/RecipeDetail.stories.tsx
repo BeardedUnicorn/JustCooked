@@ -5,9 +5,6 @@ import RecipeDetail from './RecipeDetail';
 import { mockRecipe, mockSectionedIngredients } from '@/__tests__/fixtures/recipes';
 import { Recipe } from '@app-types';
 
-// Mock the useImageUrl hook
-import * as useImageUrlModule from '@hooks/useImageUrl';
-
 const meta: Meta<typeof RecipeDetail> = {
   title: 'Display/RecipeDetail',
   component: RecipeDetail,
@@ -41,6 +38,27 @@ let mockUseImageUrlImplementation = fn().mockReturnValue({
 let mockInvokeImplementation = fn().mockResolvedValue(undefined);
 let mockReImportRecipeImplementation = fn().mockResolvedValue(undefined);
 
+const applyStorybookUseImageUrlMock = () => {
+  if (typeof window !== 'undefined') {
+    (
+      window as typeof window & {
+        __STORYBOOK_HOOK_MOCKS__?: {
+          useImageUrl?: (value: string | undefined) => ReturnType<typeof mockUseImageUrlImplementation>;
+        };
+      }
+    ).__STORYBOOK_HOOK_MOCKS__ = {
+      ...(
+        window as typeof window & {
+          __STORYBOOK_HOOK_MOCKS__?: {
+            useImageUrl?: (value: string | undefined) => ReturnType<typeof mockUseImageUrlImplementation>;
+          };
+        }
+      ).__STORYBOOK_HOOK_MOCKS__,
+      useImageUrl: (imageUrl) => mockUseImageUrlImplementation(imageUrl),
+    };
+  }
+};
+
 // Mock services for Storybook environment
 if (typeof window !== 'undefined') {
   // @ts-ignore
@@ -58,6 +76,8 @@ if (typeof window !== 'undefined') {
   };
 }
 
+applyStorybookUseImageUrlMock();
+
 // Browser-compatible mock configuration function for useImageUrl
 const configureMockUseImageUrl = (imageUrl: string, isLoading = false, error: string | null = null) => {
   mockUseImageUrlImplementation = fn().mockReturnValue({
@@ -65,11 +85,7 @@ const configureMockUseImageUrl = (imageUrl: string, isLoading = false, error: st
     isLoading,
     error,
   });
-
-  if (typeof window !== 'undefined') {
-    // @ts-ignore - Override the hook for Storybook
-    useImageUrlModule.useImageUrl = mockUseImageUrlImplementation;
-  }
+  applyStorybookUseImageUrlMock();
 };
 
 // Browser-compatible mock configuration function for services

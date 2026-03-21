@@ -15,8 +15,20 @@ export function useImageUrl(imageUrl: string | undefined): UseImageUrlResult {
   const [resolvedUrl, setResolvedUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const storybookOverride =
+    typeof window !== 'undefined'
+      ? (window as typeof window & {
+          __STORYBOOK_HOOK_MOCKS__?: {
+            useImageUrl?: (value: string | undefined) => UseImageUrlResult;
+          };
+        }).__STORYBOOK_HOOK_MOCKS__?.useImageUrl
+      : undefined;
 
   useEffect(() => {
+    if (storybookOverride) {
+      return;
+    }
+
     // Reset error state when imageUrl changes
     setError(null);
 
@@ -54,7 +66,11 @@ export function useImageUrl(imageUrl: string | undefined): UseImageUrlResult {
     // Fallback for any other case
     setResolvedUrl(imageUrl);
     setIsLoading(false);
-  }, [imageUrl]);
+  }, [imageUrl, storybookOverride]);
+
+  if (storybookOverride) {
+    return storybookOverride(imageUrl);
+  }
 
   return {
     imageUrl: resolvedUrl,

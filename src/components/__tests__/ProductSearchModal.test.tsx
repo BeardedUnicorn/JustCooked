@@ -11,18 +11,14 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 // Mock the ZXing library
-const mockDecodeFromVideoDevice = vi.fn();
-const mockReset = vi.fn();
-const mockListVideoInputDevices = vi.fn().mockResolvedValue([
-  { deviceId: 'camera1', label: 'Camera 1' }
-]);
-
 vi.mock('@zxing/browser', () => ({
-  BrowserMultiFormatReader: vi.fn().mockImplementation(() => ({
-    listVideoInputDevices: mockListVideoInputDevices,
-    decodeFromVideoDevice: mockDecodeFromVideoDevice,
-    reset: mockReset,
-  })),
+  BrowserMultiFormatReader: class BrowserMultiFormatReaderMock {
+    static listVideoInputDevices = vi.fn().mockResolvedValue([
+      { deviceId: 'camera1', label: 'Camera 1' }
+    ]);
+    decodeFromVideoDevice = vi.fn();
+    reset = vi.fn();
+  },
   NotFoundException: class NotFoundException extends Error {
     constructor(message?: string) {
       super(message);

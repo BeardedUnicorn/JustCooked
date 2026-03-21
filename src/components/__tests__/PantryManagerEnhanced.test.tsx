@@ -90,13 +90,13 @@ vi.mock('@components/IngredientAssociationModal', () => ({
 
 // Mock the ZXing library
 vi.mock('@zxing/browser', () => ({
-  BrowserMultiFormatReader: vi.fn().mockImplementation(() => ({
-    listVideoInputDevices: vi.fn().mockResolvedValue([
+  BrowserMultiFormatReader: class BrowserMultiFormatReaderMock {
+    static listVideoInputDevices = vi.fn().mockResolvedValue([
       { deviceId: 'camera1', label: 'Camera 1' }
-    ]),
-    decodeFromVideoDevice: vi.fn(),
-    reset: vi.fn(),
-  })),
+    ]);
+    decodeFromVideoDevice = vi.fn();
+    reset = vi.fn();
+  },
   NotFoundException: class NotFoundException extends Error {
     constructor(message?: string) {
       super(message);
@@ -148,6 +148,7 @@ const mockIngredientMappings: ProductIngredientMapping[] = [
 
 describe('PantryManager - Enhanced Functionality', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
     
     // Set up default mock for ingredient mappings
@@ -549,7 +550,12 @@ describe('PantryManager - Enhanced Functionality', () => {
 
       // Reopen modal - should be reset
       await user.click(addButton);
-      await user.click(manualAddItem);
+      const reopenedManualAddItem = screen.getByTestId('pantry-add-manual-menu-item');
+      await user.click(reopenedManualAddItem);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pantry-item-name-input')).toBeInTheDocument();
+      });
 
       const resetNameInput = screen.getByTestId('pantry-item-name-input').querySelector('input')!;
       const resetAmountInput = screen.getByTestId('pantry-item-amount-input').querySelector('input')!;

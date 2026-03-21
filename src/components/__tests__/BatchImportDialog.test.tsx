@@ -77,6 +77,7 @@ const siteValidation = (url: string, site: string) => {
 
 describe('BatchImportDialog', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     vi.clearAllMocks();
 
     mockBatchImportService.getQuickStartPacks.mockReturnValue([

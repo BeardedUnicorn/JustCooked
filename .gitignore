@@ -15,7 +15,10 @@ lerna-debug.log*
 
 # Dependencies and build outputs
 node_modules/
-.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
 dist/
 dist-ssr/
 storybook-static/
@@ -34,6 +37,7 @@ backup/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea/
 .DS_Store
 *.suo
